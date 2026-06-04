@@ -1,0 +1,134 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberPath(orgId) {
+      return /databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid);
+    }
+
+    function isActiveMember(orgId) {
+      return signedIn() &&
+        exists(memberPath(orgId)) &&
+        get(memberPath(orgId)).data.status == "active";
+    }
+
+    function permissions(orgId) {
+      return get(memberPath(orgId)).data.permissions;
+    }
+
+    function hasPermission(orgId, permission) {
+      return isActiveMember(orgId) && permissions(orgId).hasAny([permission]);
+    }
+
+    function hasAnyPermission(orgId, allowed) {
+      return isActiveMember(orgId) && permissions(orgId).hasAny(allowed);
+    }
+
+    function organizationMatches(orgId) {
+      return request.resource.data.organizationId == orgId;
+    }
+
+    function organizationUnchanged(orgId) {
+      return resource.data.organizationId == request.resource.data.organizationId &&
+        request.resource.data.organizationId == orgId;
+    }
+
+    function hasMetadata(orgId) {
+      return organizationMatches(orgId) &&
+        request.resource.data.branchId is string &&
+        request.resource.data.createdBy is string &&
+        request.resource.data.updatedBy is string &&
+        request.resource.data.isDeleted is bool;
+    }
+
+    match /organizations/{orgId} {
+      allow read: if isActiveMember(orgId);
+      allow create, update, delete: if hasPermission(orgId, "users.manage");
+
+      match /members/{memberId} {
+        allow read: if isActiveMember(orgId);
+        allow create, update, delete: if hasPermission(orgId, "users.manage") &&
+          request.resource.data.organizationId == orgId &&
+          !request.resource.data.permissions.hasAny(["users.manage", "roles.manage"]) || hasPermission(orgId, "roles.manage");
+      }
+
+      match /roles/{roleId} {
+        allow read: if isActiveMember(orgId);
+        allow write: if hasPermission(orgId, "roles.manage");
+      }
+
+      match /branches/{branchId} {
+        allow read: if isActiveMember(orgId);
+        allow write: if hasPermission(orgId, "users.manage") && request.resource.data.organizationId == orgId;
+      }
+
+      match /leads/{leadId} {
+        allow read: if hasPermission(orgId, "leads.readAll") ||
+          (hasPermission(orgId, "leads.readAssigned") && resource.data.assignedTo == request.auth.uid);
+        allow create: if hasPermission(orgId, "leads.create") && hasMetadata(orgId);
+        allow update: if organizationUnchanged(orgId) &&
+          (hasPermission(orgId, "leads.assign") ||
+          (hasPermission(orgId, "leads.updateAssigned") && resource.data.assignedTo == request.auth.uid));
+        allow delete: if false;
+      }
+
+      match /clients/{clientId} {
+        allow read: if hasPermission(orgId, "clients.read");
+        allow create: if hasPermission(orgId, "clients.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "clients.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
+      match /properties/{propertyId} {
+        allow read: if hasPermission(orgId, "properties.read");
+        allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
+      match /propertyUnits/{unitId} {
+        allow read: if hasPermission(orgId, "units.read");
+        allow create: if hasPermission(orgId, "units.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "units.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
+      match /tasks/{taskId} {
+        allow read: if hasPermission(orgId, "tasks.read") &&
+          (resource.data.assignedTo == request.auth.uid || hasAnyPermission(orgId, ["dashboard.viewExecutive", "users.manage"]));
+        allow create: if hasPermission(orgId, "tasks.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "tasks.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
+      match /activities/{activityId} {
+        allow read: if hasPermission(orgId, "activities.read");
+        allow create: if hasPermission(orgId, "activities.create") && hasMetadata(orgId);
+        allow update, delete: if false;
+      }
+
+      match /documents/{documentId} {
+        allow read: if isActiveMember(orgId);
+        allow create: if isActiveMember(orgId) && hasMetadata(orgId);
+        allow update, delete: if hasPermission(orgId, "users.manage");
+      }
+
+      match /auditLogs/{auditLogId} {
+        allow read: if hasPermission(orgId, "auditLogs.read");
+        allow create, update, delete: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

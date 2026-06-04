@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberDoc(orgId) {
+      return firestore.get(/databases/(default)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data;
+    }
+
+    function isActiveMember(orgId) {
+      return signedIn() && memberDoc(orgId).status == "active";
+    }
+
+    function hasPermission(orgId, permission) {
+      return isActiveMember(orgId) && memberDoc(orgId).permissions.hasAny([permission]);
+    }
+
+    match /organizations/{orgId}/{allPaths=**} {
+      allow read: if isActiveMember(orgId);
+      allow write: if hasPermission(orgId, "properties.update") ||
+        hasPermission(orgId, "clients.update") ||
+        hasPermission(orgId, "users.manage");
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
