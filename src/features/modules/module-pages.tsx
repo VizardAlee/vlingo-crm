@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { CalendarClock, CheckCircle2, CircleCheck, Clock, Flame, GitBranch, ListTodo, MessageSquarePlus, PhoneCall, Plus, Repeat2, Send, XCircle } from "lucide-react";
+import { Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, Flame, GitBranch, ListTodo, MessageSquarePlus, PhoneCall, Plus, Repeat2, Send, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +87,7 @@ function recordDisplayName(record: Record<string, unknown>) {
   return String(record.fullName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? record.referenceNumber ?? record.id ?? "Record");
 }
 
-async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities") {
+async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "propertyUnits") {
   try {
     return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName);
   } catch {
@@ -115,6 +115,18 @@ async function safeGetRelatedRecord(organizationId: string, record: Record<strin
 
   try {
     return await getOrgRecord<Record<string, unknown> & { id: string }>(organizationId, collectionName, String(record.relatedEntityId));
+  } catch {
+    return null;
+  }
+}
+
+async function safeGetLinkedProperty(organizationId: string, record: Record<string, unknown> | null) {
+  if (!record?.propertyId) {
+    return null;
+  }
+
+  try {
+    return await getOrgRecord<Record<string, unknown> & { id: string }>(organizationId, "properties", String(record.propertyId));
   } catch {
     return null;
   }
@@ -569,15 +581,128 @@ function LeadJourneyPanel({
   );
 }
 
-export function ModuleListPage({ config }: { config: ModuleConfig }) {
+type FixedFilter = { field: string; value: string };
+
+const availableUnitStatuses = ["available", "vacant"];
+const reservedUnitStatuses = ["reserved", "underNegotiation"];
+const closedUnitStatuses = ["sold", "rented", "leased", "occupied"];
+const unavailableUnitStatuses = ["unavailable", "withdrawn", "underMaintenance"];
+
+function countUnitsByStatus(records: Record<string, unknown>[], statuses: string[]) {
+  return records.filter((record) => statuses.includes(String(record.status ?? ""))).length;
+}
+
+function UnitInventoryOverview({ records }: { records: Record<string, unknown>[] }) {
+  const availableCount = countUnitsByStatus(records, availableUnitStatuses);
+  const reservedCount = countUnitsByStatus(records, reservedUnitStatuses);
+  const closedCount = countUnitsByStatus(records, closedUnitStatuses);
+  const unavailableCount = countUnitsByStatus(records, unavailableUnitStatuses);
+  const groupedByProperty = Array.from(records.reduce((groups, record) => {
+    const propertyId = String(record.propertyId ?? "unlinked");
+    const current = groups.get(propertyId) ?? {
+      available: 0,
+      closed: 0,
+      id: propertyId,
+      label: String(record.propertyName ?? record.propertyReferenceNumber ?? record.propertyId ?? "Unlinked property"),
+      reserved: 0,
+      total: 0,
+    };
+    const status = String(record.status ?? "");
+    current.total += 1;
+    if (availableUnitStatuses.includes(status)) {
+      current.available += 1;
+    }
+    if (reservedUnitStatuses.includes(status)) {
+      current.reserved += 1;
+    }
+    if (closedUnitStatuses.includes(status)) {
+      current.closed += 1;
+    }
+    groups.set(propertyId, current);
+    return groups;
+  }, new Map<string, { available: number; closed: number; id: string; label: string; reserved: number; total: number }>()).values())
+    .sort((left, right) => right.total - left.total)
+    .slice(0, 8);
+
+  const summaryCards = [
+    { icon: Building2, label: "Total units", tone: "text-foreground", value: records.length },
+    { icon: CircleCheck, label: "Available", tone: "text-success", value: availableCount },
+    { icon: Clock, label: "Reserved/negotiating", tone: "text-warning", value: reservedCount },
+    { icon: XCircle, label: "Closed or unavailable", tone: "text-muted-foreground", value: closedCount + unavailableCount },
+  ];
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Card key={item.label}>
+              <CardContent className="flex items-center justify-between gap-3 p-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">{item.label}</p>
+                  <p className="mt-1 text-2xl font-semibold">{item.value}</p>
+                </div>
+                <Icon className={cn("h-5 w-5", item.tone)} />
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+      <Card>
+        <CardHeader><CardTitle>Inventory By Property</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          {groupedByProperty.map((property) => (
+            <Link className="grid gap-3 rounded-md border p-3 hover:bg-muted md:grid-cols-[minmax(0,1fr)_auto]" href={property.id === "unlinked" ? "/units" : `/properties/${property.id}/units`} key={property.id}>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{property.label}</p>
+                <p className="mt-1 text-muted-foreground">{property.total} total units</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-md bg-success/10 px-3 py-2 text-success">
+                  <p className="font-semibold">{property.available}</p>
+                  <p className="text-xs">Available</p>
+                </div>
+                <div className="rounded-md bg-warning/10 px-3 py-2 text-warning">
+                  <p className="font-semibold">{property.reserved}</p>
+                  <p className="text-xs">Held</p>
+                </div>
+                <div className="rounded-md bg-muted px-3 py-2 text-muted-foreground">
+                  <p className="font-semibold">{property.closed}</p>
+                  <p className="text-xs">Closed</p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function ModuleListPage({
+  config,
+  createHref,
+  description,
+  fixedFilters = [],
+  title,
+}: {
+  config: ModuleConfig;
+  createHref?: string;
+  description?: string;
+  fixedFilters?: FixedFilter[];
+  title?: string;
+}) {
   const { activeOrganizationId, member, user } = useAuth();
   const [records, setRecords] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fixedFilterKey = JSON.stringify(fixedFilters);
 
   useEffect(() => {
     let mounted = true;
     const constraints: QueryConstraint[] = [];
+    const activeFixedFilters = JSON.parse(fixedFilterKey) as FixedFilter[];
 
     if (config.collection === "leads" && user && !hasPermission(member, "leads.readAll")) {
       constraints.push(where("assignedTo", "==", user.uid));
@@ -586,6 +711,10 @@ export function ModuleListPage({ config }: { config: ModuleConfig }) {
     if (config.collection === "tasks" && user && !hasAnyPermission(member, ["dashboard.viewExecutive", "users.manage"])) {
       constraints.push(where("assignedTo", "==", user.uid));
     }
+
+    activeFixedFilters.forEach((filter) => {
+      constraints.push(where(filter.field, "==", filter.value));
+    });
 
     listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, constraints)
       .then((items) => {
@@ -599,26 +728,34 @@ export function ModuleListPage({ config }: { config: ModuleConfig }) {
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, config.collection, member, user]);
+  }, [activeOrganizationId, config.collection, fixedFilterKey, member, user]);
 
   if (!hasAnyPermission(member, [config.listPermission as never, "dashboard.viewExecutive" as never])) {
     return <PermissionDenied />;
   }
 
+  const pageDescription = description ?? (
+    config.collection === "propertyUnits"
+      ? "Inventory for sellable, rentable, reserved, closed, and unavailable units under properties."
+      : "Search, filter, sort, export, and manage organization-scoped records."
+  );
+  const pageTitle = title ?? (config.collection === "propertyUnits" ? "Unit Inventory" : config.title);
+
   return (
     <section className="grid min-w-0 gap-5">
       <div className="flex flex-col gap-3 rounded-md bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
-          <h1 className="text-xl font-semibold md:text-2xl">{config.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Search, filter, sort, export, and manage organization-scoped records.</p>
+          <h1 className="text-xl font-semibold md:text-2xl">{pageTitle}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{pageDescription}</p>
         </div>
         {hasPermission(member, config.createPermission as never) ? (
-          <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={`${config.route}/new`}>
+          <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={createHref ?? `${config.route}/new`}>
             <Plus className="h-4 w-4" />
             New {config.title.slice(0, -1)}
           </ButtonLink>
         ) : null}
       </div>
+      {config.collection === "propertyUnits" && !error && !loading && records.length ? <UnitInventoryOverview records={records} /> : null}
       {error ? <ErrorState message={error} /> : loading ? <LoadingState label={`Loading ${config.title.toLowerCase()}`} /> : (
         <CrmTable columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${config.title.slice(0, -1)}`} emptyTitle={config.emptyTitle} />
       )}
@@ -654,6 +791,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [activities, setActivities] = useState<Record<string, unknown>[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [propertyUnits, setPropertyUnits] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -661,15 +799,21 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
   const loadDetail = useCallback(async () => {
     const relatedType = relatedTypeForCollection(config.collection);
-    const [nextRecord, nextTasks, nextActivities, nextDocuments] = await Promise.all([
+    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits] = await Promise.all([
       getOrgRecord<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, id),
       safeListOrgRecords(activeOrganizationId, "tasks"),
       safeListOrgRecords(activeOrganizationId, "activities"),
       safeListDocuments(activeOrganizationId),
+      safeListOrgRecords(activeOrganizationId, "propertyUnits"),
     ]);
-    const nextRelatedRecord = config.collection === "activities" ? await safeGetRelatedRecord(activeOrganizationId, nextRecord) : null;
+    const nextRelatedRecord = config.collection === "activities"
+      ? await safeGetRelatedRecord(activeOrganizationId, nextRecord)
+      : config.collection === "propertyUnits"
+        ? await safeGetLinkedProperty(activeOrganizationId, nextRecord)
+        : null;
     setRecord(nextRecord);
     setRelatedRecord(nextRelatedRecord);
+    setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : []);
     if (relatedType) {
       setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
       setActivities(nextActivities.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 10));
@@ -686,19 +830,25 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       safeListOrgRecords(activeOrganizationId, "tasks"),
       safeListOrgRecords(activeOrganizationId, "activities"),
       safeListDocuments(activeOrganizationId),
+      safeListOrgRecords(activeOrganizationId, "propertyUnits"),
     ])
-      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments]) => {
+      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits]) => {
         if (!mounted) {
           return;
         }
 
-        const nextRelatedRecord = await safeGetRelatedRecord(activeOrganizationId, config.collection === "activities" ? nextRecord : null);
+        const nextRelatedRecord = config.collection === "activities"
+          ? await safeGetRelatedRecord(activeOrganizationId, nextRecord)
+          : config.collection === "propertyUnits"
+            ? await safeGetLinkedProperty(activeOrganizationId, nextRecord)
+            : null;
         if (!mounted) {
           return;
         }
 
         setRecord(nextRecord);
         setRelatedRecord(nextRelatedRecord);
+        setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : []);
         if (relatedType) {
           setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
           setActivities(nextActivities.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 10));
@@ -731,8 +881,8 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const status = String(record.status ?? record.propertyStatus ?? "active");
   const relatedType = relatedTypeForCollection(config.collection);
   const relatedQuery = relatedType ? `relatedEntityType=${relatedType}&relatedEntityId=${id}` : "";
-  const relatedRecordHref = relatedRecord ? routeForRelatedEntity(record.relatedEntityType, relatedRecord.id) : null;
-  const relatedRecordLabel = titleCase(String(record.relatedEntityType ?? "Related record"));
+  const relatedRecordHref = relatedRecord ? routeForRelatedEntity(config.collection === "propertyUnits" ? "property" : record.relatedEntityType, relatedRecord.id) : null;
+  const relatedRecordLabel = config.collection === "propertyUnits" ? "Property" : titleCase(String(record.relatedEntityType ?? "Related record"));
 
   async function handleConvertLead() {
     setActionLoading(true);
@@ -774,7 +924,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
         </div>
       ) : null}
       {relatedType ? (
-        <div className="grid gap-2 md:grid-cols-3">
+        <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
           <ButtonLink href={`/tasks/new?${relatedQuery}`} variant="outline">
             <ListTodo className="h-4 w-4" />
             Add task
@@ -787,6 +937,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
             <GitBranch className="h-4 w-4" />
             Attach document
           </ButtonLink>
+          {config.collection === "properties" && hasPermission(member, "units.create") ? (
+            <ButtonLink href={`/units/new?propertyId=${id}`} variant="outline">
+              <Building2 className="h-4 w-4" />
+              Add unit
+            </ButtonLink>
+          ) : null}
         </div>
       ) : null}
       {config.collection === "leads" ? (
@@ -796,7 +952,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
         <Card>
           <CardHeader><CardTitle>Summary</CardTitle></CardHeader>
           <CardContent className="grid gap-3 text-sm">
-            {config.collection === "activities" && relatedRecord ? (
+            {(config.collection === "activities" || config.collection === "propertyUnits") && relatedRecord ? (
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">{relatedRecordLabel}</span>
                 {relatedRecordHref ? (
@@ -829,6 +985,32 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
           </CardContent>
         </Card>
       </div>
+      {config.collection === "properties" ? (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle>Units</CardTitle>
+              <div className="grid gap-2 sm:flex">
+                <ButtonLink href={`/properties/${id}/units`} size="sm" variant="outline">View all units</ButtonLink>
+                {hasPermission(member, "units.create") ? <ButtonLink href={`/units/new?propertyId=${id}`} size="sm">Add unit</ButtonLink> : null}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            {propertyUnits.length ? propertyUnits.map((unit) => (
+              <Link className="rounded-md border p-3 hover:bg-muted" href={`/units/${unit.id}`} key={String(unit.id)}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="font-semibold">{String(unit.unitNumber ?? unit.referenceNumber ?? "Unit")}</span>
+                  <Badge tone={statusTone(String(unit.status ?? "draft"))}>{titleCase(String(unit.status ?? "draft"))}</Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  {String(unit.unitType ?? "Unit")} · {formatCurrency(Number(unit.askingPrice ?? unit.rentAmount ?? 0))}
+                </p>
+              </Link>
+            )) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No units have been linked to this property yet.</div>}
+          </CardContent>
+        </Card>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Open Tasks</CardTitle></CardHeader>

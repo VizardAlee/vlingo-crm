@@ -6,7 +6,7 @@ import { db, storage } from "@/lib/firebase/client";
 import { createReference } from "@/lib/utils";
 import { orgCollectionPath } from "@/services/firestore-paths";
 
-export type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task";
+export type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task" | "owner" | "developer" | "management";
 
 export interface DocumentRecord {
   id: string;
@@ -21,6 +21,7 @@ export interface DocumentRecord {
   isDeleted: boolean;
   organizationId: string;
   relatedEntityId?: string;
+  relatedEntityName?: string;
   relatedEntityType?: RelatedEntityType;
   size: number;
   status: "active" | "archived";
@@ -36,6 +37,7 @@ export interface UploadDocumentInput {
   file: File;
   organizationId: string;
   relatedEntityId?: string;
+  relatedEntityName?: string;
   relatedEntityType?: RelatedEntityType;
   title: string;
   userId: string;
@@ -96,6 +98,7 @@ export async function uploadDocument(input: UploadDocumentInput) {
     isDeleted: false,
     organizationId: input.organizationId,
     relatedEntityId: input.relatedEntityId || "",
+    relatedEntityName: input.relatedEntityName || "",
     relatedEntityType: input.relatedEntityType || "",
     size: input.file.size,
     status: "active",

@@ -7,11 +7,17 @@ import type { Activity, Client, Lead, Property, PropertyUnit, Task } from "@/typ
 export type ModuleKey = "leads" | "clients" | "properties" | "propertyUnits" | "tasks" | "activities";
 
 export interface FormField {
+  colSpan?: "full";
+  helpText?: string;
   name: string;
   label: string;
   options?: string[];
+  optionSource?: "internalManagers" | "managementCompanies" | "properties" | "propertyDevelopers" | "propertyOwners";
+  readOnly?: boolean;
+  placeholder?: string;
   required?: boolean;
-  type: "text" | "email" | "number" | "select" | "textarea";
+  section?: string;
+  type: "date" | "email" | "number" | "select" | "textarea" | "text" | "url";
 }
 
 export interface ModuleConfig {
@@ -28,7 +34,15 @@ export interface ModuleConfig {
 
 const leadStatuses = ["new", "contacted", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
 const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Property portal", "Event", "Other"];
+const propertyCategories = ["Residential", "Commercial", "Land", "Estate", "Apartment", "Detached house", "Semi-detached house", "Terrace", "Office", "Shop", "Warehouse", "Mixed-use", "Short-let", "Other"];
+const listingStatuses = ["listed", "draft", "private", "offMarket"];
+const marketingStatuses = ["active", "paused", "needsMedia", "comingSoon", "archived"];
 const propertyStatuses = ["draft", "available", "reserved", "underNegotiation", "sold", "rented", "leased", "occupied", "vacant", "underMaintenance", "unavailable", "withdrawn"];
+const titleTypes = ["C of O", "Governor's consent", "Deed of assignment", "Excision", "Gazette", "Registered survey", "Receipt and allocation", "Family receipt", "None", "Other"];
+const titleStatuses = ["verified", "pendingVerification", "available", "inProcess", "notAvailable", "disputed"];
+const unitTypes = ["Apartment", "Flat", "Duplex", "Terrace", "Semi-detached", "Detached", "Bungalow", "Penthouse", "Shop", "Office", "Warehouse", "Land plot", "Other"];
+const furnishingStatuses = ["unfurnished", "semiFurnished", "furnished", "serviced"];
+const sizeUnits = ["sqm", "sqft", "plots", "acres", "hectares"];
 
 export const moduleConfigs: Record<string, ModuleConfig> = {
   leads: {
@@ -106,19 +120,64 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     route: "/properties",
     title: "Properties",
     fields: [
-      { name: "name", label: "Property name", required: true, type: "text" },
-      { name: "category", label: "Category", required: true, type: "text" },
-      { name: "transactionTypes", label: "Transaction types", required: true, type: "text" },
-      { name: "address", label: "Address", required: true, type: "textarea" },
-      { name: "state", label: "State", required: true, type: "text" },
-      { name: "city", label: "City", required: true, type: "text" },
-      { name: "askingPrice", label: "Asking price", type: "number" },
-      { name: "rentAmount", label: "Rent amount", type: "number" },
-      { name: "propertyStatus", label: "Property status", options: propertyStatuses, required: true, type: "select" },
-      { name: "listingStatus", label: "Listing status", type: "text" },
-      { name: "marketingStatus", label: "Marketing status", type: "text" },
-      { name: "features", label: "Features", type: "text" },
-      { name: "description", label: "Description", type: "textarea" },
+      { name: "name", label: "Property name", placeholder: "Example: Beacon Court Phase 2", required: true, section: "Property basics", type: "text" },
+      { name: "category", label: "Category", options: propertyCategories, required: true, section: "Property basics", type: "select" },
+      { helpText: "Use commas for multiple options.", name: "transactionTypes", label: "Transaction types", placeholder: "sale, rent, lease", required: true, section: "Property basics", type: "text" },
+      { name: "propertyStatus", label: "Property status", options: propertyStatuses, required: true, section: "Property basics", type: "select" },
+      { name: "listingStatus", label: "Listing status", options: listingStatuses, required: true, section: "Property basics", type: "select" },
+      { name: "marketingStatus", label: "Marketing status", options: marketingStatuses, required: true, section: "Property basics", type: "select" },
+      { colSpan: "full", name: "description", label: "Description", placeholder: "Short public-facing property description.", section: "Property basics", type: "textarea" },
+
+      { colSpan: "full", name: "address", label: "Address", required: true, section: "Location", type: "textarea" },
+      { name: "state", label: "State", required: true, section: "Location", type: "text" },
+      { name: "city", label: "City", required: true, section: "Location", type: "text" },
+      { name: "localGovernmentArea", label: "Local government area", section: "Location", type: "text" },
+      { name: "estateOrNeighborhood", label: "Estate or neighbourhood", section: "Location", type: "text" },
+      { name: "landmark", label: "Nearest landmark", section: "Location", type: "text" },
+      { name: "latitude", label: "Latitude", section: "Location", type: "number" },
+      { name: "longitude", label: "Longitude", section: "Location", type: "number" },
+
+      { name: "size", label: "Total size", section: "Specification", type: "number" },
+      { name: "sizeUnit", label: "Size unit", options: ["sqm", "sqft", "acres", "hectares", "plots"], section: "Specification", type: "select" },
+      { name: "bedrooms", label: "Bedrooms", section: "Specification", type: "number" },
+      { name: "bathrooms", label: "Bathrooms", section: "Specification", type: "number" },
+      { name: "toilets", label: "Toilets", section: "Specification", type: "number" },
+      { name: "parkingSpaces", label: "Parking spaces", section: "Specification", type: "number" },
+      { name: "floors", label: "Floors", section: "Specification", type: "number" },
+      { name: "unitsCount", label: "Number of units", section: "Specification", type: "number" },
+      { name: "furnishingStatus", label: "Furnishing status", options: ["unfurnished", "semiFurnished", "fullyFurnished", "notApplicable"], section: "Specification", type: "select" },
+      { colSpan: "full", helpText: "Use commas to add more than one feature.", name: "features", label: "Features", placeholder: "24/7 power, water, security, drainage", section: "Specification", type: "text" },
+
+      { name: "askingPrice", label: "Sale asking price", section: "Pricing and fees", type: "number" },
+      { name: "minimumAcceptablePrice", label: "Minimum acceptable price", section: "Pricing and fees", type: "number" },
+      { name: "rentAmount", label: "Rent amount", section: "Pricing and fees", type: "number" },
+      { name: "serviceCharge", label: "Service charge", section: "Pricing and fees", type: "number" },
+      { name: "cautionFee", label: "Caution fee", section: "Pricing and fees", type: "number" },
+      { name: "legalFee", label: "Legal fee", section: "Pricing and fees", type: "number" },
+      { name: "agencyFeeType", label: "Agency fee type", options: ["percentage", "fixed", "none"], section: "Pricing and fees", type: "select" },
+      { name: "agencyFeeValue", label: "Agency fee value", section: "Pricing and fees", type: "number" },
+      { helpText: "Calculated from sale asking price first, then rent amount if no sale price is set.", name: "agencyFee", label: "Calculated agency fee", readOnly: true, section: "Pricing and fees", type: "number" },
+      { name: "commissionType", label: "Commission type", options: ["percentage", "fixed", "none"], section: "Pricing and fees", type: "select" },
+      { name: "commissionValue", label: "Commission value", section: "Pricing and fees", type: "number" },
+      { helpText: "Calculated from sale asking price first, then rent amount if no sale price is set.", name: "commissionAmount", label: "Calculated commission amount", readOnly: true, section: "Pricing and fees", type: "number" },
+
+      { helpText: "Create owners below if they are not already listed.", name: "propertyOwnerId", label: "Owner", optionSource: "propertyOwners", section: "Ownership and management", type: "select" },
+      { helpText: "Create developers below if they are not already listed.", name: "developerId", label: "Developer", optionSource: "propertyDevelopers", section: "Ownership and management", type: "select" },
+      { helpText: "External company or person managing the property.", name: "managementCompanyId", label: "Management record", optionSource: "managementCompanies", section: "Ownership and management", type: "select" },
+      { helpText: "Internal CRM user responsible for this property.", name: "assignedManager", label: "Assigned internal manager", optionSource: "internalManagers", section: "Ownership and management", type: "select" },
+      { name: "dateListed", label: "Date listed", section: "Ownership and management", type: "date" },
+      { name: "availabilityDate", label: "Availability date", section: "Ownership and management", type: "date" },
+
+      { name: "titleType", label: "Title type", options: titleTypes, section: "Title and legal", type: "select" },
+      { name: "titleStatus", label: "Title status", options: titleStatuses, section: "Title and legal", type: "select" },
+      { name: "surveyPlanNumber", label: "Survey plan number", section: "Title and legal", type: "text" },
+      { name: "registrationNumber", label: "Registration number", section: "Title and legal", type: "text" },
+      { colSpan: "full", name: "legalNotes", label: "Legal notes", section: "Title and legal", type: "textarea" },
+
+      { name: "virtualTourUrl", label: "Virtual tour URL", section: "Media and inspection", type: "url" },
+      { name: "brochureUrl", label: "Brochure URL", section: "Media and inspection", type: "url" },
+      { name: "mediaFolderUrl", label: "Media folder URL", section: "Media and inspection", type: "url" },
+      { colSpan: "full", name: "inspectionNotes", label: "Inspection notes", section: "Media and inspection", type: "textarea" },
     ],
   },
   propertyUnits: {
@@ -131,18 +190,30 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     route: "/units",
     title: "Property Units",
     fields: [
-      { name: "propertyId", label: "Property ID", required: true, type: "text" },
-      { name: "unitNumber", label: "Unit number", required: true, type: "text" },
-      { name: "plotNumber", label: "Plot number", type: "text" },
-      { name: "phase", label: "Phase", type: "text" },
-      { name: "block", label: "Block", type: "text" },
-      { name: "size", label: "Size", type: "number" },
-      { name: "sizeUnit", label: "Size unit", type: "text" },
-      { name: "bedrooms", label: "Bedrooms", type: "number" },
-      { name: "bathrooms", label: "Bathrooms", type: "number" },
-      { name: "askingPrice", label: "Asking price", type: "number" },
-      { name: "rentAmount", label: "Rent amount", type: "number" },
-      { name: "status", label: "Status", options: propertyStatuses, required: true, type: "select" },
+      { helpText: "Pick the parent property. The saved unit will stay linked to this property record.", name: "propertyId", label: "Property", optionSource: "properties", required: true, section: "Linked property", type: "select" },
+      { name: "unitNumber", label: "Unit number/name", required: true, section: "Unit basics", type: "text" },
+      { name: "unitType", label: "Unit type", options: unitTypes, section: "Unit basics", type: "select" },
+      { name: "status", label: "Status", options: propertyStatuses, required: true, section: "Unit basics", type: "select" },
+      { name: "phase", label: "Phase", section: "Location inside property", type: "text" },
+      { name: "block", label: "Block", section: "Location inside property", type: "text" },
+      { name: "floor", label: "Floor", section: "Location inside property", type: "text" },
+      { name: "plotNumber", label: "Plot number", section: "Location inside property", type: "text" },
+      { name: "size", label: "Size", section: "Specifications", type: "number" },
+      { name: "sizeUnit", label: "Size unit", options: sizeUnits, section: "Specifications", type: "select" },
+      { name: "bedrooms", label: "Bedrooms", section: "Specifications", type: "number" },
+      { name: "bathrooms", label: "Bathrooms", section: "Specifications", type: "number" },
+      { name: "toilets", label: "Toilets", section: "Specifications", type: "number" },
+      { name: "parkingSpaces", label: "Parking spaces", section: "Specifications", type: "number" },
+      { name: "furnishingStatus", label: "Furnishing status", options: furnishingStatuses, section: "Specifications", type: "select" },
+      { colSpan: "full", helpText: "Separate multiple features with commas.", name: "features", label: "Features", section: "Specifications", type: "text" },
+      { name: "askingPrice", label: "Sale asking price", section: "Pricing and availability", type: "number" },
+      { name: "rentAmount", label: "Rent amount", section: "Pricing and availability", type: "number" },
+      { name: "serviceCharge", label: "Service charge", section: "Pricing and availability", type: "number" },
+      { name: "cautionFee", label: "Caution fee", section: "Pricing and availability", type: "number" },
+      { name: "legalFee", label: "Legal fee", section: "Pricing and availability", type: "number" },
+      { name: "availabilityDate", label: "Availability date", section: "Pricing and availability", type: "date" },
+      { name: "reservationExpiresAt", label: "Reservation expires", section: "Pricing and availability", type: "date" },
+      { colSpan: "full", name: "notes", label: "Unit notes", section: "Notes", type: "textarea" },
     ],
   },
   tasks: {
@@ -159,8 +230,8 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "description", label: "Description", type: "textarea" },
       { name: "priority", label: "Priority", options: ["low", "medium", "high", "urgent"], required: true, type: "select" },
       { name: "status", label: "Status", options: ["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"], required: true, type: "select" },
-      { name: "dueAt", label: "Due date", type: "text" },
-      { name: "assignedTo", label: "Assigned to user ID", type: "text" },
+      { name: "dueAt", label: "Due date", type: "date" },
+      { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", type: "select" },
       { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
@@ -227,10 +298,54 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
 
   if (moduleKey === "propertyUnits") {
     return [
-      { header: "Reference", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/units/${row.original.id}`}>{String(row.original.referenceNumber ?? "Draft")}</Link> },
-      { header: "Unit", accessorKey: "unitNumber" },
-      { header: "Property", accessorKey: "propertyId" },
-      { header: "Price", cell: ({ row }) => formatCurrency(Number(row.original.askingPrice ?? row.original.rentAmount ?? 0)) },
+      {
+        header: "Unit",
+        cell: ({ row }) => (
+          <Link className="grid gap-0.5 font-semibold text-primary" href={`/units/${row.original.id}`}>
+            <span>{String(row.original.unitNumber ?? "Unit")}</span>
+            <span className="text-xs font-medium text-muted-foreground">{String(row.original.referenceNumber ?? "Draft")}</span>
+          </Link>
+        ),
+      },
+      {
+        header: "Property",
+        cell: ({ row }) => {
+          const label = String(row.original.propertyName ?? row.original.propertyReferenceNumber ?? row.original.propertyId ?? "");
+          return row.original.propertyId ? <Link className="font-medium text-primary" href={`/properties/${row.original.propertyId}`}>{label}</Link> : label;
+        },
+      },
+      {
+        header: "Specs",
+        cell: ({ row }) => {
+          const specs = [
+            row.original.unitType ? titleCase(String(row.original.unitType)) : null,
+            row.original.bedrooms ? `${String(row.original.bedrooms)} bed` : null,
+            row.original.bathrooms ? `${String(row.original.bathrooms)} bath` : null,
+            row.original.size && row.original.sizeUnit ? `${String(row.original.size)} ${String(row.original.sizeUnit)}` : null,
+          ].filter(Boolean);
+          return specs.length ? specs.join(" · ") : "Not set";
+        },
+      },
+      {
+        header: "Pricing",
+        cell: ({ row }) => {
+          const salePrice = Number(row.original.askingPrice ?? 0);
+          const rentPrice = Number(row.original.rentAmount ?? 0);
+          if (salePrice && rentPrice) {
+            return `${formatCurrency(salePrice)} sale · ${formatCurrency(rentPrice)} rent`;
+          }
+
+          if (salePrice) {
+            return `${formatCurrency(salePrice)} sale`;
+          }
+
+          if (rentPrice) {
+            return `${formatCurrency(rentPrice)} rent`;
+          }
+
+          return "Not priced";
+        },
+      },
       statusColumn,
     ];
   }
@@ -239,7 +354,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
     return [
       { header: "Task", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/tasks/${row.original.id}`}>{String(row.original.title ?? "Task")}</Link> },
       { header: "Priority", cell: ({ row }) => titleCase(String(row.original.priority ?? "")) },
-      { header: "Assigned", accessorKey: "assignedTo" },
+      { header: "Assigned", cell: ({ row }) => String(row.original.assignedToName ?? row.original.assignedToEmail ?? row.original.assignedTo ?? "Unassigned") },
       statusColumn,
     ];
   }

@@ -30,15 +30,17 @@ Select.displayName = "Select";
 
 export function Field({
   children,
+  className,
   error,
   label,
 }: {
   children: React.ReactNode;
+  className?: string;
   error?: string;
   label: string;
 }) {
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-foreground">
+    <label className={cn("grid gap-1.5 text-sm font-medium text-foreground", className)}>
       <span>{label}</span>
       {children}
       {error ? <span className="text-xs font-medium text-destructive">{error}</span> : null}

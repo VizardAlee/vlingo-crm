@@ -51,7 +51,7 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if isActiveMember(orgId) &&
-          (memberId == request.auth.uid || hasAnyPermission(orgId, ["users.manage", "roles.manage"]));
+          (memberId == request.auth.uid || hasAnyPermission(orgId, ["users.manage", "roles.manage", "tasks.create", "tasks.update"]));
         allow create, update, delete: if false;
       }
 
@@ -83,6 +83,13 @@ service cloud.firestore {
       }
 
       match /properties/{propertyId} {
+        allow read: if hasPermission(orgId, "properties.read");
+        allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
+      match /propertyStakeholders/{stakeholderId} {
         allow read: if hasPermission(orgId, "properties.read");
         allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);

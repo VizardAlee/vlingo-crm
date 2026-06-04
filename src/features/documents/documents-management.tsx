@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Download, FileText, RefreshCw, Upload } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +12,80 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, uploadDocument, type DocumentRecord, type RelatedEntityType } from "@/services/documents";
+import { listOrgRecords } from "@/services/repository";
+import type { OrgCollection } from "@/services/firestore-paths";
 
-const entityTypes: RelatedEntityType[] = ["lead", "client", "property", "unit", "task"];
+type RelatedOption = { label: string; value: string };
+type RelatedConfig = {
+  collection: OrgCollection;
+  label: string;
+  type: RelatedEntityType;
+  filter?: (record: Record<string, unknown>) => boolean;
+};
+
+const relatedConfigs: RelatedConfig[] = [
+  { collection: "leads", label: "Lead", type: "lead" },
+  { collection: "clients", label: "Client", type: "client" },
+  { collection: "properties", label: "Property", type: "property" },
+  { collection: "propertyUnits", label: "Unit", type: "unit" },
+  { collection: "tasks", label: "Task", type: "task" },
+  { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", type: "owner" },
+  { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", type: "developer" },
+  { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", type: "management" },
+];
+
+function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
+  if (type === "lead" || type === "client") {
+    const detail = [record.phoneNumber, record.email, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.fullName ?? "Unnamed")} (${detail})` : String(record.fullName ?? record.referenceNumber ?? record.id);
+  }
+
+  if (type === "property") {
+    const detail = [record.city, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.name ?? "Property")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
+  }
+
+  if (type === "unit") {
+    const detail = [record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.unitNumber ?? "Unit")} (${detail})` : String(record.unitNumber ?? record.referenceNumber ?? record.id);
+  }
+
+  if (type === "task") {
+    const detail = [record.assignedToName, record.dueAt, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.title ?? "Task")} (${detail})` : String(record.title ?? record.referenceNumber ?? record.id);
+  }
+
+  const detail = [record.phoneNumber, record.email, record.referenceNumber].filter(Boolean).join(" · ");
+  return detail ? `${String(record.name ?? "Record")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
+}
+
+function routeForRelatedDocument(type: string | undefined, id: string | undefined) {
+  if (!type || !id) {
+    return null;
+  }
+
+  if (type === "lead") {
+    return `/leads/${id}`;
+  }
+
+  if (type === "client") {
+    return `/clients/${id}`;
+  }
+
+  if (type === "property") {
+    return `/properties/${id}`;
+  }
+
+  if (type === "unit") {
+    return `/units/${id}`;
+  }
+
+  if (type === "task") {
+    return `/tasks/${id}`;
+  }
+
+  return null;
+}
 
 export function DocumentsManagement() {
   const searchParams = useSearchParams();
@@ -22,6 +95,9 @@ export function DocumentsManagement() {
   const [category, setCategory] = useState("general");
   const [relatedEntityType, setRelatedEntityType] = useState(searchParams.get("relatedEntityType") ?? "");
   const [relatedEntityId, setRelatedEntityId] = useState(searchParams.get("relatedEntityId") ?? "");
+  const [relatedOptions, setRelatedOptions] = useState<RelatedOption[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(Boolean(searchParams.get("relatedEntityType")));
+  const [relatedError, setRelatedError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,6 +124,43 @@ export function DocumentsManagement() {
     return () => window.clearTimeout(timeout);
   }, [loadDocuments]);
 
+  useEffect(() => {
+    if (!relatedEntityType) {
+      return;
+    }
+
+    const config = relatedConfigs.find((item) => item.type === relatedEntityType);
+    if (!config) {
+      return;
+    }
+
+    let mounted = true;
+    listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection)
+      .then((records) => {
+        if (!mounted) {
+          return;
+        }
+
+        const filteredRecords = config.filter ? records.filter(config.filter) : records;
+        setRelatedOptions(filteredRecords.map((record) => ({ label: recordLabel(config.type, record), value: record.id })));
+      })
+      .catch(() => {
+        if (mounted) {
+          setRelatedOptions([]);
+          setRelatedError(`Unable to load ${config.label.toLowerCase()} records for this user.`);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setRelatedLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeOrganizationId, relatedEntityType]);
+
   async function submitUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user || !file) {
@@ -58,14 +171,16 @@ export function DocumentsManagement() {
     setSaving(true);
     setError(null);
     setSuccess(null);
+    const selectedRelatedOption = relatedOptions.find((option) => option.value === relatedEntityId);
     try {
       await uploadDocument({
         branchId: activeBranchId,
         category,
         file,
         organizationId: activeOrganizationId,
-        relatedEntityId,
-        relatedEntityType: relatedEntityType as RelatedEntityType,
+        relatedEntityId: relatedEntityType ? relatedEntityId : "",
+        relatedEntityName: selectedRelatedOption?.label ?? "",
+        relatedEntityType: relatedEntityType ? relatedEntityType as RelatedEntityType : undefined,
         title,
         userId: user.uid,
       });
@@ -73,6 +188,9 @@ export function DocumentsManagement() {
       setCategory("general");
       setRelatedEntityType("");
       setRelatedEntityId("");
+      setRelatedOptions([]);
+      setRelatedError(null);
+      setRelatedLoading(false);
       setFile(null);
       setSuccess("Document uploaded.");
       await loadDocuments();
@@ -128,13 +246,24 @@ export function DocumentsManagement() {
               </Select>
             </Field>
             <Field label="Related type">
-              <Select value={relatedEntityType} onChange={(event) => setRelatedEntityType(event.target.value)}>
+              <Select value={relatedEntityType} onChange={(event) => {
+                const nextType = event.target.value;
+                setRelatedEntityType(nextType);
+                setRelatedEntityId("");
+                setRelatedOptions([]);
+                setRelatedError(null);
+                setRelatedLoading(Boolean(nextType));
+              }}>
                 <option value="">None</option>
-                {entityTypes.map((type) => <option key={type} value={type}>{titleCase(type)}</option>)}
+                {relatedConfigs.map((config) => <option key={config.type} value={config.type}>{config.label}</option>)}
               </Select>
             </Field>
-            <Field label="Related ID">
-              <Input value={relatedEntityId} onChange={(event) => setRelatedEntityId(event.target.value)} />
+            <Field label="Related record" error={relatedError ?? undefined}>
+              <Select disabled={!relatedEntityType || relatedLoading} value={relatedEntityId} onChange={(event) => setRelatedEntityId(event.target.value)}>
+                <option value="">{relatedLoading ? "Loading records" : relatedEntityType ? "Select record" : "Select related type first"}</option>
+                {relatedEntityId && !relatedOptions.some((option) => option.value === relatedEntityId) ? <option value={relatedEntityId}>Selected record ({relatedEntityId})</option> : null}
+                {relatedOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </Select>
             </Field>
             <div className="lg:col-span-3">
               <Field label="File">
@@ -173,7 +302,16 @@ export function DocumentsManagement() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Related</p>
-                    <p className="truncate font-medium">{item.relatedEntityType ? `${titleCase(item.relatedEntityType)} ${item.relatedEntityId}` : "None"}</p>
+                    {(() => {
+                      const route = routeForRelatedDocument(item.relatedEntityType, item.relatedEntityId);
+                      const label = item.relatedEntityName || item.relatedEntityId;
+                      if (!item.relatedEntityType || !label) {
+                        return <p className="truncate font-medium">None</p>;
+                      }
+
+                      const content = `${titleCase(item.relatedEntityType)} · ${label}`;
+                      return route ? <Link className="truncate font-medium text-primary" href={route}>{content}</Link> : <p className="truncate font-medium">{content}</p>;
+                    })()}
                   </div>
                   <div>
                     <p className="text-muted-foreground">Size</p>

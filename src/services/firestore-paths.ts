@@ -7,6 +7,7 @@ export type OrgCollection =
   | "leads"
   | "members"
   | "properties"
+  | "propertyStakeholders"
   | "propertyUnits"
   | "roles"
   | "tasks";
