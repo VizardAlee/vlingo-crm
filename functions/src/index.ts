@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
@@ -315,13 +315,15 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
 
   const { leadId, organizationId } = request.data as { leadId: string; organizationId: string };
   const member = await db.doc(`organizations/${organizationId}/members/${request.auth.uid}`).get();
-  const permissions = member.data()?.permissions as string[] | undefined;
+  const memberData = member.data();
+  const permissions = memberData?.permissions as string[] | undefined;
   if (!member.exists || !permissions?.includes("clients.create")) {
     throw new HttpsError("permission-denied", "You cannot convert leads.");
   }
 
   const leadRef = db.doc(`organizations/${organizationId}/leads/${leadId}`);
   const clientRef = db.collection(`organizations/${organizationId}/clients`).doc();
+  let convertedLead: DocumentData | undefined;
   await db.runTransaction(async (transaction) => {
     const lead = await transaction.get(leadRef);
     if (!lead.exists) {
@@ -329,6 +331,16 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
     }
 
     const data = lead.data();
+    if (data?.status === "converted") {
+      throw new HttpsError("failed-precondition", "Lead has already been converted.");
+    }
+
+    if (data?.status === "lost") {
+      throw new HttpsError("failed-precondition", "Lost leads must be reopened before conversion.");
+    }
+
+    convertedLead = data;
+    const stageHistory = Array.isArray(data?.stageHistory) ? data.stageHistory : [];
     transaction.set(clientRef, {
       branchId: data?.branchId,
       category: "buyer",
@@ -346,7 +358,54 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: request.auth?.uid,
     });
-    transaction.update(leadRef, { status: "converted", updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth?.uid });
+    transaction.update(leadRef, {
+      clientId: clientRef.id,
+      convertedAt: FieldValue.serverTimestamp(),
+      convertedBy: request.auth?.uid,
+      lastContactAt: FieldValue.serverTimestamp(),
+      stageHistory: [
+        ...stageHistory,
+        {
+          at: new Date().toISOString(),
+          from: data?.status ?? "new",
+          note: "Lead converted to client after confirmed commitment.",
+          to: "converted",
+          userId: request.auth?.uid,
+        },
+      ],
+      status: "converted",
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: request.auth?.uid,
+    });
+  });
+
+  await db.collection(`organizations/${organizationId}/activities`).add({
+    body: `Client record created from lead ${leadId}.`,
+    branchId: convertedLead?.branchId ?? memberData?.branchId ?? "",
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: request.auth.uid,
+    isDeleted: false,
+    organizationId,
+    referenceNumber: `ACT-${Date.now()}`,
+    relatedEntityId: leadId,
+    relatedEntityType: "lead",
+    status: "completed",
+    subject: "Lead converted to client",
+    type: "internalNote",
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid,
+  });
+
+  await writeAuditLog({
+    action: "lead.convert",
+    actorId: request.auth.uid,
+    actorName: String(memberData?.displayName ?? request.auth.token.email ?? request.auth.uid),
+    branchId: String(convertedLead?.branchId ?? memberData?.branchId ?? ""),
+    entityId: leadId,
+    entityType: "lead",
+    newValue: { clientId: clientRef.id, status: "converted" },
+    organizationId,
+    previousValue: convertedLead,
   });
 
   return { clientId: clientRef.id };

@@ -148,6 +148,7 @@ export const unitSchema = z.object({
 export const taskSchema = z.object({
   title: z.string().min(2, "Task title is required."),
   description: z.string().optional(),
+  dueAt: optionalDateString,
   priority: z.enum(["low", "medium", "high", "urgent"]),
   status: z.enum(["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"]),
   assignedTo: z.string().optional(),
@@ -159,6 +160,7 @@ export const activitySchema = z.object({
   type: z.enum(["phoneCall", "whatsappMessage", "email", "sms", "meeting", "inspection", "followUp", "documentRequest", "paymentReminder", "complaint", "internalNote"]),
   subject: z.string().min(2, "Subject is required."),
   body: z.string().optional(),
+  status: z.string().optional(),
   relatedEntityType: z.enum(["lead", "client", "property", "unit", "task"]).optional(),
   relatedEntityId: z.string().optional(),
 });

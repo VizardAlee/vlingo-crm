@@ -143,6 +143,17 @@ export interface Lead extends EntityMetadata {
   lastContactAt?: Date | null;
   nextFollowUpAt?: Date | null;
   lostReason?: string;
+  clientId?: string;
+  convertedAt?: Date | null;
+  convertedBy?: string;
+  stageHistory?: Array<{
+    at: string;
+    from: string;
+    note: string;
+    reason?: string;
+    to: string;
+    userId: string;
+  }>;
 }
 
 export interface Client extends EntityMetadata {
@@ -268,6 +279,7 @@ export interface Activity extends EntityMetadata {
   type: ActivityType;
   subject: string;
   body?: string;
+  status: string;
   relatedEntityType?: "lead" | "client" | "property" | "unit" | "task";
   relatedEntityId?: string;
 }
