@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const projectId = "beacon-ops-crm";
+const projectId = "beacon-operations-crm";
 let testEnv: RulesTestEnvironment;
 
 async function seedMember(uid: string, orgId: string, permissions: string[], role = "salesExecutive") {
@@ -83,6 +83,27 @@ describe("Beacon Firestore rules", () => {
       role: "superAdmin",
       status: "active",
     }));
+  });
+
+  it("blocks direct member writes even for user managers", async () => {
+    await seedMember("manager-1", "org-a", ["users.manage"], "operationsManager");
+    const db = testEnv.authenticatedContext("manager-1").firestore();
+    await assertFails(setDoc(doc(db, "organizations/org-a/members/new-user"), {
+      branchId: "head-office",
+      displayName: "New User",
+      email: "new-user@test.local",
+      organizationId: "org-a",
+      permissions: ["leads.readAssigned"],
+      role: "salesExecutive",
+      status: "active",
+    }));
+  });
+
+  it("allows user managers to read member records", async () => {
+    await seedMember("manager-1", "org-a", ["users.manage"], "operationsManager");
+    await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
+    const db = testEnv.authenticatedContext("manager-1").firestore();
+    await assertSucceeds(getDoc(doc(db, "organizations/org-a/members/sales-1")));
   });
 
   it("allows sales manager to assign leads", async () => {

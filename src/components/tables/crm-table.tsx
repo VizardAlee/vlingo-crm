@@ -14,6 +14,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/state";
+import { cn } from "@/lib/utils";
+
+function headerLabel<TData>(column: ColumnDef<TData>) {
+  return typeof column.header === "string" ? column.header : "Detail";
+}
 
 export function CrmTable<TData>({
   columns,
@@ -47,24 +52,55 @@ export function CrmTable<TData>({
   }
 
   return (
-    <div className="rounded-md border bg-white">
-      <div className="flex flex-col gap-3 border-b p-4 md:flex-row md:items-center md:justify-between">
-        <div className="relative max-w-md flex-1">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-md border bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b p-3 md:flex-row md:items-center md:justify-between md:p-4">
+        <div className="relative flex-1 md:max-w-md">
           <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Search table" value={globalFilter} onChange={(event) => setGlobalFilter(event.target.value)} />
+          <Input className="h-11 rounded-md pl-9 md:h-10" placeholder="Search records" value={globalFilter} onChange={(event) => setGlobalFilter(event.target.value)} />
         </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline">
+        <div className="grid grid-cols-2 gap-2 md:flex">
+          <Button className="h-11 md:h-10" type="button" variant="outline">
             <SlidersHorizontal className="h-4 w-4" />
             Filters
           </Button>
-          <Button type="button" variant="outline">
+          <Button className="h-11 md:h-10" type="button" variant="outline">
             <Download className="h-4 w-4" />
             Export
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      {table.getRowModel().rows.length ? (
+        <div className="grid gap-3 bg-muted/40 p-3 lg:hidden">
+          {table.getRowModel().rows.map((row) => {
+            const cells = row.getVisibleCells();
+            const [primaryCell, ...detailCells] = cells;
+            return (
+              <article className="rounded-md border bg-white p-4 shadow-sm" key={row.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 text-base font-semibold">
+                    {primaryCell ? flexRender(primaryCell.column.columnDef.cell, primaryCell.getContext()) : "Record"}
+                  </div>
+                </div>
+                <dl className="mt-4 grid gap-3">
+                  {detailCells.slice(0, 5).map((cell) => (
+                    <div className="flex items-start justify-between gap-4 text-sm" key={cell.id}>
+                      <dt className="shrink-0 text-muted-foreground">{headerLabel(cell.column.columnDef)}</dt>
+                      <dd className={cn("min-w-0 text-right font-medium", cell.column.id === "Status" && "text-left")}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="p-3 lg:hidden">
+          <EmptyState title="No records match this search." />
+        </div>
+      )}
+      <div className="hidden max-w-full overflow-x-auto lg:block">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -90,7 +126,7 @@ export function CrmTable<TData>({
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between border-t p-4 text-sm text-muted-foreground">
+      <div className="flex items-center justify-between border-t p-3 text-sm text-muted-foreground md:p-4">
         <span>
           Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
         </span>

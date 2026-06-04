@@ -1,6 +1,23 @@
 {
   "indexes": [
     {
+      "collectionGroup": "documents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "assignedTo", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "leads",
       "queryScope": "COLLECTION",
       "fields": [
@@ -16,6 +33,15 @@
         { "fieldPath": "isDeleted", "order": "ASCENDING" },
         { "fieldPath": "propertyId", "order": "ASCENDING" },
         { "fieldPath": "unitNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "assignedTo", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
     },
     {

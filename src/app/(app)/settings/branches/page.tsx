@@ -1,5 +1,5 @@
-import { BranchSettings } from "@/components/settings/settings-panel";
+import { BranchesManagement } from "@/features/settings/branches-management";
 
 export default function BranchSettingsPage() {
-  return <BranchSettings />;
+  return <BranchesManagement />;
 }

@@ -83,9 +83,14 @@ export interface Member {
   branchId: string;
   displayName: string;
   email: string;
+  phoneNumber?: string;
   role: RoleName;
   permissions: Permission[];
   status: MembershipStatus;
+  createdAt?: Date;
+  createdBy?: string;
+  updatedAt?: Date;
+  updatedBy?: string;
 }
 
 export type LeadStatus =
@@ -109,17 +114,29 @@ export interface Lead extends EntityMetadata {
   phoneNumber: string;
   whatsappNumber?: string;
   email?: string;
+  contactPreference?: string;
   preferredLocation?: string;
+  preferredState?: string;
+  preferredCity?: string;
   propertyType?: string;
+  preferredPropertyCategory?: string;
+  preferredBedrooms?: number;
   budgetMinimum?: number;
   budgetMaximum?: number;
+  preferredBudgetCurrency?: string;
   transactionInterest: "buy" | "rent" | "lease" | "invest";
   intendedUse?: string;
   paymentPreference?: string;
   preferredInspectionDate?: Date | null;
   source: string;
+  sourcePlatform?: string;
+  campaignName?: string;
+  sourceReference?: string;
+  referralName?: string;
+  referralPhone?: string;
   assignedAgentId?: string;
   score: number;
+  leadTemperature?: "cold" | "warm" | "hot";
   status: LeadStatus;
   tags: string[];
   notes?: string;

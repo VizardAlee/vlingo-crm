@@ -52,29 +52,29 @@ export default function DashboardPage() {
   ];
 
   return (
-    <section className="grid gap-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <section className="grid min-w-0 gap-5 md:gap-6">
+      <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <h1 className="text-xl font-semibold md:text-2xl">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">Operational snapshot for {new Date().toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })}.</p>
         </div>
-        <div className="flex gap-2">
-          <ButtonLink href="/leads/new" variant="secondary">Capture lead</ButtonLink>
-          <ButtonLink href="/properties/new" variant="outline">List property</ButtonLink>
+        <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
+          <ButtonLink className="h-11 md:h-10" href="/leads/new" variant="secondary">Capture lead</ButtonLink>
+          <ButtonLink className="h-11 md:h-10" href="/properties/new" variant="outline">List property</ButtonLink>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
         {cards.map((card) => {
           const Icon = card.icon;
           return (
             <Card key={card.label}>
-              <CardContent className="flex items-center gap-4">
-                <div className="grid h-11 w-11 place-items-center rounded-md bg-primary/10 text-primary">
+              <CardContent className="grid gap-3 p-4 md:flex md:items-center md:gap-4 md:p-5">
+                <div className="grid h-10 w-10 place-items-center rounded-md bg-primary/10 text-primary md:h-11 md:w-11">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">{card.label}</p>
-                  <p className="text-2xl font-semibold">{card.value}</p>
+                  <p className="text-xs text-muted-foreground md:text-sm">{card.label}</p>
+                  <p className="text-xl font-semibold md:text-2xl">{card.value}</p>
                 </div>
               </CardContent>
             </Card>
@@ -84,8 +84,8 @@ export default function DashboardPage() {
       <div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]">
         <Card>
           <CardHeader><CardTitle>Lead Pipeline</CardTitle></CardHeader>
-          <CardContent className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="h-64 min-w-0 p-3 md:h-80 md:p-5">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={pipeline}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" />
@@ -98,8 +98,8 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader><CardTitle>Lead Sources</CardTitle></CardHeader>
-          <CardContent className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="h-64 min-w-0 p-3 md:h-80 md:p-5">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <PieChart>
                 <Pie data={sources} dataKey="value" nameKey="name" innerRadius={58} outerRadius={96}>
                   {sources.map((entry) => <Cell fill={entry.color} key={entry.name} />)}

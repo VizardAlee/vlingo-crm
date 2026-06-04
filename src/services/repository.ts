@@ -10,14 +10,14 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
   type DocumentData,
   type QueryConstraint,
   type WithFieldValue,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
 import { createReference } from "@/lib/utils";
 import { orgCollectionPath, type OrgCollection } from "@/services/firestore-paths";
 
@@ -122,16 +122,21 @@ export async function softDeleteOrgRecord(collectionName: OrgCollection, id: str
 }
 
 export async function writeAuditLog(context: WriteContext, action: string, entityType: string, entityId: string, newValue?: unknown) {
-  const firestore = assertDb();
-  await setDoc(doc(collection(firestore, orgCollectionPath(context.organizationId, "auditLogs"))), {
-    action,
-    actorId: context.userId,
-    actorName: context.userId,
-    branchId: context.branchId,
-    createdAt: serverTimestamp(),
-    entityId,
-    entityType,
-    newValue,
-    organizationId: context.organizationId,
-  });
+  if (!functions) {
+    console.warn("Firebase Functions are not configured; audit log skipped.");
+    return;
+  }
+
+  try {
+    await httpsCallable(functions, "writeProtectedAuditLog")({
+      action,
+      branchId: context.branchId,
+      entityId,
+      entityType,
+      newValue,
+      organizationId: context.organizationId,
+    });
+  } catch (error) {
+    console.warn("Audit log write failed; primary record operation completed.", error);
+  }
 }

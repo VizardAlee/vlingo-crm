@@ -70,6 +70,7 @@ export const navigation: NavSection[] = [
     label: "Administration",
     items: [
       { href: "/settings/organization", icon: Settings, label: "Organization", permissions: ["users.manage", "roles.manage"] },
+      { href: "/settings/branches", icon: Building2, label: "Branches", permissions: ["users.manage"] },
       { href: "/settings/users", icon: Users, label: "Users", permissions: ["users.manage"] },
       { href: "/settings/roles", icon: ShieldCheck, label: "Roles", permissions: ["roles.manage"] },
     ],

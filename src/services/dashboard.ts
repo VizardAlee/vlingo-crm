@@ -22,8 +22,12 @@ async function count(path: string, filters: ReturnType<typeof where>[] = []) {
     return 0;
   }
 
-  const snapshot = await getCountFromServer(query(collection(db, path), where("isDeleted", "==", false), ...filters));
-  return snapshot.data().count;
+  try {
+    const snapshot = await getCountFromServer(query(collection(db, path), where("isDeleted", "==", false), ...filters));
+    return snapshot.data().count;
+  } catch {
+    return 0;
+  }
 }
 
 export async function getDashboardMetrics(organizationId: string): Promise<DashboardMetrics> {

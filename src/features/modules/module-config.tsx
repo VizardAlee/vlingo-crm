@@ -27,6 +27,7 @@ export interface ModuleConfig {
 }
 
 const leadStatuses = ["new", "contacted", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
+const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Property portal", "Event", "Other"];
 const propertyStatuses = ["draft", "available", "reserved", "underNegotiation", "sold", "rented", "leased", "occupied", "vacant", "underMaintenance", "unavailable", "withdrawn"];
 
 export const moduleConfigs: Record<string, ModuleConfig> = {
@@ -44,15 +45,29 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "phoneNumber", label: "Phone number", required: true, type: "text" },
       { name: "whatsappNumber", label: "WhatsApp number", type: "text" },
       { name: "email", label: "Email", type: "email" },
+      { name: "contactPreference", label: "Contact preference", options: ["phone", "whatsapp", "email", "sms"], type: "select" },
       { name: "preferredLocation", label: "Preferred location", type: "text" },
+      { name: "preferredState", label: "Preferred state", type: "text" },
+      { name: "preferredCity", label: "Preferred city", type: "text" },
       { name: "propertyType", label: "Property type", type: "text" },
+      { name: "preferredPropertyCategory", label: "Preferred property category", type: "text" },
+      { name: "preferredBedrooms", label: "Preferred bedrooms", type: "number" },
       { name: "budgetMinimum", label: "Budget minimum", type: "number" },
       { name: "budgetMaximum", label: "Budget maximum", type: "number" },
+      { name: "preferredBudgetCurrency", label: "Budget currency", type: "text" },
       { name: "transactionInterest", label: "Transaction interest", options: ["buy", "rent", "lease", "invest"], required: true, type: "select" },
-      { name: "source", label: "Source", required: true, type: "text" },
+      { name: "source", label: "Source", options: leadSources, required: true, type: "select" },
+      { name: "sourcePlatform", label: "Source platform", type: "text" },
+      { name: "campaignName", label: "Campaign name", type: "text" },
+      { name: "sourceReference", label: "External source reference", type: "text" },
       { name: "assignedTo", label: "Assigned to user ID", type: "text" },
       { name: "score", label: "Lead score", type: "number" },
+      { name: "leadTemperature", label: "Lead temperature", options: ["cold", "warm", "hot"], type: "select" },
       { name: "status", label: "Status", options: leadStatuses, required: true, type: "select" },
+      { name: "nextFollowUpAt", label: "Next follow-up date", type: "text" },
+      { name: "preferredInspectionDate", label: "Preferred inspection date", type: "text" },
+      { name: "referralName", label: "Referral name", type: "text" },
+      { name: "referralPhone", label: "Referral phone", type: "text" },
       { name: "tags", label: "Tags", type: "text" },
       { name: "notes", label: "Notes", type: "textarea" },
       { name: "lostReason", label: "Lost reason", type: "textarea" },
@@ -182,6 +197,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Reference", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/leads/${row.original.id}`}>{String(row.original.referenceNumber ?? "Draft")}</Link> },
       { header: "Lead", accessorKey: "fullName" },
       { header: "Phone", cell: ({ row }) => formatPhone(String(row.original.phoneNumber ?? "")) },
+      { header: "Source", cell: ({ row }) => String(row.original.source ?? "") },
       { header: "Interest", cell: ({ row }) => titleCase(String(row.original.transactionInterest ?? "")) },
       statusColumn,
     ];

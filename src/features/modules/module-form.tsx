@@ -25,7 +25,7 @@ const schemaByCollection: Record<string, ZodType> = {
 
 type FormValues = Record<string, string | number | string[] | undefined>;
 
-export function ModuleForm({ config, existing, id }: { config: ModuleConfig; existing?: FormValues; id?: string }) {
+export function ModuleForm({ config, existing, id, initialValues }: { config: ModuleConfig; existing?: FormValues; id?: string; initialValues?: FormValues }) {
   const router = useRouter();
   const { activeBranchId, activeOrganizationId, user } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,10 @@ export function ModuleForm({ config, existing, id }: { config: ModuleConfig; exi
     handleSubmit,
     register,
   } = useForm<FormValues>({
-    defaultValues: existing ?? Object.fromEntries(config.fields.map((field) => [field.name, field.options?.[0] ?? ""])),
+    defaultValues: existing ?? {
+      ...Object.fromEntries(config.fields.map((field) => [field.name, field.options?.[0] ?? ""])),
+      ...initialValues,
+    },
   });
 
   async function onSubmit(values: FormValues) {
@@ -54,6 +57,14 @@ export function ModuleForm({ config, existing, id }: { config: ModuleConfig; exi
     }
 
     const parsedData = parsed.data as Record<string, unknown>;
+    if (config.collection === "leads" && !parsedData.assignedTo) {
+      parsedData.assignedTo = user.uid;
+    }
+
+    if (config.collection === "tasks" && !parsedData.assignedTo) {
+      parsedData.assignedTo = user.uid;
+    }
+
     const context = { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid };
     try {
       if (id) {
@@ -75,7 +86,7 @@ export function ModuleForm({ config, existing, id }: { config: ModuleConfig; exi
       <CardContent>
         <form className="grid gap-5" onSubmit={handleSubmit(onSubmit)}>
           {error ? <ErrorState message={error} /> : null}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             {config.fields.map((field) => (
               <Field key={field.name} label={field.label} error={validationErrors[field.name]}>
                 {field.type === "textarea" ? (
@@ -91,8 +102,8 @@ export function ModuleForm({ config, existing, id }: { config: ModuleConfig; exi
               </Field>
             ))}
           </div>
-          <div className="flex justify-end">
-            <Button disabled={isSubmitting} type="submit">
+          <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] -mx-5 -mb-5 border-t bg-white p-4 md:static md:m-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0">
+            <Button className="h-12 w-full md:h-10 md:w-auto" disabled={isSubmitting} type="submit">
               <Save className="h-4 w-4" />
               {isSubmitting ? "Saving" : "Save record"}
             </Button>

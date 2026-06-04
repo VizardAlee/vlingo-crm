@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Beacon Operations CRM",
   description: "Secure real estate operations platform for Beacon Corporate Realty Limited.",
+  icons: {
+    icon: "/branding/beacon-logo.jpeg",
+    shortcut: "/branding/beacon-logo.jpeg",
+    apple: "/branding/beacon-logo.jpeg",
+  },
 };
 
 export default function RootLayout({

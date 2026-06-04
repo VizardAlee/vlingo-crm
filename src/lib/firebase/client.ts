@@ -4,6 +4,7 @@ import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 import { getMessaging, isSupported } from "firebase/messaging";
 import { getStorage } from "firebase/storage";
 import { firebaseClientEnv, hasFirebaseClientConfig } from "@/lib/firebase/config";
@@ -26,6 +27,7 @@ function app() {
 export const firebaseApp = app();
 export const auth = firebaseApp ? getAuth(firebaseApp) : null;
 export const db = firebaseApp ? getFirestore(firebaseApp) : null;
+export const functions = firebaseApp ? getFunctions(firebaseApp) : null;
 export const storage = firebaseApp ? getStorage(firebaseApp) : null;
 
 export function initializeBeaconAppCheck() {

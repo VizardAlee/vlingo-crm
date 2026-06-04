@@ -50,10 +50,9 @@ service cloud.firestore {
       allow create, update, delete: if hasPermission(orgId, "users.manage");
 
       match /members/{memberId} {
-        allow read: if isActiveMember(orgId);
-        allow create, update, delete: if hasPermission(orgId, "users.manage") &&
-          request.resource.data.organizationId == orgId &&
-          !request.resource.data.permissions.hasAny(["users.manage", "roles.manage"]) || hasPermission(orgId, "roles.manage");
+        allow read: if isActiveMember(orgId) &&
+          (memberId == request.auth.uid || hasAnyPermission(orgId, ["users.manage", "roles.manage"]));
+        allow create, update, delete: if false;
       }
 
       match /roles/{roleId} {

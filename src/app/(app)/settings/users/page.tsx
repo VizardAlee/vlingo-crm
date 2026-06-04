@@ -1,5 +1,5 @@
-import { UserSettings } from "@/components/settings/settings-panel";
+import { UsersManagement } from "@/features/settings/users-management";
 
 export default function UserSettingsPage() {
-  return <UserSettings />;
+  return <UsersManagement />;
 }

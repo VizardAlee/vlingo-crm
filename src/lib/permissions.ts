@@ -58,6 +58,7 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "tasks.update",
     "activities.create",
     "activities.read",
+    "users.manage",
   ],
   salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],

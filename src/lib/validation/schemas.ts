@@ -1,6 +1,14 @@
 import { z } from "zod";
 
 const optionalEmail = z.union([z.email(), z.literal("")]).optional();
+const optionalNumber = z.preprocess(
+  (value) => value === "" || value === null || value === undefined ? undefined : value,
+  z.coerce.number().nonnegative().optional(),
+);
+const optionalDateString = z.preprocess(
+  (value) => value === "" || value === null || value === undefined ? undefined : value,
+  z.string().optional(),
+);
 const tagString = z.preprocess(
   (value) => {
     if (Array.isArray(value)) {
@@ -24,17 +32,30 @@ export const leadSchema = z.object({
   phoneNumber: z.string().min(7, "A valid phone number is required."),
   whatsappNumber: z.string().optional(),
   email: optionalEmail,
+  contactPreference: z.string().optional(),
   preferredLocation: z.string().optional(),
+  preferredState: z.string().optional(),
+  preferredCity: z.string().optional(),
   propertyType: z.string().optional(),
-  budgetMinimum: z.coerce.number().nonnegative().optional(),
-  budgetMaximum: z.coerce.number().nonnegative().optional(),
+  preferredPropertyCategory: z.string().optional(),
+  preferredBedrooms: optionalNumber,
+  budgetMinimum: optionalNumber,
+  budgetMaximum: optionalNumber,
+  preferredBudgetCurrency: z.string().optional(),
   transactionInterest: z.enum(["buy", "rent", "lease", "invest"]),
   intendedUse: z.string().optional(),
   paymentPreference: z.string().optional(),
+  preferredInspectionDate: optionalDateString,
   source: z.string().min(2, "Lead source is required."),
+  sourcePlatform: z.string().optional(),
+  campaignName: z.string().optional(),
+  sourceReference: z.string().optional(),
+  referralName: z.string().optional(),
+  referralPhone: z.string().optional(),
   assignedTo: z.string().optional(),
   assignedAgentId: z.string().optional(),
   score: z.coerce.number().min(0).max(100).default(25),
+  leadTemperature: z.enum(["cold", "warm", "hot"]).optional(),
   status: z.enum([
     "new",
     "contacted",
@@ -51,6 +72,7 @@ export const leadSchema = z.object({
   ]),
   tags: tagString.default([]),
   notes: z.string().optional(),
+  nextFollowUpAt: optionalDateString,
   lostReason: z.string().optional(),
 });
 

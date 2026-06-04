@@ -9,7 +9,7 @@ let testEnv: RulesTestEnvironment;
 describe("Beacon Storage rules", () => {
   beforeAll(async () => {
     testEnv = await initializeTestEnvironment({
-      projectId: "beacon-ops-crm",
+      projectId: "beacon-operations-crm",
       firestore: {
         rules: readFileSync("firestore.rules", "utf8"),
       },
