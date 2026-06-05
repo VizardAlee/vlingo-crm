@@ -6,6 +6,10 @@ const optionalNumber = z.preprocess(
   (value) => value === "" || value === null || value === undefined ? undefined : value,
   z.coerce.number().nonnegative().optional(),
 );
+const requiredNumber = z.preprocess(
+  (value) => value === "" || value === null || value === undefined ? undefined : value,
+  z.coerce.number().nonnegative(),
+);
 const optionalDateString = z.preprocess(
   (value) => value === "" || value === null || value === undefined ? undefined : value,
   z.string().optional(),
@@ -185,6 +189,38 @@ export const unitSchema = z.object({
   status: z.enum(["draft", "available", "reserved", "underNegotiation", "sold", "rented", "leased", "occupied", "vacant", "underMaintenance", "unavailable", "withdrawn"]),
 });
 
+export const rentalTenancySchema = z.object({
+  tenantClientId: z.string().min(2, "Tenant/client is required."),
+  tenantName: z.string().optional(),
+  tenantEmail: z.string().optional(),
+  tenantPhone: z.string().optional(),
+  propertyId: z.string().min(2, "Property is required."),
+  propertyName: z.string().optional(),
+  unitId: z.string().optional(),
+  unitName: z.string().optional(),
+  landlordOwnerId: z.string().optional(),
+  landlordOwnerName: z.string().optional(),
+  leaseStartDate: optionalDateString,
+  leaseEndDate: optionalDateString,
+  moveInDate: optionalDateString,
+  moveOutDate: optionalDateString,
+  rentAmount: requiredNumber,
+  paymentCycle: z.enum(["monthly", "quarterly", "biannual", "annual", "oneOff"]),
+  rentDueDay: optionalNumber,
+  gracePeriodDays: optionalNumber,
+  serviceCharge: optionalNumber,
+  cautionFee: optionalNumber,
+  agencyFee: optionalNumber,
+  legalFee: optionalNumber,
+  totalInitialPayment: optionalNumber,
+  paymentStatus: z.enum(["notInvoiced", "invoiced", "partPaid", "paid", "overdue"]).optional(),
+  renewalNoticeDate: optionalDateString,
+  nextRentDueDate: optionalDateString,
+  agreementStatus: z.enum(["notStarted", "drafting", "sent", "signed", "expired"]).optional(),
+  status: z.enum(["draft", "active", "expiringSoon", "renewalDue", "renewed", "terminated", "defaulting", "movedOut"]),
+  notes: z.string().optional(),
+});
+
 export const taskSchema = z.object({
   title: z.string().min(2, "Task title is required."),
   description: z.string().optional(),
@@ -194,7 +230,7 @@ export const taskSchema = z.object({
   assignedTo: z.string().optional(),
   assignedToEmail: z.string().optional(),
   assignedToName: z.string().optional(),
-  relatedEntityType: z.enum(["lead", "client", "property", "unit"]).optional(),
+  relatedEntityType: z.enum(["lead", "client", "property", "unit", "tenancy"]).optional(),
   relatedEntityId: z.string().optional(),
 });
 
@@ -203,6 +239,6 @@ export const activitySchema = z.object({
   subject: z.string().min(2, "Subject is required."),
   body: z.string().optional(),
   status: z.string().optional(),
-  relatedEntityType: z.enum(["lead", "client", "property", "unit", "task"]).optional(),
+  relatedEntityType: z.enum(["lead", "client", "property", "unit", "task", "tenancy"]).optional(),
   relatedEntityId: z.string().optional(),
 });

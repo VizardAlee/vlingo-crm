@@ -61,7 +61,7 @@ export const navigation: NavSection[] = [
     label: "Future Modules",
     items: [
       { href: "/finance", icon: Receipt, label: "Finance", permissions: ["reports.viewFinancial"] },
-      { href: "/rentals", icon: Landmark, label: "Rentals", permissions: ["properties.read"] },
+      { href: "/rentals", icon: Landmark, label: "Rentals", permissions: ["rentals.read"] },
       { href: "/development", icon: FolderKanban, label: "Development", permissions: ["properties.read"] },
       { href: "/marketing", icon: Megaphone, label: "Marketing", permissions: ["leads.readAll"] },
     ],
@@ -73,6 +73,7 @@ export const navigation: NavSection[] = [
       { href: "/settings/branches", icon: Building2, label: "Branches", permissions: ["users.manage"] },
       { href: "/settings/users", icon: Users, label: "Users", permissions: ["users.manage"] },
       { href: "/settings/roles", icon: ShieldCheck, label: "Roles", permissions: ["roles.manage"] },
+      { href: "/settings/audit-logs", icon: FileText, label: "Audit Logs", permissions: ["auditLogs.read"] },
     ],
   },
 ];

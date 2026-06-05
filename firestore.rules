@@ -76,30 +76,37 @@ service cloud.firestore {
       }
 
       match /clients/{clientId} {
-        allow read: if hasPermission(orgId, "clients.read");
+        allow read: if hasAnyPermission(orgId, ["clients.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "clients.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "clients.update") && organizationUnchanged(orgId);
         allow delete: if false;
       }
 
       match /properties/{propertyId} {
-        allow read: if hasPermission(orgId, "properties.read");
+        allow read: if hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);
         allow delete: if false;
       }
 
       match /propertyStakeholders/{stakeholderId} {
-        allow read: if hasPermission(orgId, "properties.read");
+        allow read: if hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);
         allow delete: if false;
       }
 
       match /propertyUnits/{unitId} {
-        allow read: if hasPermission(orgId, "units.read");
+        allow read: if hasAnyPermission(orgId, ["units.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "units.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "units.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
+      match /rentalTenancies/{tenancyId} {
+        allow read: if hasPermission(orgId, "rentals.read");
+        allow create: if hasPermission(orgId, "rentals.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "rentals.update") && organizationUnchanged(orgId);
         allow delete: if false;
       }
 

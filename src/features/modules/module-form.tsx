@@ -11,10 +11,10 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
-import { activitySchema, clientSchema, leadSchema, propertySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
+import { activitySchema, clientSchema, leadSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
 import { cn } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import type { Member, Property, PropertyStakeholder } from "@/types/crm";
+import type { Client, Member, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
@@ -22,6 +22,7 @@ const schemaByCollection: Record<string, ZodType> = {
   leads: leadSchema,
   properties: propertySchema,
   propertyUnits: unitSchema,
+  rentalTenancies: rentalTenancySchema,
   tasks: taskSchema,
 };
 
@@ -87,12 +88,54 @@ function dateInputValue(value: unknown) {
   return "";
 }
 
+function addMonthsToDateInput(value: unknown, months: number) {
+  const date = typeof value === "string" && value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  date.setMonth(date.getMonth() + months);
+  return date.toISOString().slice(0, 10);
+}
+
+function subtractDaysFromDateInput(value: unknown, days: number) {
+  const date = typeof value === "string" && value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+function monthsForPaymentCycle(value: unknown) {
+  if (value === "monthly") {
+    return 1;
+  }
+
+  if (value === "quarterly") {
+    return 3;
+  }
+
+  if (value === "biannual") {
+    return 6;
+  }
+
+  if (value === "annual") {
+    return 12;
+  }
+
+  return 0;
+}
+
 export function ModuleForm({ config, existing, id, initialValues }: { config: ModuleConfig; existing?: FormValues; id?: string; initialValues?: FormValues }) {
   const router = useRouter();
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [propertyUnits, setPropertyUnits] = useState<PropertyUnit[]>([]);
   const [stakeholderForm, setStakeholderForm] = useState({ email: "", name: "", notes: "", phoneNumber: "", type: "owner" as StakeholderKind });
   const [stakeholders, setStakeholders] = useState<PropertyStakeholder[]>([]);
   const [stakeholderSaving, setStakeholderSaving] = useState(false);
@@ -113,14 +156,30 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   });
 
   const sections = groupFields(config.fields);
-  const [askingPrice, rentAmount, agencyFeeType, agencyFeeValue, commissionType, commissionValue] = useWatch({
+  const [
+    askingPrice,
+    rentAmount,
+    agencyFeeType,
+    agencyFeeValue,
+    directAgencyFee,
+    commissionType,
+    commissionValue,
+    serviceCharge,
+    cautionFee,
+    legalFee,
+    leaseStartDate,
+    leaseEndDate,
+    paymentCycle,
+  ] = useWatch({
     control,
-    name: ["askingPrice", "rentAmount", "agencyFeeType", "agencyFeeValue", "commissionType", "commissionValue"],
+    name: ["askingPrice", "rentAmount", "agencyFeeType", "agencyFeeValue", "agencyFee", "commissionType", "commissionValue", "serviceCharge", "cautionFee", "legalFee", "leaseStartDate", "leaseEndDate", "paymentCycle"],
   });
   const basePropertyAmount = Number(askingPrice || rentAmount || 0);
-  const agencyFee = calculateFeeAmount(String(agencyFeeType ?? ""), Number(agencyFeeValue || 0), basePropertyAmount);
+  const calculatedAgencyFee = calculateFeeAmount(String(agencyFeeType ?? ""), Number(agencyFeeValue || 0), basePropertyAmount);
   const commissionAmount = calculateFeeAmount(String(commissionType ?? ""), Number(commissionValue || 0), basePropertyAmount);
+  const totalInitialPayment = Number(rentAmount || 0) + Number(serviceCharge || 0) + Number(cautionFee || 0) + Number(directAgencyFee || 0) + Number(legalFee || 0);
   const selectedPropertyId = useWatch({ control, name: "propertyId" });
+  const selectedUnitId = useWatch({ control, name: "unitId" });
 
   const ownerOptions = useMemo(() => stakeholders.filter((item) => item.type === "owner").map(toStakeholderOption), [stakeholders]);
   const developerOptions = useMemo(() => stakeholders.filter((item) => item.type === "developer").map(toStakeholderOption), [stakeholders]);
@@ -140,9 +199,25 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }),
     [properties],
   );
+  const clientOptions = useMemo(
+    () => clients.map((item) => {
+      const detail = [item.phoneNumber, item.email, item.referenceNumber].filter(Boolean).join(" · ");
+      return { label: detail ? `${item.fullName} (${detail})` : item.fullName, value: item.id };
+    }),
+    [clients],
+  );
+  const unitOptions = useMemo(
+    () => propertyUnits
+      .filter((item) => !selectedPropertyId || item.propertyId === selectedPropertyId)
+      .map((item) => {
+        const detail = [item.propertyName, item.referenceNumber].filter(Boolean).join(" · ");
+        return { label: detail ? `${item.unitNumber} (${detail})` : item.unitNumber, value: item.id };
+      }),
+    [propertyUnits, selectedPropertyId],
+  );
 
   useEffect(() => {
-    if (config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "tasks") {
+    if (config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "tasks") {
       return;
     }
 
@@ -150,42 +225,151 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     const loadOptions = (() => {
       if (config.collection === "propertyUnits") {
         return Promise.all([
+          Promise.resolve<Client[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           Promise.resolve<Member[]>([]),
           listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          Promise.resolve<PropertyUnit[]>([]),
         ]);
       }
 
       if (config.collection === "tasks") {
         return Promise.all([
+          Promise.resolve<Client[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
           Promise.resolve<Property[]>([]),
+          Promise.resolve<PropertyUnit[]>([]),
+        ]);
+      }
+
+      if (config.collection === "rentalTenancies") {
+        return Promise.all([
+          listOrgRecords<Client>(activeOrganizationId, "clients").catch(() => []),
+          listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders").catch(() => []),
+          Promise.resolve<Member[]>([]),
+          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
         ]);
       }
 
       return Promise.all([
+        Promise.resolve<Client[]>([]),
         listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders").catch(() => []),
         listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
         Promise.resolve<Property[]>([]),
+        Promise.resolve<PropertyUnit[]>([]),
       ]);
     })();
 
     loadOptions
-      .then(([nextStakeholders, nextMembers, nextProperties]) => {
+      .then(([nextClients, nextStakeholders, nextMembers, nextProperties, nextPropertyUnits]) => {
         if (!mounted) {
           return;
         }
 
+        setClients(nextClients);
         setStakeholders(nextStakeholders);
         setMembers(nextMembers);
         setProperties(nextProperties);
+        setPropertyUnits(nextPropertyUnits);
       });
 
     return () => {
       mounted = false;
     };
   }, [activeOrganizationId, config.collection, member]);
+
+  useEffect(() => {
+    if (config.collection !== "rentalTenancies" || !selectedUnitId) {
+      return;
+    }
+
+    const selectedUnit = propertyUnits.find((unit) => unit.id === selectedUnitId);
+    if (!selectedUnit?.propertyId) {
+      return;
+    }
+
+    const currentPropertyId = getValues("propertyId");
+    if (isBlankFormValue(currentPropertyId) || currentPropertyId !== selectedUnit.propertyId) {
+      setValue("propertyId", selectedUnit.propertyId, { shouldDirty: true, shouldValidate: false });
+    }
+
+    function setTenancyDefault(fieldName: string, nextValue: FormValue) {
+      if (isBlankFormValue(nextValue)) {
+        return;
+      }
+
+      if (isBlankFormValue(getValues(fieldName))) {
+        setValue(fieldName, nextValue, { shouldDirty: true, shouldValidate: false });
+      }
+    }
+
+    setTenancyDefault("rentAmount", selectedUnit.rentAmount);
+    setTenancyDefault("serviceCharge", selectedUnit.serviceCharge);
+    setTenancyDefault("cautionFee", selectedUnit.cautionFee);
+    setTenancyDefault("legalFee", selectedUnit.legalFee);
+  }, [config.collection, getValues, propertyUnits, selectedUnitId, setValue]);
+
+  useEffect(() => {
+    if (config.collection !== "rentalTenancies" || !selectedPropertyId) {
+      return;
+    }
+
+    const selectedProperty = properties.find((property) => property.id === selectedPropertyId);
+    if (!selectedProperty) {
+      return;
+    }
+
+    const selectedUnit = propertyUnits.find((unit) => unit.id === selectedUnitId);
+    if (selectedUnit && selectedUnit.propertyId !== selectedPropertyId) {
+      setValue("unitId", "", { shouldDirty: true, shouldValidate: false });
+    }
+
+    function setTenancyDefault(fieldName: string, nextValue: FormValue) {
+      if (isBlankFormValue(nextValue)) {
+        return;
+      }
+
+      if (isBlankFormValue(getValues(fieldName))) {
+        setValue(fieldName, nextValue, { shouldDirty: true, shouldValidate: false });
+      }
+    }
+
+    setTenancyDefault("landlordOwnerId", selectedProperty.propertyOwnerId);
+    if (!selectedUnitId) {
+      setTenancyDefault("rentAmount", selectedProperty.rentAmount);
+      setTenancyDefault("serviceCharge", selectedProperty.serviceCharge);
+      setTenancyDefault("cautionFee", selectedProperty.cautionFee);
+      setTenancyDefault("agencyFee", selectedProperty.agencyFee);
+      setTenancyDefault("legalFee", selectedProperty.legalFee);
+    }
+  }, [config.collection, getValues, properties, propertyUnits, selectedPropertyId, selectedUnitId, setValue]);
+
+  useEffect(() => {
+    if (config.collection !== "rentalTenancies" || id) {
+      return;
+    }
+
+    if (leaseStartDate && isBlankFormValue(getValues("moveInDate"))) {
+      setValue("moveInDate", String(leaseStartDate), { shouldDirty: true, shouldValidate: false });
+    }
+
+    if (leaseStartDate && paymentCycle && isBlankFormValue(getValues("nextRentDueDate"))) {
+      const cycleMonths = monthsForPaymentCycle(paymentCycle);
+      const nextDueDate = cycleMonths ? addMonthsToDateInput(leaseStartDate, cycleMonths) : String(leaseEndDate || leaseStartDate);
+      if (nextDueDate) {
+        setValue("nextRentDueDate", nextDueDate, { shouldDirty: true, shouldValidate: false });
+      }
+    }
+
+    if (leaseEndDate && isBlankFormValue(getValues("renewalNoticeDate"))) {
+      const renewalDate = subtractDaysFromDateInput(leaseEndDate, 30);
+      if (renewalDate) {
+        setValue("renewalNoticeDate", renewalDate, { shouldDirty: true, shouldValidate: false });
+      }
+    }
+  }, [config.collection, getValues, id, leaseEndDate, leaseStartDate, paymentCycle, setValue]);
 
   useEffect(() => {
     if (config.collection !== "propertyUnits" || !selectedPropertyId) {
@@ -242,7 +426,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     const parsedData = parsed.data as Record<string, unknown>;
     if (config.collection === "properties") {
-      parsedData.agencyFee = agencyFee;
+      parsedData.agencyFee = calculatedAgencyFee;
       parsedData.commissionAmount = commissionAmount;
     }
 
@@ -264,6 +448,20 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       const assignedMember = members.find((item) => item.id === parsedData.assignedTo);
       parsedData.assignedToName = assignedMember?.displayName ?? "";
       parsedData.assignedToEmail = assignedMember?.email ?? "";
+    }
+
+    if (config.collection === "rentalTenancies") {
+      const tenant = clients.find((item) => item.id === parsedData.tenantClientId);
+      const linkedProperty = properties.find((item) => item.id === parsedData.propertyId);
+      const linkedUnit = propertyUnits.find((item) => item.id === parsedData.unitId);
+      const landlord = stakeholders.find((item) => item.id === parsedData.landlordOwnerId);
+      parsedData.tenantName = tenant?.fullName ?? "";
+      parsedData.tenantEmail = tenant?.email ?? "";
+      parsedData.tenantPhone = tenant?.phoneNumber ?? "";
+      parsedData.propertyName = linkedProperty?.name ?? linkedUnit?.propertyName ?? "";
+      parsedData.unitName = linkedUnit?.unitNumber ?? "";
+      parsedData.landlordOwnerName = landlord?.name ?? "";
+      parsedData.totalInitialPayment = totalInitialPayment;
     }
 
     const context = { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid };
@@ -295,8 +493,16 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return managementOptions;
     }
 
+    if (field.optionSource === "clients") {
+      return clientOptions;
+    }
+
     if (field.optionSource === "properties") {
       return propertyOptions;
+    }
+
+    if (field.optionSource === "propertyUnits") {
+      return unitOptions;
     }
 
     if (field.optionSource === "internalManagers") {
@@ -401,10 +607,12 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                             <option value="">Select {field.label.toLowerCase()}</option>
                             {optionsForField(field).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                           </Select>
-                        ) : field.name === "agencyFee" ? (
-                          <Input readOnly type="number" value={agencyFee} />
+                        ) : config.collection === "properties" && field.name === "agencyFee" ? (
+                          <Input readOnly type="number" value={calculatedAgencyFee} />
                         ) : field.name === "commissionAmount" ? (
                           <Input readOnly type="number" value={commissionAmount} />
+                        ) : field.name === "totalInitialPayment" ? (
+                          <Input readOnly type="number" value={totalInitialPayment} />
                         ) : (
                           <Input placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} type={field.type} />
                         )}

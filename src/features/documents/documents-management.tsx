@@ -29,6 +29,7 @@ const relatedConfigs: RelatedConfig[] = [
   { collection: "properties", label: "Property", type: "property" },
   { collection: "propertyUnits", label: "Unit", type: "unit" },
   { collection: "tasks", label: "Task", type: "task" },
+  { collection: "rentalTenancies", label: "Tenancy", type: "tenancy" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", type: "owner" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", type: "developer" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", type: "management" },
@@ -53,6 +54,11 @@ function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
   if (type === "task") {
     const detail = [record.assignedToName, record.dueAt, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.title ?? "Task")} (${detail})` : String(record.title ?? record.referenceNumber ?? record.id);
+  }
+
+  if (type === "tenancy") {
+    const detail = [record.propertyName, record.unitName, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.tenantName ?? "Tenant")} (${detail})` : String(record.tenantName ?? record.referenceNumber ?? record.id);
   }
 
   const detail = [record.phoneNumber, record.email, record.referenceNumber].filter(Boolean).join(" · ");
@@ -82,6 +88,10 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
 
   if (type === "task") {
     return `/tasks/${id}`;
+  }
+
+  if (type === "tenancy") {
+    return `/rentals/${id}`;
   }
 
   return null;

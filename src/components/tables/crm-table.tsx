@@ -70,22 +70,22 @@ export function CrmTable<TData>({
         </div>
       </div>
       {table.getRowModel().rows.length ? (
-        <div className="grid gap-3 bg-muted/40 p-3 lg:hidden">
+        <div className="grid gap-3 bg-muted/40 p-3 md:grid-cols-2 lg:hidden">
           {table.getRowModel().rows.map((row) => {
             const cells = row.getVisibleCells();
             const [primaryCell, ...detailCells] = cells;
             return (
-              <article className="rounded-md border bg-white p-4 shadow-sm" key={row.id}>
+              <article className="rounded-md border bg-white p-4 shadow-sm md:min-h-56" key={row.id}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 text-base font-semibold">
+                  <div className="min-w-0 text-base font-semibold leading-6">
                     {primaryCell ? flexRender(primaryCell.column.columnDef.cell, primaryCell.getContext()) : "Record"}
                   </div>
                 </div>
                 <dl className="mt-4 grid gap-3">
                   {detailCells.slice(0, 5).map((cell) => (
-                    <div className="flex items-start justify-between gap-4 text-sm" key={cell.id}>
-                      <dt className="shrink-0 text-muted-foreground">{headerLabel(cell.column.columnDef)}</dt>
-                      <dd className={cn("min-w-0 text-right font-medium", cell.column.id === "Status" && "text-left")}>
+                    <div className="grid grid-cols-[6.5rem_1fr] items-start gap-3 text-sm" key={cell.id}>
+                      <dt className="text-muted-foreground">{headerLabel(cell.column.columnDef)}</dt>
+                      <dd className={cn("min-w-0 text-right font-medium", cell.column.id.toLowerCase().includes("status") && "text-left")}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </dd>
                     </div>

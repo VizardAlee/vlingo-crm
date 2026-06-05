@@ -15,6 +15,9 @@ export type Permission =
   | "units.create"
   | "units.read"
   | "units.update"
+  | "rentals.create"
+  | "rentals.read"
+  | "rentals.update"
   | "tasks.create"
   | "tasks.read"
   | "tasks.update"
@@ -294,6 +297,67 @@ export interface PropertyUnit extends EntityMetadata {
   reservationExpiresAt?: Date | null;
 }
 
+export type RentalTenancyStatus = "draft" | "active" | "expiringSoon" | "renewalDue" | "renewed" | "terminated" | "defaulting" | "movedOut";
+export type RentalPaymentStatus = "notInvoiced" | "invoiced" | "partPaid" | "paid" | "overdue";
+export type RentalPaymentMethod = "bankTransfer" | "cash" | "pos" | "cheque" | "onlinePayment" | "other";
+
+export interface RentalPaymentRecord {
+  amount: number;
+  at: string;
+  method: RentalPaymentMethod;
+  note?: string;
+  reference?: string;
+  userId: string;
+}
+
+export interface RentalStatusHistoryEntry {
+  at: string;
+  fromPaymentStatus?: string;
+  fromStatus?: string;
+  note: string;
+  toPaymentStatus: string;
+  toStatus: string;
+  userId: string;
+}
+
+export interface RentalTenancy extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  tenantClientId: string;
+  tenantName?: string;
+  tenantEmail?: string;
+  tenantPhone?: string;
+  propertyId: string;
+  propertyName?: string;
+  unitId?: string;
+  unitName?: string;
+  landlordOwnerId?: string;
+  landlordOwnerName?: string;
+  leaseStartDate: Date | null;
+  leaseEndDate: Date | null;
+  moveInDate?: Date | null;
+  moveOutDate?: Date | null;
+  rentAmount: number;
+  paymentCycle: "monthly" | "quarterly" | "biannual" | "annual" | "oneOff";
+  rentDueDay?: number;
+  gracePeriodDays?: number;
+  serviceCharge?: number;
+  cautionFee?: number;
+  agencyFee?: number;
+  legalFee?: number;
+  totalInitialPayment?: number;
+  lastPaymentAmount?: number;
+  lastPaymentAt?: Date | string | null;
+  paymentHistory?: RentalPaymentRecord[];
+  paymentStatus?: RentalPaymentStatus;
+  statusHistory?: RentalStatusHistoryEntry[];
+  renewalNoticeDate?: Date | null;
+  nextRentDueDate?: Date | null;
+  agreementStatus?: "notStarted" | "drafting" | "sent" | "signed" | "expired";
+  status: RentalTenancyStatus;
+  notes?: string;
+}
+
 export type TaskStatus = "notStarted" | "inProgress" | "waiting" | "completed" | "cancelled" | "overdue";
 
 export interface Task extends EntityMetadata {
@@ -305,7 +369,7 @@ export interface Task extends EntityMetadata {
   assignedTo?: string;
   assignedToEmail?: string;
   assignedToName?: string;
-  relatedEntityType?: "lead" | "client" | "property" | "unit";
+  relatedEntityType?: "lead" | "client" | "property" | "unit" | "tenancy";
   relatedEntityId?: string;
   status: TaskStatus;
 }
@@ -329,7 +393,7 @@ export interface Activity extends EntityMetadata {
   subject: string;
   body?: string;
   status: string;
-  relatedEntityType?: "lead" | "client" | "property" | "unit" | "task";
+  relatedEntityType?: "lead" | "client" | "property" | "unit" | "task" | "tenancy";
   relatedEntityId?: string;
 }
 

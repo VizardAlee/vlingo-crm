@@ -2,9 +2,9 @@ import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatPhone, statusTone, titleCase } from "@/lib/utils";
-import type { Activity, Client, Lead, Property, PropertyUnit, Task } from "@/types/crm";
+import type { Activity, Client, Lead, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
 
-export type ModuleKey = "leads" | "clients" | "properties" | "propertyUnits" | "tasks" | "activities";
+export type ModuleKey = "leads" | "clients" | "properties" | "propertyUnits" | "rentalTenancies" | "tasks" | "activities";
 
 export interface FormField {
   colSpan?: "full";
@@ -12,7 +12,7 @@ export interface FormField {
   name: string;
   label: string;
   options?: string[];
-  optionSource?: "internalManagers" | "managementCompanies" | "properties" | "propertyDevelopers" | "propertyOwners";
+  optionSource?: "clients" | "internalManagers" | "managementCompanies" | "properties" | "propertyDevelopers" | "propertyOwners" | "propertyUnits";
   readOnly?: boolean;
   placeholder?: string;
   required?: boolean;
@@ -43,6 +43,10 @@ const titleStatuses = ["verified", "pendingVerification", "available", "inProces
 const unitTypes = ["Apartment", "Flat", "Duplex", "Terrace", "Semi-detached", "Detached", "Bungalow", "Penthouse", "Shop", "Office", "Warehouse", "Land plot", "Other"];
 const furnishingStatuses = ["unfurnished", "semiFurnished", "furnished", "serviced"];
 const sizeUnits = ["sqm", "sqft", "plots", "acres", "hectares"];
+const rentalStatuses = ["draft", "active", "expiringSoon", "renewalDue", "renewed", "terminated", "defaulting", "movedOut"];
+const paymentCycles = ["monthly", "quarterly", "biannual", "annual", "oneOff"];
+const agreementStatuses = ["notStarted", "drafting", "sent", "signed", "expired"];
+const rentalPaymentStatuses = ["notInvoiced", "invoiced", "partPaid", "paid", "overdue"];
 
 export const moduleConfigs: Record<string, ModuleConfig> = {
   leads: {
@@ -232,8 +236,46 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "status", label: "Status", options: ["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"], required: true, type: "select" },
       { name: "dueAt", label: "Due date", type: "date" },
       { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", type: "select" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "tenancy"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
+    ],
+  },
+  rentalTenancies: {
+    collection: "rentalTenancies",
+    createPermission: "rentals.create",
+    editPermission: "rentals.update",
+    emptyTitle: "No tenancies have been created yet.",
+    listPermission: "rentals.read",
+    prefix: "RENT",
+    route: "/rentals",
+    title: "Rentals",
+    fields: [
+      { helpText: "Choose the tenant from existing clients.", name: "tenantClientId", label: "Tenant/client", optionSource: "clients", required: true, section: "Tenant and property", type: "select" },
+      { name: "propertyId", label: "Property", optionSource: "properties", required: true, section: "Tenant and property", type: "select" },
+      { helpText: "Optional if the whole property is being rented.", name: "unitId", label: "Unit", optionSource: "propertyUnits", section: "Tenant and property", type: "select" },
+      { helpText: "Owner/landlord record for this rental.", name: "landlordOwnerId", label: "Landlord/owner", optionSource: "propertyOwners", section: "Tenant and property", type: "select" },
+
+      { name: "leaseStartDate", label: "Lease start date", required: true, section: "Lease dates", type: "date" },
+      { name: "leaseEndDate", label: "Lease end date", required: true, section: "Lease dates", type: "date" },
+      { name: "moveInDate", label: "Move-in date", section: "Lease dates", type: "date" },
+      { name: "moveOutDate", label: "Move-out date", section: "Lease dates", type: "date" },
+      { name: "renewalNoticeDate", label: "Renewal notice date", section: "Lease dates", type: "date" },
+      { name: "nextRentDueDate", label: "Next rent due date", section: "Lease dates", type: "date" },
+
+      { name: "rentAmount", label: "Rent amount", required: true, section: "Financial terms", type: "number" },
+      { name: "paymentCycle", label: "Payment cycle", options: paymentCycles, required: true, section: "Financial terms", type: "select" },
+      { helpText: "Day of the month rent is normally due, e.g. 1 or 15.", name: "rentDueDay", label: "Rent due day", section: "Financial terms", type: "number" },
+      { name: "gracePeriodDays", label: "Grace period days", section: "Financial terms", type: "number" },
+      { name: "serviceCharge", label: "Service charge", section: "Financial terms", type: "number" },
+      { name: "cautionFee", label: "Caution fee", section: "Financial terms", type: "number" },
+      { name: "agencyFee", label: "Agency fee", section: "Financial terms", type: "number" },
+      { name: "legalFee", label: "Legal fee", section: "Financial terms", type: "number" },
+      { helpText: "Rent plus service charge, caution fee, agency fee, and legal fee.", name: "totalInitialPayment", label: "Total initial payment", readOnly: true, section: "Financial terms", type: "number" },
+
+      { name: "status", label: "Tenancy status", options: rentalStatuses, required: true, section: "Status and notes", type: "select" },
+      { name: "paymentStatus", label: "Payment status", options: rentalPaymentStatuses, section: "Status and notes", type: "select" },
+      { name: "agreementStatus", label: "Agreement status", options: agreementStatuses, section: "Status and notes", type: "select" },
+      { colSpan: "full", name: "notes", label: "Tenancy notes", section: "Status and notes", type: "textarea" },
     ],
   },
   activities: {
@@ -250,7 +292,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "subject", label: "Subject", required: true, type: "text" },
       { name: "body", label: "Details", type: "textarea" },
       { name: "status", label: "Status", type: "text" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "task"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "task", "tenancy"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },
@@ -359,6 +401,24 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
     ];
   }
 
+  if (moduleKey === "rentalTenancies") {
+    return [
+      {
+        header: "Tenancy",
+        cell: ({ row }) => (
+          <Link className="grid gap-0.5 font-semibold text-primary" href={`/rentals/${row.original.id}`}>
+            <span>{String(row.original.tenantName ?? "Tenant")}</span>
+            <span className="text-xs font-medium text-muted-foreground">{String(row.original.referenceNumber ?? "Draft")}</span>
+          </Link>
+        ),
+      },
+      { header: "Property", cell: ({ row }) => String(row.original.unitName ?? row.original.propertyName ?? row.original.propertyId ?? "") },
+      { header: "Lease", cell: ({ row }) => `${String(row.original.leaseStartDate ?? "Not set")} to ${String(row.original.leaseEndDate ?? "Not set")}` },
+      { header: "Rent", cell: ({ row }) => `${formatCurrency(Number(row.original.rentAmount ?? 0))} · ${titleCase(String(row.original.paymentCycle ?? ""))}` },
+      statusColumn,
+    ];
+  }
+
   return [
     { header: "Activity", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/activities/${row.original.id}`}>{String(row.original.subject ?? "Activity")}</Link> },
     { header: "Type", cell: ({ row }) => titleCase(String(row.original.type ?? "")) },
@@ -367,4 +427,4 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
   ];
 }
 
-export type ModuleEntity = Activity | Client | Lead | Property | PropertyUnit | Task;
+export type ModuleEntity = Activity | Client | Lead | Property | PropertyUnit | RentalTenancy | Task;

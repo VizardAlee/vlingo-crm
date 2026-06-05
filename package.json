@@ -11,7 +11,8 @@
     "test": "vitest run tests/unit",
     "test:rules": "firebase emulators:exec --only firestore,storage \"vitest run tests/rules --no-file-parallelism\"",
     "seed": "tsx scripts/seed.ts",
-    "create:first-admin": "tsx scripts/create-first-admin.ts"
+    "create:first-admin": "tsx scripts/create-first-admin.ts",
+    "sync:roles": "tsx scripts/sync-role-permissions.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

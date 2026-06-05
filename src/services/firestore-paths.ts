@@ -9,6 +9,7 @@ export type OrgCollection =
   | "properties"
   | "propertyStakeholders"
   | "propertyUnits"
+  | "rentalTenancies"
   | "roles"
   | "tasks";
 

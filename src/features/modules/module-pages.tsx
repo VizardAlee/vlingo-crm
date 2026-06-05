@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, Flame, GitBranch, ListTodo, MessageSquarePlus, PhoneCall, Plus, Repeat2, Send, XCircle } from "lucide-react";
+import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Home, ListTodo, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import { listDocuments, type DocumentRecord } from "@/services/documents";
 import { createOrgRecord, getOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { convertLeadToClient } from "@/services/workflows";
 
-type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task";
+type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task" | "tenancy";
 
 function relatedTypeForCollection(collection: ModuleConfig["collection"]): RelatedEntityType | null {
   if (collection === "leads") {
@@ -41,6 +41,10 @@ function relatedTypeForCollection(collection: ModuleConfig["collection"]): Relat
 
   if (collection === "tasks") {
     return "task";
+  }
+
+  if (collection === "rentalTenancies") {
+    return "tenancy";
   }
 
   return null;
@@ -67,6 +71,10 @@ function collectionForRelatedEntity(type: unknown): ModuleConfig["collection"] |
     return "tasks";
   }
 
+  if (type === "tenancy") {
+    return "rentalTenancies";
+  }
+
   return null;
 }
 
@@ -80,11 +88,15 @@ function routeForRelatedEntity(type: unknown, id: string) {
     return `/units/${id}`;
   }
 
+  if (collectionName === "rentalTenancies") {
+    return `/rentals/${id}`;
+  }
+
   return `/${collectionName}/${id}`;
 }
 
 function recordDisplayName(record: Record<string, unknown>) {
-  return String(record.fullName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? record.referenceNumber ?? record.id ?? "Record");
+  return String(record.fullName ?? record.tenantName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? record.referenceNumber ?? record.id ?? "Record");
 }
 
 async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "propertyUnits") {
@@ -200,6 +212,448 @@ function formatRecordValue(value: unknown) {
 
 function isOpenTask(task: Record<string, unknown>) {
   return !["completed", "cancelled"].includes(String(task.status ?? ""));
+}
+
+function parseDateObject(value: unknown) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    const date = value.toDate() as Date;
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+}
+
+function dateInputString(value: unknown) {
+  const date = parseDateObject(value);
+  return date ? date.toISOString().slice(0, 10) : "";
+}
+
+function daysUntil(value: unknown) {
+  const date = parseDateObject(value);
+  if (!date) {
+    return null;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  return Math.ceil((date.getTime() - today.getTime()) / 86_400_000);
+}
+
+function addMonthsToInputDate(value: unknown, months: number) {
+  const date = parseDateObject(value);
+  if (!date) {
+    return "";
+  }
+
+  date.setMonth(date.getMonth() + months);
+  return date.toISOString().slice(0, 10);
+}
+
+function rentCycleMonths(value: unknown) {
+  if (value === "monthly") {
+    return 1;
+  }
+
+  if (value === "quarterly") {
+    return 3;
+  }
+
+  if (value === "biannual") {
+    return 6;
+  }
+
+  if (value === "annual") {
+    return 12;
+  }
+
+  return 0;
+}
+
+const rentalPaymentStatusOptions = ["notInvoiced", "invoiced", "partPaid", "paid", "overdue"] as const;
+const rentalTenancyStatusOptions = ["draft", "active", "expiringSoon", "renewalDue", "renewed", "terminated", "defaulting", "movedOut"] as const;
+const paymentMethods = ["bankTransfer", "cash", "pos", "cheque", "onlinePayment", "other"] as const;
+
+function RentalOperationsPanel({
+  activities,
+  id,
+  onChanged,
+  record,
+  tasks,
+}: {
+  activities: Record<string, unknown>[];
+  id: string;
+  onChanged: () => Promise<void>;
+  record: Record<string, unknown>;
+  tasks: Record<string, unknown>[];
+}) {
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const rentAmount = Number(record.rentAmount ?? 0);
+  const [paymentAmount, setPaymentAmount] = useState(String(rentAmount || ""));
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentMethod, setPaymentMethod] = useState<(typeof paymentMethods)[number]>("bankTransfer");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [nextPaymentStatus, setNextPaymentStatus] = useState(String(record.paymentStatus ?? "notInvoiced"));
+  const [nextTenancyStatus, setNextTenancyStatus] = useState(String(record.status ?? "draft"));
+  const [statusNote, setStatusNote] = useState("");
+  const [renewalDueAt, setRenewalDueAt] = useState(dateInputString(record.renewalNoticeDate || record.leaseEndDate));
+  const [saving, setSaving] = useState<"payment" | "status" | "renewal" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const context = user ? { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid } : null;
+  const canUpdateRental = hasPermission(member, "rentals.update");
+  const canCreateActivity = hasPermission(member, "activities.create");
+  const canCreateTask = hasPermission(member, "tasks.create");
+  const leaseDaysLeft = daysUntil(record.leaseEndDate);
+  const rentDaysLeft = daysUntil(record.nextRentDueDate);
+  const renewalTasks = tasks.filter((task) => String(task.relatedEntityType) === "tenancy" && /renew|expiry|lease/i.test(String(task.title ?? "")));
+  const paymentHistory = Array.isArray(record.paymentHistory) ? record.paymentHistory.slice().reverse() : [];
+  const totalPaid = Array.isArray(record.paymentHistory)
+    ? record.paymentHistory.reduce((sum, entry) => sum + Number((entry as Record<string, unknown>).amount ?? 0), 0)
+    : 0;
+
+  async function handlePaymentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!context) {
+      setError("You must be signed in to record payment.");
+      return;
+    }
+
+    const amount = Number(paymentAmount);
+    if (!amount || amount <= 0) {
+      setError("Enter a valid payment amount.");
+      return;
+    }
+
+    const cycleMonths = rentCycleMonths(record.paymentCycle);
+    const nextRentDueDate = cycleMonths ? addMonthsToInputDate(record.nextRentDueDate || record.leaseStartDate || paymentDate, cycleMonths) : dateInputString(record.leaseEndDate);
+    const paymentEntry = {
+      amount,
+      at: paymentDate || new Date().toISOString().slice(0, 10),
+      method: paymentMethod,
+      note: paymentNote.trim(),
+      reference: paymentReference.trim(),
+      userId: context.userId,
+    };
+    const existingHistory = Array.isArray(record.paymentHistory) ? record.paymentHistory : [];
+    const paymentStatus = amount >= rentAmount ? "paid" : "partPaid";
+
+    setSaving("payment");
+    setError(null);
+    setSuccess(null);
+    try {
+      await updateOrgRecord("rentalTenancies", id, {
+        lastPaymentAmount: amount,
+        lastPaymentAt: paymentEntry.at,
+        nextRentDueDate,
+        paymentHistory: [...existingHistory, paymentEntry],
+        paymentStatus,
+        status: String(record.status ?? "draft") === "draft" ? "active" : record.status,
+      }, context);
+      const activityId = await createOrgRecord("activities", {
+        body: paymentNote.trim() || `Payment received by ${titleCase(paymentMethod)}${paymentReference.trim() ? `, reference ${paymentReference.trim()}` : ""}.`,
+        relatedEntityId: id,
+        relatedEntityType: "tenancy",
+        status: "completed",
+        subject: `Rent payment recorded: ${formatCurrency(amount)}`,
+        type: "internalNote",
+      }, context, "ACT");
+      await writeAuditLog(context, "rental.paymentRecord", "rentalTenancies", id, { amount, nextRentDueDate, paymentStatus });
+      await writeAuditLog(context, "activity.create", "activities", activityId, { relatedEntityId: id, subject: `Rent payment recorded: ${formatCurrency(amount)}` });
+      setPaymentReference("");
+      setPaymentNote("");
+      setSuccess("Payment recorded and next rent due date updated.");
+      await onChanged();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to record payment.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleStatusSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!context) {
+      setError("You must be signed in to update this tenancy.");
+      return;
+    }
+
+    if (!statusNote.trim()) {
+      setError("Add a short note before changing rental status.");
+      return;
+    }
+
+    const statusHistory = Array.isArray(record.statusHistory) ? record.statusHistory : [];
+    const nextPayload = {
+      paymentStatus: nextPaymentStatus,
+      status: nextTenancyStatus,
+      statusHistory: [
+        ...statusHistory,
+        {
+          at: new Date().toISOString(),
+          fromPaymentStatus: record.paymentStatus ?? "",
+          fromStatus: record.status ?? "",
+          note: statusNote.trim(),
+          toPaymentStatus: nextPaymentStatus,
+          toStatus: nextTenancyStatus,
+          userId: context.userId,
+        },
+      ],
+    };
+
+    setSaving("status");
+    setError(null);
+    setSuccess(null);
+    try {
+      await updateOrgRecord("rentalTenancies", id, nextPayload, context);
+      const activityId = await createOrgRecord("activities", {
+        body: statusNote.trim(),
+        relatedEntityId: id,
+        relatedEntityType: "tenancy",
+        status: "completed",
+        subject: `Tenancy updated to ${titleCase(nextTenancyStatus)}`,
+        type: "internalNote",
+      }, context, "ACT");
+      await writeAuditLog(context, "rental.statusChange", "rentalTenancies", id, nextPayload);
+      await writeAuditLog(context, "activity.create", "activities", activityId, { relatedEntityId: id, subject: `Tenancy updated to ${titleCase(nextTenancyStatus)}` });
+      setStatusNote("");
+      setSuccess("Rental status updated.");
+      await onChanged();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to update rental status.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleRenewalTaskSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!context) {
+      setError("You must be signed in to schedule renewal work.");
+      return;
+    }
+
+    if (!renewalDueAt) {
+      setError("Choose a renewal task due date.");
+      return;
+    }
+
+    setSaving("renewal");
+    setError(null);
+    setSuccess(null);
+    try {
+      const taskId = await createOrgRecord("tasks", {
+        assignedTo: context.userId,
+        description: `Review renewal for ${String(record.tenantName ?? "tenant")} at ${String(record.propertyName ?? record.unitName ?? "rental property")}. Lease ends ${dateDisplay(record.leaseEndDate)}.`,
+        dueAt: renewalDueAt,
+        priority: "high",
+        relatedEntityId: id,
+        relatedEntityType: "tenancy",
+        status: "notStarted",
+        title: `Renewal review: ${String(record.tenantName ?? record.referenceNumber ?? "Rental")}`,
+      }, context, "TASK");
+      await updateOrgRecord("rentalTenancies", id, { renewalNoticeDate: renewalDueAt, status: leaseDaysLeft !== null && leaseDaysLeft <= 60 ? "renewalDue" : record.status }, context);
+      await writeAuditLog(context, "task.create", "tasks", taskId, { relatedEntityId: id, title: `Renewal review: ${String(record.tenantName ?? record.referenceNumber ?? "Rental")}` });
+      setSuccess("Renewal task created.");
+      await onChanged();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to create renewal task.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle>Rental Operations</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Track rent, renewal, agreement, and tenant follow-up from one tenancy view.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={statusTone(String(record.status ?? "draft"))}>{titleCase(String(record.status ?? "draft"))}</Badge>
+            <Badge tone={statusTone(String(record.paymentStatus ?? "notInvoiced"))}>{titleCase(String(record.paymentStatus ?? "notInvoiced"))}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { icon: Home, label: "Tenant", value: String(record.tenantName ?? "Not linked") },
+              { icon: Building2, label: "Property", value: String(record.unitName ?? record.propertyName ?? "Not linked") },
+              { icon: Banknote, label: "Rent", value: `${formatCurrency(rentAmount)} · ${titleCase(String(record.paymentCycle ?? ""))}` },
+              { icon: ReceiptText, label: "Total paid", value: formatCurrency(totalPaid) },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div className="rounded-md border bg-white p-3" key={item.label}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium uppercase text-muted-foreground">{item.label}</p>
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="mt-1 truncate text-lg font-semibold">{item.value}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md border bg-white p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Next rent due</p>
+              <p className="mt-1 text-lg font-semibold">{dateDisplay(record.nextRentDueDate)}</p>
+              <p className={cn("mt-1 text-xs", rentDaysLeft !== null && rentDaysLeft < 0 ? "text-destructive" : "text-muted-foreground")}>
+                {rentDaysLeft === null ? "No due date set" : rentDaysLeft < 0 ? `${Math.abs(rentDaysLeft)} days overdue` : `${rentDaysLeft} days left`}
+              </p>
+            </div>
+            <div className="rounded-md border bg-white p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Lease ends</p>
+              <p className="mt-1 text-lg font-semibold">{dateDisplay(record.leaseEndDate)}</p>
+              <p className={cn("mt-1 text-xs", leaseDaysLeft !== null && leaseDaysLeft <= 60 ? "text-warning" : "text-muted-foreground")}>
+                {leaseDaysLeft === null ? "No lease end set" : leaseDaysLeft < 0 ? `${Math.abs(leaseDaysLeft)} days expired` : `${leaseDaysLeft} days left`}
+              </p>
+            </div>
+            <div className="rounded-md border bg-white p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Renewal tasks</p>
+              <p className="mt-1 text-lg font-semibold">{renewalTasks.length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{dateDisplay(record.renewalNoticeDate)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {error ? <ErrorState message={error} /> : null}
+      {success ? (
+        <div className="flex items-center gap-2 rounded-md border border-success/20 bg-success/10 p-3 text-sm font-medium text-success">
+          <CheckCircle2 className="h-4 w-4" />
+          {success}
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card>
+          <CardHeader><CardTitle>Record Payment</CardTitle></CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handlePaymentSubmit}>
+              <Field label="Amount">
+                <Input disabled={!canUpdateRental} min={0} type="number" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} />
+              </Field>
+              <Field label="Payment date">
+                <Input disabled={!canUpdateRental} type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
+              </Field>
+              <Field label="Method">
+                <Select disabled={!canUpdateRental} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as (typeof paymentMethods)[number])}>
+                  {paymentMethods.map((method) => <option key={method} value={method}>{titleCase(method)}</option>)}
+                </Select>
+              </Field>
+              <Field label="Reference">
+                <Input disabled={!canUpdateRental} value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} />
+              </Field>
+              <Field label="Note">
+                <Textarea disabled={!canUpdateRental} value={paymentNote} onChange={(event) => setPaymentNote(event.target.value)} />
+              </Field>
+              <Button className="h-11" disabled={!canUpdateRental || !canCreateActivity || saving === "payment"} type="submit">
+                <Banknote className="h-4 w-4" />
+                {saving === "payment" ? "Recording" : "Record payment"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Status Control</CardTitle></CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handleStatusSubmit}>
+              <Field label="Tenancy status">
+                <Select disabled={!canUpdateRental} value={nextTenancyStatus} onChange={(event) => setNextTenancyStatus(event.target.value)}>
+                  {rentalTenancyStatusOptions.map((statusOption) => <option key={statusOption} value={statusOption}>{titleCase(statusOption)}</option>)}
+                </Select>
+              </Field>
+              <Field label="Payment status">
+                <Select disabled={!canUpdateRental} value={nextPaymentStatus} onChange={(event) => setNextPaymentStatus(event.target.value)}>
+                  {rentalPaymentStatusOptions.map((statusOption) => <option key={statusOption} value={statusOption}>{titleCase(statusOption)}</option>)}
+                </Select>
+              </Field>
+              <Field label="Update note">
+                <Textarea disabled={!canUpdateRental} value={statusNote} onChange={(event) => setStatusNote(event.target.value)} />
+              </Field>
+              <Button className="h-11" disabled={!canUpdateRental || !canCreateActivity || saving === "status"} type="submit" variant="secondary">
+                <Send className="h-4 w-4" />
+                {saving === "status" ? "Updating" : "Update status"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Renewal Follow-up</CardTitle></CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handleRenewalTaskSubmit}>
+              <Field label="Task due date">
+                <Input disabled={!canCreateTask} type="date" value={renewalDueAt} onChange={(event) => setRenewalDueAt(event.target.value)} />
+              </Field>
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                Lease ends {dateDisplay(record.leaseEndDate)}. Create a task before expiry so renewal, move-out, or replacement tenant work is not missed.
+              </div>
+              <Button className="h-11" disabled={!canCreateTask || !canUpdateRental || saving === "renewal"} type="submit" variant="outline">
+                <FileClock className="h-4 w-4" />
+                {saving === "renewal" ? "Creating" : "Create renewal task"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle>Payment History</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            {paymentHistory.length ? paymentHistory.slice(0, 6).map((entry, index) => {
+              const item = entry as Record<string, unknown>;
+              return (
+                <div className="rounded-md border p-3" key={`${String(item.at)}-${index}`}>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="font-semibold">{formatCurrency(Number(item.amount ?? 0))}</span>
+                    <span className="text-xs text-muted-foreground">{dateDisplay(item.at)}</span>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">{titleCase(String(item.method ?? "payment"))}{item.reference ? ` · ${String(item.reference)}` : ""}</p>
+                  {item.note ? <p className="mt-1 text-muted-foreground">{String(item.note)}</p> : null}
+                </div>
+              );
+            }) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No rent payments have been recorded yet.</div>}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Rental Activity</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            {activities.length ? activities.slice(0, 6).map((activity) => (
+              <Link className="rounded-md border p-3 text-foreground hover:bg-muted" href={`/activities/${activity.id}`} key={String(activity.id)}>
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="font-semibold">{String(activity.subject ?? "Activity")}</span>
+                  <Badge tone="muted">{titleCase(String(activity.type ?? "activity"))}</Badge>
+                </div>
+                <p className="mt-1 line-clamp-2 text-muted-foreground">{String(activity.body ?? "No details")}</p>
+              </Link>
+            )) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No rental activity has been logged yet.</div>}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 function LeadJourneyPanel({
@@ -903,7 +1357,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     <section className="grid min-w-0 gap-5">
       <div className="flex flex-col gap-3 rounded-md bg-white p-4 shadow-sm md:flex-row md:items-start md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
-          <h1 className="text-xl font-semibold md:text-2xl">{String(record.fullName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? "Record")}</h1>
+          <h1 className="text-xl font-semibold md:text-2xl">{String(record.fullName ?? record.tenantName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? "Record")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{String(record.referenceNumber ?? id)} · {status}</p>
         </div>
         <div className="grid gap-2 md:flex">
@@ -947,6 +1401,9 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       ) : null}
       {config.collection === "leads" ? (
         <LeadJourneyPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
+      ) : null}
+      {config.collection === "rentalTenancies" ? (
+        <RentalOperationsPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
       ) : null}
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>
