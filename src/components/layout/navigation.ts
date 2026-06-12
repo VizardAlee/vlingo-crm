@@ -62,8 +62,8 @@ export const navigation: NavSection[] = [
     items: [
       { href: "/finance", icon: Receipt, label: "Finance", permissions: ["reports.viewFinancial"] },
       { href: "/rentals", icon: Landmark, label: "Rentals", permissions: ["rentals.read"] },
-      { href: "/development", icon: FolderKanban, label: "Development", permissions: ["properties.read"] },
-      { href: "/marketing", icon: Megaphone, label: "Marketing", permissions: ["leads.readAll"] },
+      { href: "/development", icon: FolderKanban, label: "Development", permissions: ["development.read"] },
+      { href: "/marketing", icon: Megaphone, label: "Marketing", permissions: ["marketing.read"] },
     ],
   },
   {

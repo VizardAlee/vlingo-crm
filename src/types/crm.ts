@@ -18,6 +18,12 @@ export type Permission =
   | "rentals.create"
   | "rentals.read"
   | "rentals.update"
+  | "development.create"
+  | "development.read"
+  | "development.update"
+  | "marketing.create"
+  | "marketing.read"
+  | "marketing.update"
   | "tasks.create"
   | "tasks.read"
   | "tasks.update"
@@ -358,6 +364,84 @@ export interface RentalTenancy extends EntityMetadata {
   notes?: string;
 }
 
+export type DevelopmentProjectStatus =
+  | "concept"
+  | "planning"
+  | "approval"
+  | "procurement"
+  | "construction"
+  | "inspection"
+  | "handover"
+  | "completed"
+  | "onHold"
+  | "cancelled";
+
+export type DevelopmentRiskLevel = "low" | "medium" | "high" | "critical";
+
+export interface DevelopmentProject extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  name: string;
+  projectType: string;
+  propertyId?: string;
+  propertyName?: string;
+  propertyReferenceNumber?: string;
+  location?: string;
+  state?: string;
+  city?: string;
+  projectManagerId?: string;
+  projectManagerName?: string;
+  projectManagerEmail?: string;
+  contractorName?: string;
+  contractorPhone?: string;
+  contractorEmail?: string;
+  currentPhase?: string;
+  permitStatus?: string;
+  startDate?: Date | null;
+  expectedCompletionDate?: Date | null;
+  actualCompletionDate?: Date | null;
+  budget?: number;
+  amountSpent?: number;
+  progressPercent?: number;
+  riskLevel?: DevelopmentRiskLevel;
+  priority?: "low" | "medium" | "high" | "urgent";
+  status: DevelopmentProjectStatus;
+  notes?: string;
+}
+
+export type MarketingCampaignStatus = "draft" | "planned" | "active" | "paused" | "completed" | "cancelled";
+export type MarketingCampaignChannel = "Facebook" | "Instagram" | "Google Ads" | "WhatsApp" | "Email" | "SMS" | "Property portal" | "Referral" | "Event" | "Outdoor" | "Other";
+
+export interface MarketingCampaign extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  name: string;
+  campaignType: string;
+  channel: MarketingCampaignChannel;
+  objective?: string;
+  propertyId?: string;
+  propertyName?: string;
+  propertyReferenceNumber?: string;
+  campaignManagerId?: string;
+  campaignManagerName?: string;
+  campaignManagerEmail?: string;
+  targetAudience?: string;
+  targetLocation?: string;
+  sourceTag?: string;
+  landingPageUrl?: string;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  budget?: number;
+  amountSpent?: number;
+  expectedLeads?: number;
+  actualLeads?: number;
+  qualifiedLeads?: number;
+  convertedLeads?: number;
+  priority?: "low" | "medium" | "high" | "urgent";
+  status: MarketingCampaignStatus;
+  notes?: string;
+}
+
 export type TaskStatus = "notStarted" | "inProgress" | "waiting" | "completed" | "cancelled" | "overdue";
 
 export interface Task extends EntityMetadata {
@@ -369,7 +453,7 @@ export interface Task extends EntityMetadata {
   assignedTo?: string;
   assignedToEmail?: string;
   assignedToName?: string;
-  relatedEntityType?: "lead" | "client" | "property" | "unit" | "tenancy";
+  relatedEntityType?: "lead" | "client" | "property" | "unit" | "tenancy" | "development" | "marketing";
   relatedEntityId?: string;
   status: TaskStatus;
 }
@@ -393,7 +477,7 @@ export interface Activity extends EntityMetadata {
   subject: string;
   body?: string;
   status: string;
-  relatedEntityType?: "lead" | "client" | "property" | "unit" | "task" | "tenancy";
+  relatedEntityType?: "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
   relatedEntityId?: string;
 }
 

@@ -2,9 +2,9 @@ import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatPhone, statusTone, titleCase } from "@/lib/utils";
-import type { Activity, Client, Lead, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
+import type { Activity, Client, DevelopmentProject, Lead, MarketingCampaign, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
 
-export type ModuleKey = "leads" | "clients" | "properties" | "propertyUnits" | "rentalTenancies" | "tasks" | "activities";
+export type ModuleKey = "leads" | "clients" | "properties" | "propertyUnits" | "rentalTenancies" | "developmentProjects" | "marketingCampaigns" | "tasks" | "activities";
 
 export interface FormField {
   colSpan?: "full";
@@ -47,6 +47,14 @@ const rentalStatuses = ["draft", "active", "expiringSoon", "renewalDue", "renewe
 const paymentCycles = ["monthly", "quarterly", "biannual", "annual", "oneOff"];
 const agreementStatuses = ["notStarted", "drafting", "sent", "signed", "expired"];
 const rentalPaymentStatuses = ["notInvoiced", "invoiced", "partPaid", "paid", "overdue"];
+const developmentStatuses = ["concept", "planning", "approval", "procurement", "construction", "inspection", "handover", "completed", "onHold", "cancelled"];
+const developmentTypes = ["Estate development", "Building construction", "Renovation", "Infrastructure", "Land development", "Fit-out", "Maintenance", "Other"];
+const permitStatuses = ["notStarted", "inReview", "approved", "rejected", "notRequired"];
+const riskLevels = ["low", "medium", "high", "critical"];
+const priorities = ["low", "medium", "high", "urgent"];
+const marketingCampaignStatuses = ["draft", "planned", "active", "paused", "completed", "cancelled"];
+const marketingCampaignTypes = ["Property launch", "Open house", "Lead generation", "Retargeting", "Brand awareness", "Referral drive", "Agent campaign", "Event", "Other"];
+const marketingChannels = ["Facebook", "Instagram", "Google Ads", "WhatsApp", "Email", "SMS", "Property portal", "Referral", "Event", "Outdoor", "Other"];
 
 export const moduleConfigs: Record<string, ModuleConfig> = {
   leads: {
@@ -236,7 +244,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "status", label: "Status", options: ["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"], required: true, type: "select" },
       { name: "dueAt", label: "Due date", type: "date" },
       { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", type: "select" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "tenancy"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "tenancy", "development", "marketing"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },
@@ -278,6 +286,80 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { colSpan: "full", name: "notes", label: "Tenancy notes", section: "Status and notes", type: "textarea" },
     ],
   },
+  developmentProjects: {
+    collection: "developmentProjects",
+    createPermission: "development.create",
+    editPermission: "development.update",
+    emptyTitle: "No development projects have been created yet.",
+    listPermission: "development.read",
+    prefix: "DEV",
+    route: "/development",
+    title: "Development Projects",
+    fields: [
+      { name: "name", label: "Project name", placeholder: "Example: Beacon Court Phase 2 Construction", required: true, section: "Project basics", type: "text" },
+      { name: "projectType", label: "Project type", options: developmentTypes, required: true, section: "Project basics", type: "select" },
+      { helpText: "Optional: link this project to an existing property record.", name: "propertyId", label: "Linked property", optionSource: "properties", section: "Project basics", type: "select" },
+      { name: "status", label: "Project status", options: developmentStatuses, required: true, section: "Project basics", type: "select" },
+      { name: "priority", label: "Priority", options: priorities, section: "Project basics", type: "select" },
+      { name: "riskLevel", label: "Risk level", options: riskLevels, section: "Project basics", type: "select" },
+
+      { colSpan: "full", name: "location", label: "Site/location", section: "Location", type: "textarea" },
+      { name: "state", label: "State", section: "Location", type: "text" },
+      { name: "city", label: "City", section: "Location", type: "text" },
+
+      { helpText: "Internal CRM user responsible for delivery.", name: "projectManagerId", label: "Project manager", optionSource: "internalManagers", section: "Team and contractor", type: "select" },
+      { name: "contractorName", label: "Main contractor", section: "Team and contractor", type: "text" },
+      { name: "contractorPhone", label: "Contractor phone", section: "Team and contractor", type: "text" },
+      { name: "contractorEmail", label: "Contractor email", section: "Team and contractor", type: "email" },
+
+      { name: "currentPhase", label: "Current phase", placeholder: "Foundation, blockwork, roofing, finishing...", section: "Delivery", type: "text" },
+      { name: "permitStatus", label: "Permit status", options: permitStatuses, section: "Delivery", type: "select" },
+      { name: "progressPercent", label: "Progress %", section: "Delivery", type: "number" },
+      { name: "startDate", label: "Start date", section: "Delivery", type: "date" },
+      { name: "expectedCompletionDate", label: "Expected completion", section: "Delivery", type: "date" },
+      { name: "actualCompletionDate", label: "Actual completion", section: "Delivery", type: "date" },
+
+      { name: "budget", label: "Approved budget", section: "Budget", type: "number" },
+      { name: "amountSpent", label: "Amount spent", section: "Budget", type: "number" },
+      { colSpan: "full", name: "notes", label: "Development notes", section: "Notes", type: "textarea" },
+    ],
+  },
+  marketingCampaigns: {
+    collection: "marketingCampaigns",
+    createPermission: "marketing.create",
+    editPermission: "marketing.update",
+    emptyTitle: "No marketing campaigns have been created yet.",
+    listPermission: "marketing.read",
+    prefix: "MKT",
+    route: "/marketing",
+    title: "Marketing Campaigns",
+    fields: [
+      { name: "name", label: "Campaign name", placeholder: "Example: Lekki Phase 1 Open House", required: true, section: "Campaign basics", type: "text" },
+      { name: "campaignType", label: "Campaign type", options: marketingCampaignTypes, required: true, section: "Campaign basics", type: "select" },
+      { name: "channel", label: "Primary channel", options: marketingChannels, required: true, section: "Campaign basics", type: "select" },
+      { name: "status", label: "Campaign status", options: marketingCampaignStatuses, required: true, section: "Campaign basics", type: "select" },
+      { name: "priority", label: "Priority", options: priorities, section: "Campaign basics", type: "select" },
+      { colSpan: "full", name: "objective", label: "Objective", placeholder: "What this campaign is meant to achieve.", section: "Campaign basics", type: "textarea" },
+
+      { helpText: "Optional: link campaign performance to a property/listing.", name: "propertyId", label: "Linked property/listing", optionSource: "properties", section: "Targeting", type: "select" },
+      { name: "campaignManagerId", label: "Campaign manager", optionSource: "internalManagers", section: "Targeting", type: "select" },
+      { name: "targetAudience", label: "Target audience", placeholder: "Investors, tenants, first-time buyers...", section: "Targeting", type: "text" },
+      { name: "targetLocation", label: "Target location", placeholder: "Lekki, Ajah, Abuja...", section: "Targeting", type: "text" },
+      { helpText: "Use this same value on imported leads as campaign name/source tag.", name: "sourceTag", label: "Lead source tag", section: "Targeting", type: "text" },
+      { name: "landingPageUrl", label: "Landing page URL", section: "Targeting", type: "url" },
+
+      { name: "startDate", label: "Start date", section: "Schedule and budget", type: "date" },
+      { name: "endDate", label: "End date", section: "Schedule and budget", type: "date" },
+      { name: "budget", label: "Budget", section: "Schedule and budget", type: "number" },
+      { name: "amountSpent", label: "Amount spent", section: "Schedule and budget", type: "number" },
+
+      { name: "expectedLeads", label: "Expected leads", section: "Performance", type: "number" },
+      { name: "actualLeads", label: "Actual leads", section: "Performance", type: "number" },
+      { name: "qualifiedLeads", label: "Qualified leads", section: "Performance", type: "number" },
+      { name: "convertedLeads", label: "Converted leads", section: "Performance", type: "number" },
+      { colSpan: "full", name: "notes", label: "Marketing notes", section: "Notes", type: "textarea" },
+    ],
+  },
   activities: {
     collection: "activities",
     createPermission: "activities.create",
@@ -292,7 +374,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "subject", label: "Subject", required: true, type: "text" },
       { name: "body", label: "Details", type: "textarea" },
       { name: "status", label: "Status", type: "text" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "task", "tenancy"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },
@@ -419,6 +501,58 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
     ];
   }
 
+  if (moduleKey === "developmentProjects") {
+    return [
+      {
+        header: "Project",
+        cell: ({ row }) => (
+          <Link className="grid gap-0.5 font-semibold text-primary" href={`/development/${row.original.id}`}>
+            <span>{String(row.original.name ?? "Development project")}</span>
+            <span className="text-xs font-medium text-muted-foreground">{String(row.original.referenceNumber ?? "Draft")}</span>
+          </Link>
+        ),
+      },
+      { header: "Linked property", cell: ({ row }) => String(row.original.propertyName ?? row.original.city ?? row.original.location ?? "Not linked") },
+      { header: "Manager", cell: ({ row }) => String(row.original.projectManagerName ?? row.original.projectManagerEmail ?? "Unassigned") },
+      {
+        header: "Budget",
+        cell: ({ row }) => {
+          const budget = Number(row.original.budget ?? 0);
+          const spent = Number(row.original.amountSpent ?? 0);
+          return budget || spent ? `${formatCurrency(spent)} / ${formatCurrency(budget)}` : "Not set";
+        },
+      },
+      { header: "Progress", cell: ({ row }) => `${Number(row.original.progressPercent ?? 0)}%` },
+      statusColumn,
+    ];
+  }
+
+  if (moduleKey === "marketingCampaigns") {
+    return [
+      {
+        header: "Campaign",
+        cell: ({ row }) => (
+          <Link className="grid gap-0.5 font-semibold text-primary" href={`/marketing/${row.original.id}`}>
+            <span>{String(row.original.name ?? "Marketing campaign")}</span>
+            <span className="text-xs font-medium text-muted-foreground">{String(row.original.referenceNumber ?? "Draft")}</span>
+          </Link>
+        ),
+      },
+      { header: "Channel", cell: ({ row }) => String(row.original.channel ?? "Not set") },
+      { header: "Linked property", cell: ({ row }) => String(row.original.propertyName ?? row.original.targetLocation ?? "Not linked") },
+      {
+        header: "Spend",
+        cell: ({ row }) => {
+          const budget = Number(row.original.budget ?? 0);
+          const spent = Number(row.original.amountSpent ?? 0);
+          return budget || spent ? `${formatCurrency(spent)} / ${formatCurrency(budget)}` : "Not set";
+        },
+      },
+      { header: "Leads", cell: ({ row }) => `${Number(row.original.actualLeads ?? 0)} / ${Number(row.original.expectedLeads ?? 0)}` },
+      statusColumn,
+    ];
+  }
+
   return [
     { header: "Activity", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/activities/${row.original.id}`}>{String(row.original.subject ?? "Activity")}</Link> },
     { header: "Type", cell: ({ row }) => titleCase(String(row.original.type ?? "")) },
@@ -427,4 +561,4 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
   ];
 }
 
-export type ModuleEntity = Activity | Client | Lead | Property | PropertyUnit | RentalTenancy | Task;
+export type ModuleEntity = Activity | Client | DevelopmentProject | Lead | MarketingCampaign | Property | PropertyUnit | RentalTenancy | Task;

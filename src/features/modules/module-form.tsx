@@ -11,7 +11,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
-import { activitySchema, clientSchema, leadSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
+import { activitySchema, clientSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
 import { cn } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import type { Client, Member, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
@@ -19,7 +19,9 @@ import type { Client, Member, Property, PropertyStakeholder, PropertyUnit } from
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
   clients: clientSchema,
+  developmentProjects: developmentProjectSchema,
   leads: leadSchema,
+  marketingCampaigns: marketingCampaignSchema,
   properties: propertySchema,
   propertyUnits: unitSchema,
   rentalTenancies: rentalTenancySchema,
@@ -217,7 +219,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   );
 
   useEffect(() => {
-    if (config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "tasks") {
+    if (config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
       return;
     }
 
@@ -239,6 +241,26 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
           Promise.resolve<Property[]>([]),
+          Promise.resolve<PropertyUnit[]>([]),
+        ]);
+      }
+
+      if (config.collection === "developmentProjects") {
+        return Promise.all([
+          Promise.resolve<Client[]>([]),
+          Promise.resolve<PropertyStakeholder[]>([]),
+          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          Promise.resolve<PropertyUnit[]>([]),
+        ]);
+      }
+
+      if (config.collection === "marketingCampaigns") {
+        return Promise.all([
+          Promise.resolve<Client[]>([]),
+          Promise.resolve<PropertyStakeholder[]>([]),
+          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
           Promise.resolve<PropertyUnit[]>([]),
         ]);
       }
@@ -462,6 +484,24 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       parsedData.unitName = linkedUnit?.unitNumber ?? "";
       parsedData.landlordOwnerName = landlord?.name ?? "";
       parsedData.totalInitialPayment = totalInitialPayment;
+    }
+
+    if (config.collection === "developmentProjects") {
+      const linkedProperty = properties.find((item) => item.id === parsedData.propertyId);
+      const projectManager = members.find((item) => item.id === parsedData.projectManagerId);
+      parsedData.propertyName = linkedProperty?.name ?? "";
+      parsedData.propertyReferenceNumber = linkedProperty?.referenceNumber ?? "";
+      parsedData.projectManagerName = projectManager?.displayName ?? "";
+      parsedData.projectManagerEmail = projectManager?.email ?? "";
+    }
+
+    if (config.collection === "marketingCampaigns") {
+      const linkedProperty = properties.find((item) => item.id === parsedData.propertyId);
+      const campaignManager = members.find((item) => item.id === parsedData.campaignManagerId);
+      parsedData.propertyName = linkedProperty?.name ?? "";
+      parsedData.propertyReferenceNumber = linkedProperty?.referenceNumber ?? "";
+      parsedData.campaignManagerName = campaignManager?.displayName ?? "";
+      parsedData.campaignManagerEmail = campaignManager?.email ?? "";
     }
 
     const context = { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid };

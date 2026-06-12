@@ -110,6 +110,20 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /developmentProjects/{projectId} {
+        allow read: if hasPermission(orgId, "development.read");
+        allow create: if hasPermission(orgId, "development.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "development.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
+      match /marketingCampaigns/{campaignId} {
+        allow read: if hasPermission(orgId, "marketing.read");
+        allow create: if hasPermission(orgId, "marketing.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "marketing.update") && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
       match /tasks/{taskId} {
         allow read: if hasPermission(orgId, "tasks.read") &&
           (resource.data.assignedTo == request.auth.uid || hasAnyPermission(orgId, ["dashboard.viewExecutive", "users.manage"]));

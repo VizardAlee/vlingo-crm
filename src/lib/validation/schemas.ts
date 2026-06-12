@@ -221,6 +221,66 @@ export const rentalTenancySchema = z.object({
   notes: z.string().optional(),
 });
 
+export const developmentProjectSchema = z.object({
+  name: z.string().min(2, "Project name is required."),
+  projectType: z.string().min(2, "Project type is required."),
+  propertyId: z.string().optional(),
+  propertyName: z.string().optional(),
+  propertyReferenceNumber: z.string().optional(),
+  location: z.string().optional(),
+  state: z.string().optional(),
+  city: z.string().optional(),
+  projectManagerId: z.string().optional(),
+  projectManagerName: z.string().optional(),
+  projectManagerEmail: z.string().optional(),
+  contractorName: z.string().optional(),
+  contractorPhone: z.string().optional(),
+  contractorEmail: optionalEmail,
+  currentPhase: z.string().optional(),
+  permitStatus: z.enum(["notStarted", "inReview", "approved", "rejected", "notRequired"]).optional(),
+  startDate: optionalDateString,
+  expectedCompletionDate: optionalDateString,
+  actualCompletionDate: optionalDateString,
+  budget: optionalNumber,
+  amountSpent: optionalNumber,
+  progressPercent: z.preprocess(
+    (value) => value === "" || value === null || value === undefined ? undefined : value,
+    z.coerce.number().min(0).max(100).optional(),
+  ),
+  riskLevel: z.enum(["low", "medium", "high", "critical"]).optional(),
+  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+  status: z.enum(["concept", "planning", "approval", "procurement", "construction", "inspection", "handover", "completed", "onHold", "cancelled"]),
+  notes: z.string().optional(),
+});
+
+export const marketingCampaignSchema = z.object({
+  name: z.string().min(2, "Campaign name is required."),
+  campaignType: z.string().min(2, "Campaign type is required."),
+  channel: z.enum(["Facebook", "Instagram", "Google Ads", "WhatsApp", "Email", "SMS", "Property portal", "Referral", "Event", "Outdoor", "Other"]),
+  objective: z.string().optional(),
+  propertyId: z.string().optional(),
+  propertyName: z.string().optional(),
+  propertyReferenceNumber: z.string().optional(),
+  campaignManagerId: z.string().optional(),
+  campaignManagerName: z.string().optional(),
+  campaignManagerEmail: z.string().optional(),
+  targetAudience: z.string().optional(),
+  targetLocation: z.string().optional(),
+  sourceTag: z.string().optional(),
+  landingPageUrl: optionalUrl,
+  startDate: optionalDateString,
+  endDate: optionalDateString,
+  budget: optionalNumber,
+  amountSpent: optionalNumber,
+  expectedLeads: optionalNumber,
+  actualLeads: optionalNumber,
+  qualifiedLeads: optionalNumber,
+  convertedLeads: optionalNumber,
+  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+  status: z.enum(["draft", "planned", "active", "paused", "completed", "cancelled"]),
+  notes: z.string().optional(),
+});
+
 export const taskSchema = z.object({
   title: z.string().min(2, "Task title is required."),
   description: z.string().optional(),
@@ -230,7 +290,7 @@ export const taskSchema = z.object({
   assignedTo: z.string().optional(),
   assignedToEmail: z.string().optional(),
   assignedToName: z.string().optional(),
-  relatedEntityType: z.enum(["lead", "client", "property", "unit", "tenancy"]).optional(),
+  relatedEntityType: z.enum(["lead", "client", "property", "unit", "tenancy", "development", "marketing"]).optional(),
   relatedEntityId: z.string().optional(),
 });
 
@@ -239,6 +299,6 @@ export const activitySchema = z.object({
   subject: z.string().min(2, "Subject is required."),
   body: z.string().optional(),
   status: z.string().optional(),
-  relatedEntityType: z.enum(["lead", "client", "property", "unit", "task", "tenancy"]).optional(),
+  relatedEntityType: z.enum(["lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"]).optional(),
   relatedEntityId: z.string().optional(),
 });

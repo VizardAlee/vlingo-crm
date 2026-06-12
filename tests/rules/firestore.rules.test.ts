@@ -117,6 +117,88 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
+  it("allows project managers to create and update development projects", async () => {
+    await seedMember("project-1", "org-a", ["development.create", "development.read", "development.update"], "projectManager");
+    const db = testEnv.authenticatedContext("project-1").firestore();
+    const projectRef = doc(db, "organizations/org-a/developmentProjects/project-1");
+
+    await assertSucceeds(setDoc(projectRef, {
+      branchId: "head-office",
+      createdBy: "project-1",
+      isDeleted: false,
+      name: "Beacon Court Phase 2",
+      organizationId: "org-a",
+      projectType: "Building construction",
+      status: "planning",
+      updatedBy: "project-1",
+    }));
+
+    await assertSucceeds(updateDoc(projectRef, {
+      organizationId: "org-a",
+      progressPercent: 35,
+      status: "construction",
+      updatedBy: "project-1",
+    }));
+  });
+
+  it("blocks development project writes without development permission", async () => {
+    await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertFails(setDoc(doc(db, "organizations/org-a/developmentProjects/project-1"), {
+      branchId: "head-office",
+      createdBy: "sales-1",
+      isDeleted: false,
+      name: "Unauthorized Project",
+      organizationId: "org-a",
+      projectType: "Building construction",
+      status: "planning",
+      updatedBy: "sales-1",
+    }));
+  });
+
+  it("allows marketing officers to create and update marketing campaigns", async () => {
+    await seedMember("marketing-1", "org-a", ["marketing.create", "marketing.read", "marketing.update"], "marketingOfficer");
+    const db = testEnv.authenticatedContext("marketing-1").firestore();
+    const campaignRef = doc(db, "organizations/org-a/marketingCampaigns/campaign-1");
+
+    await assertSucceeds(setDoc(campaignRef, {
+      branchId: "head-office",
+      campaignType: "Lead generation",
+      channel: "Instagram",
+      createdBy: "marketing-1",
+      isDeleted: false,
+      name: "Lekki Launch Campaign",
+      organizationId: "org-a",
+      status: "planned",
+      updatedBy: "marketing-1",
+    }));
+
+    await assertSucceeds(updateDoc(campaignRef, {
+      actualLeads: 12,
+      organizationId: "org-a",
+      status: "active",
+      updatedBy: "marketing-1",
+    }));
+  });
+
+  it("blocks marketing campaign writes without marketing permission", async () => {
+    await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertFails(setDoc(doc(db, "organizations/org-a/marketingCampaigns/campaign-1"), {
+      branchId: "head-office",
+      campaignType: "Lead generation",
+      channel: "Instagram",
+      createdBy: "sales-1",
+      isDeleted: false,
+      name: "Unauthorized Campaign",
+      organizationId: "org-a",
+      status: "planned",
+      updatedBy: "sales-1",
+    }));
+  });
+
   it("blocks ordinary audit log writes", async () => {
     await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
     const db = testEnv.authenticatedContext("sales-1").firestore();

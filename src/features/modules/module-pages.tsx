@@ -20,7 +20,7 @@ import { listDocuments, type DocumentRecord } from "@/services/documents";
 import { createOrgRecord, getOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { convertLeadToClient } from "@/services/workflows";
 
-type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task" | "tenancy";
+type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
 
 function relatedTypeForCollection(collection: ModuleConfig["collection"]): RelatedEntityType | null {
   if (collection === "leads") {
@@ -45,6 +45,14 @@ function relatedTypeForCollection(collection: ModuleConfig["collection"]): Relat
 
   if (collection === "rentalTenancies") {
     return "tenancy";
+  }
+
+  if (collection === "developmentProjects") {
+    return "development";
+  }
+
+  if (collection === "marketingCampaigns") {
+    return "marketing";
   }
 
   return null;
@@ -75,6 +83,14 @@ function collectionForRelatedEntity(type: unknown): ModuleConfig["collection"] |
     return "rentalTenancies";
   }
 
+  if (type === "development") {
+    return "developmentProjects";
+  }
+
+  if (type === "marketing") {
+    return "marketingCampaigns";
+  }
+
   return null;
 }
 
@@ -90,6 +106,14 @@ function routeForRelatedEntity(type: unknown, id: string) {
 
   if (collectionName === "rentalTenancies") {
     return `/rentals/${id}`;
+  }
+
+  if (collectionName === "developmentProjects") {
+    return `/development/${id}`;
+  }
+
+  if (collectionName === "marketingCampaigns") {
+    return `/marketing/${id}`;
   }
 
   return `/${collectionName}/${id}`;

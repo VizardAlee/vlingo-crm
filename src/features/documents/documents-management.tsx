@@ -30,6 +30,8 @@ const relatedConfigs: RelatedConfig[] = [
   { collection: "propertyUnits", label: "Unit", type: "unit" },
   { collection: "tasks", label: "Task", type: "task" },
   { collection: "rentalTenancies", label: "Tenancy", type: "tenancy" },
+  { collection: "developmentProjects", label: "Development project", type: "development" },
+  { collection: "marketingCampaigns", label: "Marketing campaign", type: "marketing" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", type: "owner" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", type: "developer" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", type: "management" },
@@ -59,6 +61,16 @@ function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
   if (type === "tenancy") {
     const detail = [record.propertyName, record.unitName, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.tenantName ?? "Tenant")} (${detail})` : String(record.tenantName ?? record.referenceNumber ?? record.id);
+  }
+
+  if (type === "development") {
+    const detail = [record.propertyName, record.city, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.name ?? "Development project")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
+  }
+
+  if (type === "marketing") {
+    const detail = [record.channel, record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.name ?? "Marketing campaign")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
   }
 
   const detail = [record.phoneNumber, record.email, record.referenceNumber].filter(Boolean).join(" · ");
@@ -92,6 +104,14 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
 
   if (type === "tenancy") {
     return `/rentals/${id}`;
+  }
+
+  if (type === "development") {
+    return `/development/${id}`;
+  }
+
+  if (type === "marketing") {
+    return `/marketing/${id}`;
   }
 
   return null;
