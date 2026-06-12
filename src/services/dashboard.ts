@@ -1,8 +1,21 @@
 "use client";
 
-import { collection, getCountFromServer, query, where } from "firebase/firestore";
+import { collection, getCountFromServer, getDocs, limit, orderBy, query, where, type QueryConstraint } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { orgCollectionPath } from "@/services/firestore-paths";
+
+export interface DashboardChartPoint {
+  color?: string;
+  name: string;
+  value: number;
+}
+
+export interface DashboardActivity {
+  id: string;
+  at: string;
+  subject: string;
+  type: string;
+}
 
 export interface DashboardMetrics {
   totalLeads: number;
@@ -15,9 +28,24 @@ export interface DashboardMetrics {
   pipelineValue: number;
   upcomingInspections: number;
   overdueFollowUps: number;
+  leadPipeline: DashboardChartPoint[];
+  leadSources: DashboardChartPoint[];
+  recentActivities: DashboardActivity[];
 }
 
-async function count(path: string, filters: ReturnType<typeof where>[] = []) {
+const pipelineStages = [
+  { key: "new", name: "New" },
+  { key: "qualified", name: "Qualified" },
+  { key: "inspectionScheduled", name: "Inspection" },
+  { key: "negotiation", name: "Negotiation" },
+  { key: "converted", name: "Converted" },
+];
+
+const sourceColors = ["#b11226", "#202124", "#047857", "#2563eb", "#7c3aed", "#c2410c"];
+const activeDealStatuses = ["qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending"];
+const openPipelineStatuses = [...activeDealStatuses, "new", "contacted"];
+
+async function count(path: string, filters: QueryConstraint[] = []) {
   if (!db) {
     return 0;
   }
@@ -30,17 +58,124 @@ async function count(path: string, filters: ReturnType<typeof where>[] = []) {
   }
 }
 
-export async function getDashboardMetrics(organizationId: string): Promise<DashboardMetrics> {
-  const [totalLeads, qualifiedLeads, activeClients, activeProperties, availableUnits, reservedUnits, overdueFollowUps] =
+async function listRecords(path: string, filters: QueryConstraint[] = [], max = 100) {
+  if (!db) {
+    return [];
+  }
+
+  try {
+    const snapshot = await getDocs(query(collection(db, path), where("isDeleted", "==", false), ...filters, limit(max)));
+    return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as Record<string, unknown> & { id: string });
+  } catch {
+    return [];
+  }
+}
+
+async function listRecentActivities(organizationId: string) {
+  if (!db) {
+    return [];
+  }
+
+  try {
+    const snapshot = await getDocs(query(
+      collection(db, orgCollectionPath(organizationId, "activities")),
+      where("isDeleted", "==", false),
+      orderBy("updatedAt", "desc"),
+      limit(5),
+    ));
+    return snapshot.docs.map((item) => {
+      const data = item.data();
+      const updatedAt = data.updatedAt;
+      return {
+        id: item.id,
+        at: typeof updatedAt === "object" && updatedAt && "toDate" in updatedAt && typeof updatedAt.toDate === "function"
+          ? (updatedAt.toDate() as Date).toISOString()
+          : String(updatedAt ?? ""),
+        subject: String(data.subject ?? "Activity"),
+        type: String(data.type ?? "activity"),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function countRows(rows: Record<string, unknown>[], key: string) {
+  return rows.reduce<Record<string, number>>((acc, row) => {
+    const value = String(row[key] ?? "Not set").trim() || "Not set";
+    acc[value] = (acc[value] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
+function topSources(rows: Record<string, unknown>[]) {
+  return Object.entries(countRows(rows, "source"))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name, value], index) => ({ color: sourceColors[index % sourceColors.length], name, value }));
+}
+
+function pipelineValue(rows: Record<string, unknown>[]) {
+  return rows
+    .filter((row) => openPipelineStatuses.includes(String(row.status ?? "")))
+    .reduce((total, row) => total + Number(row.budgetMaximum ?? row.budgetMinimum ?? 0), 0);
+}
+
+function dateFromValue(value: unknown) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    const date = value.toDate() as Date;
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+}
+
+function upcomingInspectionCount(rows: Record<string, unknown>[]) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const thirtyDaysFromNow = new Date(today);
+  thirtyDaysFromNow.setDate(today.getDate() + 30);
+
+  return rows.filter((row) => {
+    if (row.status === "inspectionScheduled") {
+      return true;
+    }
+
+    const date = dateFromValue(row.preferredInspectionDate);
+    return date ? date >= today && date <= thirtyDaysFromNow : false;
+  }).length;
+}
+
+export async function getDashboardMetrics(organizationId: string, options: { assignedTo?: string } = {}): Promise<DashboardMetrics> {
+  const leadFilters = options.assignedTo ? [where("assignedTo", "==", options.assignedTo)] : [];
+  const leadsPath = orgCollectionPath(organizationId, "leads");
+  const tasksPath = orgCollectionPath(organizationId, "tasks");
+  const [totalLeads, qualifiedLeads, activeClients, activeProperties, availableUnits, reservedUnits, overdueFollowUps, leads, recentActivities] =
     await Promise.all([
-      count(orgCollectionPath(organizationId, "leads")),
-      count(orgCollectionPath(organizationId, "leads"), [where("status", "==", "qualified")]),
+      count(leadsPath, leadFilters),
+      count(leadsPath, [...leadFilters, where("status", "==", "qualified")]),
       count(orgCollectionPath(organizationId, "clients"), [where("status", "==", "active")]),
       count(orgCollectionPath(organizationId, "properties"), [where("propertyStatus", "in", ["available", "reserved", "underNegotiation"])]),
       count(orgCollectionPath(organizationId, "propertyUnits"), [where("status", "==", "available")]),
       count(orgCollectionPath(organizationId, "propertyUnits"), [where("status", "==", "reserved")]),
-      count(orgCollectionPath(organizationId, "tasks"), [where("status", "==", "overdue")]),
+      count(tasksPath, [where("status", "==", "overdue")]),
+      listRecords(leadsPath, leadFilters, 250),
+      listRecentActivities(organizationId),
     ]);
+  const statusCounts = countRows(leads, "status");
 
   return {
     totalLeads,
@@ -49,9 +184,12 @@ export async function getDashboardMetrics(organizationId: string): Promise<Dashb
     activeProperties,
     availableUnits,
     reservedUnits,
-    activeDeals: 0,
-    pipelineValue: 0,
-    upcomingInspections: 0,
+    activeDeals: leads.filter((lead) => activeDealStatuses.includes(String(lead.status ?? ""))).length,
+    pipelineValue: pipelineValue(leads),
+    upcomingInspections: upcomingInspectionCount(leads),
     overdueFollowUps,
+    leadPipeline: pipelineStages.map((stage) => ({ name: stage.name, value: statusCounts[stage.key] ?? 0 })),
+    leadSources: topSources(leads),
+    recentActivities,
   };
 }

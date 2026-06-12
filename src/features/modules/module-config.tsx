@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatPhone, statusTone, titleCase } from "@/lib/utils";
+import { WhatsAppPhoneLink } from "@/components/ui/whatsapp-link";
+import { formatCurrency, statusTone, titleCase } from "@/lib/utils";
 import type { Activity, Client, DevelopmentProject, Lead, MarketingCampaign, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
 
 export type ModuleKey = "leads" | "clients" | "properties" | "propertyUnits" | "rentalTenancies" | "developmentProjects" | "marketingCampaigns" | "tasks" | "activities";
@@ -393,7 +394,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
     return [
       { header: "Reference", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/leads/${row.original.id}`}>{String(row.original.referenceNumber ?? "Draft")}</Link> },
       { header: "Lead", accessorKey: "fullName" },
-      { header: "Phone", cell: ({ row }) => formatPhone(String(row.original.phoneNumber ?? "")) },
+      { header: "Phone", cell: ({ row }) => <WhatsAppPhoneLink displayNumber={String(row.original.phoneNumber ?? "")} phoneNumber={String(row.original.whatsappNumber ?? row.original.phoneNumber ?? "")} /> },
       { header: "Source", cell: ({ row }) => String(row.original.source ?? "") },
       { header: "Interest", cell: ({ row }) => titleCase(String(row.original.transactionInterest ?? "")) },
       statusColumn,
@@ -405,7 +406,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Reference", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/clients/${row.original.id}`}>{String(row.original.referenceNumber ?? "Draft")}</Link> },
       { header: "Client", accessorKey: "fullName" },
       { header: "Type", cell: ({ row }) => titleCase(String(row.original.clientType ?? "")) },
-      { header: "Phone", cell: ({ row }) => formatPhone(String(row.original.phoneNumber ?? "")) },
+      { header: "Phone", cell: ({ row }) => <WhatsAppPhoneLink displayNumber={String(row.original.phoneNumber ?? "")} phoneNumber={String(row.original.phoneNumber ?? "")} /> },
       statusColumn,
     ];
   }

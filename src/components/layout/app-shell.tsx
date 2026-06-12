@@ -251,9 +251,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button aria-label="Search" className="md:hidden" onClick={() => setMobileSearchOpen((value) => !value)} size="icon" variant="ghost">
               <Search className="h-5 w-5" />
             </Button>
-            <Button aria-label="Notifications" size="icon" variant="outline">
+            <ButtonLink aria-label="Notifications" href="/notifications" size="icon" variant="outline">
               <Bell className="h-4 w-4" />
-            </Button>
+            </ButtonLink>
             <Button aria-label="Sign out" className="hidden md:inline-flex" onClick={signOutUser} size="icon" variant="ghost">
               <LogOut className="h-4 w-4" />
             </Button>

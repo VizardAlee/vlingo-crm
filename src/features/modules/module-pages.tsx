@@ -9,6 +9,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { WhatsAppPhoneLink } from "@/components/ui/whatsapp-link";
 import { PermissionDenied, LoadingState, ErrorState } from "@/components/ui/state";
 import { CrmTable } from "@/components/tables/crm-table";
 import { ModuleForm } from "@/features/modules/module-form";
@@ -18,7 +19,9 @@ import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, type DocumentRecord } from "@/services/documents";
 import { createOrgRecord, getOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
+import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
+import type { Member } from "@/types/crm";
 
 type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
 
@@ -139,6 +142,14 @@ async function safeListDocuments(organizationId: string) {
   }
 }
 
+async function safeListMembers(organizationId: string) {
+  try {
+    return await listMembers(organizationId);
+  } catch {
+    return [];
+  }
+}
+
 async function safeGetRelatedRecord(organizationId: string, record: Record<string, unknown> | null) {
   if (!record?.relatedEntityId) {
     return null;
@@ -232,6 +243,58 @@ function formatRecordValue(value: unknown) {
   }
 
   return String(value);
+}
+
+function isPhoneField(key: string) {
+  const normalized = key.toLowerCase();
+  return normalized.includes("phone") || normalized.includes("whatsapp");
+}
+
+function userDisplay(value: unknown, members: Member[]) {
+  if (!value) {
+    return "Not set";
+  }
+
+  const user = members.find((item) => item.id === value);
+  if (!user) {
+    return "Unknown user";
+  }
+
+  return user.email ? `${user.displayName} (${user.email})` : user.displayName;
+}
+
+function recordValueDisplay(record: Record<string, unknown>, key: string, value: unknown, collection: ModuleConfig["collection"], members: Member[]) {
+  if (collection === "activities" && (key === "createdBy" || key === "updatedBy")) {
+    return <span className="max-w-64 truncate font-medium">{userDisplay(value, members)}</span>;
+  }
+
+  if ((collection === "leads" || collection === "clients") && isPhoneField(key)) {
+    const displayNumber = value ? String(value) : "";
+    const phoneNumber = key === "phoneNumber" && record.whatsappNumber ? String(record.whatsappNumber) : displayNumber;
+    return <WhatsAppPhoneLink className="max-w-48 truncate" displayNumber={displayNumber} phoneNumber={phoneNumber} />;
+  }
+
+  return <span className="max-w-48 truncate font-medium">{formatRecordValue(value)}</span>;
+}
+
+function recordSummaryEntries(record: Record<string, unknown>, collection: ModuleConfig["collection"]) {
+  if (collection !== "activities") {
+    return Object.entries(record).slice(0, 8).map(([key, value]) => ({ key, label: key, value }));
+  }
+
+  return [
+    "subject",
+    "type",
+    "status",
+    "relatedEntityType",
+    "relatedEntityId",
+    "createdBy",
+    "updatedBy",
+    "createdAt",
+    "updatedAt",
+  ]
+    .filter((key) => key in record)
+    .map((key) => ({ key, label: titleCase(key), value: record[key] }));
 }
 
 function isOpenTask(task: Record<string, unknown>) {
@@ -1218,6 +1281,13 @@ export function ModuleListPage({
       : "Search, filter, sort, export, and manage organization-scoped records."
   );
   const pageTitle = title ?? (config.collection === "propertyUnits" ? "Unit Inventory" : config.title);
+  const compactContactView = config.collection === "leads" || config.collection === "clients"
+    ? {
+        getHref: (row: Record<string, unknown>) => `${config.route}/${String(row.id)}`,
+        getName: (row: Record<string, unknown>) => String(row.fullName ?? row.referenceNumber ?? "Unnamed"),
+        getPhone: (row: Record<string, unknown>) => String(row.phoneNumber ?? row.whatsappNumber ?? ""),
+      }
+    : undefined;
 
   return (
     <section className="grid min-w-0 gap-5">
@@ -1235,7 +1305,7 @@ export function ModuleListPage({
       </div>
       {config.collection === "propertyUnits" && !error && !loading && records.length ? <UnitInventoryOverview records={records} /> : null}
       {error ? <ErrorState message={error} /> : loading ? <LoadingState label={`Loading ${config.title.toLowerCase()}`} /> : (
-        <CrmTable columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${config.title.slice(0, -1)}`} emptyTitle={config.emptyTitle} />
+        <CrmTable compactContactView={compactContactView} columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${config.title.slice(0, -1)}`} emptyTitle={config.emptyTitle} />
       )}
     </section>
   );
@@ -1269,6 +1339,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [activities, setActivities] = useState<Record<string, unknown>[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [activityMembers, setActivityMembers] = useState<Member[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -1277,12 +1348,13 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
   const loadDetail = useCallback(async () => {
     const relatedType = relatedTypeForCollection(config.collection);
-    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits] = await Promise.all([
+    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits, nextMembers] = await Promise.all([
       getOrgRecord<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, id),
       safeListOrgRecords(activeOrganizationId, "tasks"),
       safeListOrgRecords(activeOrganizationId, "activities"),
       safeListDocuments(activeOrganizationId),
       safeListOrgRecords(activeOrganizationId, "propertyUnits"),
+      config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ]);
     const nextRelatedRecord = config.collection === "activities"
       ? await safeGetRelatedRecord(activeOrganizationId, nextRecord)
@@ -1291,6 +1363,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
         : null;
     setRecord(nextRecord);
     setRelatedRecord(nextRelatedRecord);
+    setActivityMembers(nextMembers);
     setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : []);
     if (relatedType) {
       setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
@@ -1309,8 +1382,9 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       safeListOrgRecords(activeOrganizationId, "activities"),
       safeListDocuments(activeOrganizationId),
       safeListOrgRecords(activeOrganizationId, "propertyUnits"),
+      config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ])
-      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits]) => {
+      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits, nextMembers]) => {
         if (!mounted) {
           return;
         }
@@ -1326,6 +1400,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
         setRecord(nextRecord);
         setRelatedRecord(nextRelatedRecord);
+        setActivityMembers(nextMembers);
         setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : []);
         if (relatedType) {
           setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
@@ -1443,10 +1518,10 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
                 )}
               </div>
             ) : null}
-            {Object.entries(record).slice(0, 8).map(([key, value]) => (
+            {recordSummaryEntries(record, config.collection).map(({ key, label, value }) => (
               <div className="flex justify-between gap-4" key={key}>
-                <span className="text-muted-foreground">{key}</span>
-                <span className="max-w-48 truncate font-medium">{formatRecordValue(value)}</span>
+                <span className="text-muted-foreground">{label}</span>
+                {recordValueDisplay(record, key, value, config.collection, activityMembers)}
               </div>
             ))}
           </CardContent>

@@ -23,6 +23,11 @@ interface PreviewLead {
   rowNumber: number;
 }
 
+interface ImportSheet {
+  headers: string[];
+  rows: Record<string, unknown>[];
+}
+
 const leadStatuses = ["new", "contacted", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
 const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Property portal", "Event", "Other"];
 const platforms = ["Meta", "Google", "TikTok", "LinkedIn", "PropertyPro", "PrivateProperty", "WhatsApp", "Website", "Manual", "Other"];
@@ -67,6 +72,7 @@ const defaultLead: LeadFormState = {
 };
 
 const headerAliases: Record<string, string[]> = {
+  assignedTo: ["assignedto", "assignee", "agent", "assignedagent", "owner", "salesperson"],
   budgetMaximum: ["budgetmaximum", "maxbudget", "budgetmax", "maximumbudget", "budgetto"],
   budgetMinimum: ["budgetminimum", "minbudget", "budgetmin", "minimumbudget", "budgetfrom"],
   campaignName: ["campaign", "campaignname", "adcampaign"],
@@ -80,31 +86,97 @@ const headerAliases: Record<string, string[]> = {
   paymentPreference: ["paymentpreference", "paymentplan", "paymentmethod"],
   phoneNumber: ["phone", "phonenumber", "mobile", "mobilenumber", "telephone"],
   preferredBedrooms: ["bedrooms", "beds", "preferredbedrooms"],
+  preferredBudgetCurrency: ["currency", "budgetcurrency", "preferredbudgetcurrency"],
   preferredCity: ["city", "preferredcity"],
+  preferredInspectionDate: ["inspectiondate", "preferredinspectiondate", "viewingdate", "tourdate"],
   preferredLocation: ["location", "preferredlocation", "area", "neighborhood"],
   preferredPropertyCategory: ["category", "propertycategory"],
   preferredState: ["state", "preferredstate"],
   propertyType: ["propertytype", "type"],
   referralName: ["referralname", "referrer", "referredby"],
   referralPhone: ["referralphone", "referrerphone"],
+  score: ["score", "leadscore"],
   source: ["source", "leadsource", "origin"],
   sourcePlatform: ["platform", "sourceplatform", "channel"],
   sourceReference: ["reference", "sourcereference", "externalid", "leadid"],
+  status: ["status", "leadstatus", "stage", "pipeline"],
   tags: ["tags", "tag"],
   transactionInterest: ["interest", "transactioninterest", "transaction", "intent"],
   whatsappNumber: ["whatsapp", "whatsappnumber"],
 };
 
+const importFields = [
+  { key: "fullName", label: "Full name", required: true },
+  { key: "phoneNumber", label: "Phone number", required: true },
+  { key: "whatsappNumber", label: "WhatsApp number" },
+  { key: "email", label: "Email" },
+  { key: "contactPreference", label: "Contact preference" },
+  { key: "source", label: "Source" },
+  { key: "sourcePlatform", label: "Platform" },
+  { key: "campaignName", label: "Campaign name" },
+  { key: "sourceReference", label: "External reference" },
+  { key: "transactionInterest", label: "Transaction interest" },
+  { key: "propertyType", label: "Property type" },
+  { key: "preferredPropertyCategory", label: "Property category" },
+  { key: "preferredBedrooms", label: "Bedrooms" },
+  { key: "preferredLocation", label: "Preferred location" },
+  { key: "preferredState", label: "State" },
+  { key: "preferredCity", label: "City" },
+  { key: "preferredBudgetCurrency", label: "Currency" },
+  { key: "budgetMinimum", label: "Budget minimum" },
+  { key: "budgetMaximum", label: "Budget maximum" },
+  { key: "paymentPreference", label: "Payment preference" },
+  { key: "intendedUse", label: "Intended use" },
+  { key: "status", label: "Status" },
+  { key: "score", label: "Score" },
+  { key: "leadTemperature", label: "Lead temperature" },
+  { key: "nextFollowUpAt", label: "Next follow-up" },
+  { key: "preferredInspectionDate", label: "Preferred inspection" },
+  { key: "referralName", label: "Referral name" },
+  { key: "referralPhone", label: "Referral phone" },
+  { key: "assignedTo", label: "Assignee" },
+  { key: "notes", label: "Notes" },
+  { key: "tags", label: "Tags" },
+];
+
 function normalizeHeader(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function valueFromRow(row: Record<string, unknown>, field: string) {
+function valueFromRow(row: Record<string, unknown>, field: string, mapping?: Record<string, string>) {
+  const mappedHeader = mapping?.[field];
+  if (mapping && !mappedHeader) {
+    return "";
+  }
+
+  if (mappedHeader) {
+    const value = row[mappedHeader];
+    return value === undefined || value === null ? "" : String(value).trim();
+  }
+
   const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
   const aliases = headerAliases[field] ?? [field];
   const match = aliases.find((alias) => normalized[normalizeHeader(alias)] !== undefined);
   const value = match ? normalized[normalizeHeader(match)] : undefined;
   return value === undefined || value === null ? "" : String(value).trim();
+}
+
+function detectColumnMapping(headers: string[]) {
+  return Object.fromEntries(importFields.map(({ key }) => {
+    const aliases = headerAliases[key] ?? [key];
+    const match = headers.find((header) => aliases.some((alias) => normalizeHeader(header) === normalizeHeader(alias)));
+    return [key, match ?? ""];
+  }));
+}
+
+function cleanHeaderRow(headers: unknown[]) {
+  const seen = new Map<string, number>();
+  return headers.map((header, index) => {
+    const base = String(header ?? "").trim() || `Column ${index + 1}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count ? `${base} ${count + 1}` : base;
+  });
 }
 
 function normalizeInterest(value: string) {
@@ -141,15 +213,17 @@ function formToLeadPayload(values: LeadFormState) {
   };
 }
 
-function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormState) {
+function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormState, mapping?: Record<string, string>) {
   return rows.map<PreviewLead>((row, index) => {
     const values = { ...defaults };
-    Object.keys(headerAliases).forEach((field) => {
-      const value = valueFromRow(row, field);
+    importFields.forEach(({ key }) => {
+      const value = valueFromRow(row, key, mapping);
       if (value) {
-        values[field] = value;
+        values[key] = value;
       }
     });
+    values.phoneNumber = values.phoneNumber || values.whatsappNumber;
+    values.whatsappNumber = values.whatsappNumber || values.phoneNumber;
     values.transactionInterest = normalizeInterest(values.transactionInterest);
     values.source = values.source || defaults.source || "Imported";
     values.sourcePlatform = values.sourcePlatform || defaults.sourcePlatform || "Other";
@@ -165,7 +239,7 @@ function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormSta
   });
 }
 
-function parseCsv(text: string) {
+function parseCsv(text: string): ImportSheet {
   const rows: string[][] = [];
   let current = "";
   let row: string[] = [];
@@ -204,17 +278,25 @@ function parseCsv(text: string) {
   }
 
   const [headers = [], ...body] = rows;
-  return body.map((cells) => Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""])));
+  const cleanHeaders = cleanHeaderRow(headers);
+  return {
+    headers: cleanHeaders,
+    rows: body.map((cells) => Object.fromEntries(cleanHeaders.map((header, index) => [header, cells[index] ?? ""]))),
+  };
 }
 
-async function spreadsheetRows(file: File) {
+async function spreadsheetRows(file: File): Promise<ImportSheet> {
   if (file.name.toLowerCase().endsWith(".csv")) {
     return parseCsv(await file.text());
   }
 
   const rows: unknown[][] = await readSheet(file);
   const [headers = [], ...body] = rows;
-  return body.map((cells: unknown[]) => Object.fromEntries(headers.map((header: unknown, index: number) => [String(header ?? ""), cells[index] ?? ""])));
+  const cleanHeaders = cleanHeaderRow(headers);
+  return {
+    headers: cleanHeaders,
+    rows: body.map((cells: unknown[]) => Object.fromEntries(cleanHeaders.map((header: string, index: number) => [header, cells[index] ?? ""]))),
+  };
 }
 
 function downloadTemplate() {
@@ -274,6 +356,9 @@ export function LeadCreatePage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [branchId, setBranchId] = useState("");
   const [values, setValues] = useState<LeadFormState>(defaultLead);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importRows, setImportRows] = useState<Record<string, unknown>[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<PreviewLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -348,21 +433,45 @@ export function LeadCreatePage() {
     setError(null);
     setSuccess(null);
     setPreview([]);
+    setImportHeaders([]);
+    setImportRows([]);
+    setColumnMapping({});
     if (!file) {
       return;
     }
 
     try {
-      const rows = await spreadsheetRows(file);
+      const { headers, rows } = await spreadsheetRows(file);
       if (!rows.length) {
         setError("The selected file has no rows.");
         return;
       }
 
-      setPreview(parsePreviewRows(rows, values));
+      if (!headers.length) {
+        setError("The selected file has no header row.");
+        return;
+      }
+
+      const nextMapping = detectColumnMapping(headers);
+      setImportHeaders(headers);
+      setImportRows(rows);
+      setColumnMapping(nextMapping);
+      setPreview(parsePreviewRows(rows, values, nextMapping));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to read spreadsheet.");
     }
+  }
+
+  function updateColumnMapping(field: string, header: string) {
+    const next = { ...columnMapping, [field]: header };
+    setColumnMapping(next);
+    if (importRows.length) {
+      setPreview(parsePreviewRows(importRows, values, next));
+    }
+  }
+
+  function refreshImportPreview() {
+    setPreview(parsePreviewRows(importRows, values, columnMapping));
   }
 
   async function importValidRows() {
@@ -375,6 +484,9 @@ export function LeadCreatePage() {
       }
       setSuccess(`${validPreviewRows.length} lead${validPreviewRows.length === 1 ? "" : "s"} imported.`);
       setPreview([]);
+      setImportHeaders([]);
+      setImportRows([]);
+      setColumnMapping({});
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to import leads.");
     } finally {
@@ -545,8 +657,31 @@ export function LeadCreatePage() {
             </div>
 
             <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
-              Accepted headers include name/fullName, phone/phoneNumber, whatsapp, email, source, platform, campaign, interest, propertyType, location, state, city, budgetMinimum, budgetMaximum, temperature, nextFollowUp, notes, and tags.
+              Upload any CSV or Excel sheet with a header row. CRM fields can be matched to the file headers below; optional fields can be left unmapped.
             </div>
+
+            {importHeaders.length ? (
+              <div className="grid gap-4 rounded-md border p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold">Match columns</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">{importHeaders.length} file columns detected. Required fields must map to a useful column before import.</p>
+                  </div>
+                  <Button onClick={refreshImportPreview} type="button" variant="outline">Refresh preview</Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {importFields.map((field) => (
+                    <Field key={field.key} label={field.label}>
+                      <Select value={columnMapping[field.key] ?? ""} onChange={(event) => updateColumnMapping(field.key, event.target.value)}>
+                        <option value="">{field.required ? "Select a column" : "Do not import"}</option>
+                        {importHeaders.map((header) => <option key={`${field.key}-${header}`} value={header}>{header}</option>)}
+                      </Select>
+                      {field.required ? <span className="text-xs font-medium text-primary">Required</span> : null}
+                    </Field>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {preview.length ? (
               <div className="grid gap-4">

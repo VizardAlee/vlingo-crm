@@ -30,6 +30,25 @@ export function formatPhone(value: string | null | undefined) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+export function whatsappHref(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  let digits = value.replace(/\D/g, "");
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  } else if (digits.startsWith("0")) {
+    digits = `234${digits.slice(1)}`;
+  }
+
+  return `https://wa.me/${digits}`;
+}
+
 export function titleCase(value: string) {
   return value
     .replace(/([A-Z])/g, " $1")

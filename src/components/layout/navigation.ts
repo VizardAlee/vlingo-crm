@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Bell,
   Building2,
   ClipboardCheck,
   FileText,
@@ -32,7 +33,10 @@ export interface NavSection {
 export const navigation: NavSection[] = [
   {
     label: "Workspace",
-    items: [{ href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", permissions: ["leads.readAssigned", "leads.readAll", "dashboard.viewExecutive"] }],
+    items: [
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", permissions: ["leads.readAssigned", "leads.readAll", "dashboard.viewExecutive"] },
+      { href: "/notifications", icon: Bell, label: "Notifications", permissions: ["tasks.read", "leads.readAssigned", "leads.readAll", "rentals.read", "activities.read"] },
+    ],
   },
   {
     label: "CRM",
