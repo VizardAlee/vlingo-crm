@@ -2,6 +2,7 @@
 
 import { Save } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { where } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { type ZodType } from "zod";
@@ -9,16 +10,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
-import { activitySchema, clientSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
-import { cn } from "@/lib/utils";
+import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
+import { hasPermission } from "@/lib/permissions";
+import { cn, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import type { Client, Member, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
+import type { Client, Lead, Member, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
   clients: clientSchema,
+  deals: dealSchema,
   developmentProjects: developmentProjectSchema,
   leads: leadSchema,
   marketingCampaigns: marketingCampaignSchema,
@@ -130,11 +134,82 @@ function monthsForPaymentCycle(value: unknown) {
   return 0;
 }
 
+function fieldTourTarget(collection: string, fieldName: string) {
+  return `module-${collection}-${fieldName}`;
+}
+
+function formTourSteps(config: ModuleConfig): GuidedTourStep[] {
+  if (config.collection === "deals") {
+    return [
+      {
+        body: "Give the opportunity a clear name. This becomes the label sales, finance, and management will recognize in lists and receipts.",
+        target: fieldTourTarget(config.collection, "title"),
+        title: "Name the deal",
+      },
+      {
+        body: "Link the original lead when this deal started from an enquiry. The deal keeps that source history without duplicating the lead.",
+        target: fieldTourTarget(config.collection, "leadId"),
+        title: "Connect the lead",
+      },
+      {
+        body: "Select the client once the person or company has a client record. Finance will use this as payer context for receipts.",
+        target: fieldTourTarget(config.collection, "clientId"),
+        title: "Attach the client",
+      },
+      {
+        body: "Pick the property or unit being sold, rented, leased, or reserved. Unit selection can also fill the parent property automatically.",
+        target: fieldTourTarget(config.collection, "propertyId"),
+        title: "Link inventory",
+      },
+      {
+        body: "Record the commercial value here. Agreed amount takes priority for finance and pipeline reporting; offer amount is useful before terms are final.",
+        target: fieldTourTarget(config.collection, "agreedAmount"),
+        title: "Set the value",
+      },
+      {
+        body: "Track whether the deal has been invoiced, partly paid, fully paid, or overdue. This keeps sales and finance looking at the same status.",
+        target: fieldTourTarget(config.collection, "financeStatus"),
+        title: "Sync finance status",
+      },
+      {
+        body: "Save writes the linked IDs and readable names together, so detail pages, receipts, documents, and reports do not break if users navigate later.",
+        target: fieldTourTarget(config.collection, "save"),
+        title: "Save the workflow",
+      },
+    ];
+  }
+
+  const requiredSteps = config.fields
+    .filter((field) => field.required)
+    .slice(0, 3)
+    .map((field) => ({
+      body: field.helpText ?? `${field.label} is required before this ${config.title.slice(0, -1).toLowerCase()} can be saved.`,
+      target: fieldTourTarget(config.collection, field.name),
+      title: field.label,
+    }));
+  const statusField = config.fields.find((field) => field.name === "status" || field.name.endsWith("Status"));
+
+  return [
+    ...requiredSteps,
+    ...(statusField ? [{
+      body: "Use status to keep lists, reports, and follow-up workflows aligned.",
+      target: fieldTourTarget(config.collection, statusField.name),
+      title: statusField.label,
+    }] : []),
+    {
+      body: "Review the record, then save. You can return later to edit permitted fields.",
+      target: fieldTourTarget(config.collection, "save"),
+      title: "Save record",
+    },
+  ];
+}
+
 export function ModuleForm({ config, existing, id, initialValues }: { config: ModuleConfig; existing?: FormValues; id?: string; initialValues?: FormValues }) {
   const router = useRouter();
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<PropertyUnit[]>([]);
@@ -143,6 +218,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [stakeholderSaving, setStakeholderSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const schema = schemaByCollection[config.collection];
+  const tourSteps = formTourSteps(config);
   const {
     control,
     formState: { isSubmitting },
@@ -166,6 +242,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     directAgencyFee,
     commissionType,
     commissionValue,
+    agreedAmount,
+    offerAmount,
     serviceCharge,
     cautionFee,
     legalFee,
@@ -174,13 +252,15 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     paymentCycle,
   ] = useWatch({
     control,
-    name: ["askingPrice", "rentAmount", "agencyFeeType", "agencyFeeValue", "agencyFee", "commissionType", "commissionValue", "serviceCharge", "cautionFee", "legalFee", "leaseStartDate", "leaseEndDate", "paymentCycle"],
+    name: ["askingPrice", "rentAmount", "agencyFeeType", "agencyFeeValue", "agencyFee", "commissionType", "commissionValue", "agreedAmount", "offerAmount", "serviceCharge", "cautionFee", "legalFee", "leaseStartDate", "leaseEndDate", "paymentCycle"],
   });
   const basePropertyAmount = Number(askingPrice || rentAmount || 0);
   const calculatedAgencyFee = calculateFeeAmount(String(agencyFeeType ?? ""), Number(agencyFeeValue || 0), basePropertyAmount);
-  const commissionAmount = calculateFeeAmount(String(commissionType ?? ""), Number(commissionValue || 0), basePropertyAmount);
+  const baseCommissionAmount = config.collection === "deals" ? Number(agreedAmount || offerAmount || 0) : basePropertyAmount;
+  const commissionAmount = calculateFeeAmount(String(commissionType ?? ""), Number(commissionValue || 0), baseCommissionAmount);
   const totalInitialPayment = Number(rentAmount || 0) + Number(serviceCharge || 0) + Number(cautionFee || 0) + Number(directAgencyFee || 0) + Number(legalFee || 0);
   const selectedPropertyId = useWatch({ control, name: "propertyId" });
+  const selectedLeadId = useWatch({ control, name: "leadId" });
   const selectedUnitId = useWatch({ control, name: "unitId" });
 
   const ownerOptions = useMemo(() => stakeholders.filter((item) => item.type === "owner").map(toStakeholderOption), [stakeholders]);
@@ -208,6 +288,13 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }),
     [clients],
   );
+  const leadOptions = useMemo(
+    () => leads.map((item) => {
+      const detail = [item.phoneNumber, item.email, item.referenceNumber].filter(Boolean).join(" · ");
+      return { label: detail ? `${item.fullName} (${detail})` : item.fullName, value: item.id };
+    }),
+    [leads],
+  );
   const unitOptions = useMemo(
     () => propertyUnits
       .filter((item) => !selectedPropertyId || item.propertyId === selectedPropertyId)
@@ -219,7 +306,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   );
 
   useEffect(() => {
-    if (config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
+    if (config.collection !== "deals" && config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
       return;
     }
 
@@ -228,6 +315,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       if (config.collection === "propertyUnits") {
         return Promise.all([
           Promise.resolve<Client[]>([]),
+          Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           Promise.resolve<Member[]>([]),
           listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
@@ -238,6 +326,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       if (config.collection === "tasks") {
         return Promise.all([
           Promise.resolve<Client[]>([]),
+          Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
           Promise.resolve<Property[]>([]),
@@ -248,6 +337,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       if (config.collection === "developmentProjects") {
         return Promise.all([
           Promise.resolve<Client[]>([]),
+          Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
           listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
@@ -258,6 +348,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       if (config.collection === "marketingCampaigns") {
         return Promise.all([
           Promise.resolve<Client[]>([]),
+          Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
           listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
@@ -268,6 +359,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       if (config.collection === "rentalTenancies") {
         return Promise.all([
           listOrgRecords<Client>(activeOrganizationId, "clients").catch(() => []),
+          Promise.resolve<Lead[]>([]),
           listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders").catch(() => []),
           Promise.resolve<Member[]>([]),
           listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
@@ -275,8 +367,21 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         ]);
       }
 
+      if (config.collection === "deals") {
+        const leadConstraints = user && !hasPermission(member, "leads.readAll") ? [where("assignedTo", "==", user.uid)] : [];
+        return Promise.all([
+          listOrgRecords<Client>(activeOrganizationId, "clients").catch(() => []),
+          listOrgRecords<Lead>(activeOrganizationId, "leads", leadConstraints).catch(() => []),
+          Promise.resolve<PropertyStakeholder[]>([]),
+          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
+        ]);
+      }
+
       return Promise.all([
         Promise.resolve<Client[]>([]),
+        Promise.resolve<Lead[]>([]),
         listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders").catch(() => []),
         listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
         Promise.resolve<Property[]>([]),
@@ -285,12 +390,13 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     })();
 
     loadOptions
-      .then(([nextClients, nextStakeholders, nextMembers, nextProperties, nextPropertyUnits]) => {
+      .then(([nextClients, nextLeads, nextStakeholders, nextMembers, nextProperties, nextPropertyUnits]) => {
         if (!mounted) {
           return;
         }
 
         setClients(nextClients);
+        setLeads(nextLeads);
         setStakeholders(nextStakeholders);
         setMembers(nextMembers);
         setProperties(nextProperties);
@@ -300,10 +406,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, config.collection, member]);
+  }, [activeOrganizationId, config.collection, member, user]);
 
   useEffect(() => {
-    if (config.collection !== "rentalTenancies" || !selectedUnitId) {
+    if ((config.collection !== "rentalTenancies" && config.collection !== "deals") || !selectedUnitId) {
       return;
     }
 
@@ -317,7 +423,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       setValue("propertyId", selectedUnit.propertyId, { shouldDirty: true, shouldValidate: false });
     }
 
-    function setTenancyDefault(fieldName: string, nextValue: FormValue) {
+    function setLinkedDefault(fieldName: string, nextValue: FormValue) {
       if (isBlankFormValue(nextValue)) {
         return;
       }
@@ -327,14 +433,18 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       }
     }
 
-    setTenancyDefault("rentAmount", selectedUnit.rentAmount);
-    setTenancyDefault("serviceCharge", selectedUnit.serviceCharge);
-    setTenancyDefault("cautionFee", selectedUnit.cautionFee);
-    setTenancyDefault("legalFee", selectedUnit.legalFee);
+    if (config.collection === "rentalTenancies") {
+      setLinkedDefault("rentAmount", selectedUnit.rentAmount);
+      setLinkedDefault("serviceCharge", selectedUnit.serviceCharge);
+      setLinkedDefault("cautionFee", selectedUnit.cautionFee);
+      setLinkedDefault("legalFee", selectedUnit.legalFee);
+    } else {
+      setLinkedDefault("offerAmount", selectedUnit.askingPrice ?? selectedUnit.rentAmount);
+    }
   }, [config.collection, getValues, propertyUnits, selectedUnitId, setValue]);
 
   useEffect(() => {
-    if (config.collection !== "rentalTenancies" || !selectedPropertyId) {
+    if ((config.collection !== "rentalTenancies" && config.collection !== "deals") || !selectedPropertyId) {
       return;
     }
 
@@ -348,7 +458,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       setValue("unitId", "", { shouldDirty: true, shouldValidate: false });
     }
 
-    function setTenancyDefault(fieldName: string, nextValue: FormValue) {
+    function setLinkedDefault(fieldName: string, nextValue: FormValue) {
       if (isBlankFormValue(nextValue)) {
         return;
       }
@@ -358,15 +468,44 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       }
     }
 
-    setTenancyDefault("landlordOwnerId", selectedProperty.propertyOwnerId);
-    if (!selectedUnitId) {
-      setTenancyDefault("rentAmount", selectedProperty.rentAmount);
-      setTenancyDefault("serviceCharge", selectedProperty.serviceCharge);
-      setTenancyDefault("cautionFee", selectedProperty.cautionFee);
-      setTenancyDefault("agencyFee", selectedProperty.agencyFee);
-      setTenancyDefault("legalFee", selectedProperty.legalFee);
+    if (config.collection === "rentalTenancies") {
+      setLinkedDefault("landlordOwnerId", selectedProperty.propertyOwnerId);
+      if (!selectedUnitId) {
+        setLinkedDefault("rentAmount", selectedProperty.rentAmount);
+        setLinkedDefault("serviceCharge", selectedProperty.serviceCharge);
+        setLinkedDefault("cautionFee", selectedProperty.cautionFee);
+        setLinkedDefault("agencyFee", selectedProperty.agencyFee);
+        setLinkedDefault("legalFee", selectedProperty.legalFee);
+      }
+    } else if (!selectedUnitId) {
+      setLinkedDefault("offerAmount", selectedProperty.askingPrice ?? selectedProperty.rentAmount);
     }
   }, [config.collection, getValues, properties, propertyUnits, selectedPropertyId, selectedUnitId, setValue]);
+
+  useEffect(() => {
+    if (config.collection !== "deals" || !selectedLeadId) {
+      return;
+    }
+
+    const selectedLead = leads.find((lead) => lead.id === selectedLeadId);
+    if (!selectedLead) {
+      return;
+    }
+
+    function setDealDefault(fieldName: string, nextValue: FormValue) {
+      if (isBlankFormValue(nextValue) || !isBlankFormValue(getValues(fieldName))) {
+        return;
+      }
+
+      setValue(fieldName, nextValue, { shouldDirty: true, shouldValidate: false });
+    }
+
+    setDealDefault("title", `${selectedLead.fullName} ${titleCase(selectedLead.transactionInterest)} deal`);
+    setDealDefault("dealType", selectedLead.transactionInterest === "buy" ? "sale" : selectedLead.transactionInterest);
+    setDealDefault("dealOwnerId", selectedLead.assignedTo);
+    setDealDefault("offerAmount", selectedLead.budgetMaximum ?? selectedLead.budgetMinimum);
+    setDealDefault("closeProbability", selectedLead.score);
+  }, [config.collection, getValues, leads, selectedLeadId, setValue]);
 
   useEffect(() => {
     if (config.collection !== "rentalTenancies" || id) {
@@ -449,6 +588,24 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     const parsedData = parsed.data as Record<string, unknown>;
     if (config.collection === "properties") {
       parsedData.agencyFee = calculatedAgencyFee;
+      parsedData.commissionAmount = commissionAmount;
+    }
+
+    if (config.collection === "deals") {
+      const linkedLead = leads.find((item) => item.id === parsedData.leadId);
+      const linkedClient = clients.find((item) => item.id === parsedData.clientId);
+      const linkedProperty = properties.find((item) => item.id === parsedData.propertyId);
+      const linkedUnit = propertyUnits.find((item) => item.id === parsedData.unitId);
+      const dealOwner = members.find((item) => item.id === parsedData.dealOwnerId);
+      parsedData.leadName = linkedLead?.fullName ?? "";
+      parsedData.clientName = linkedClient?.fullName ?? "";
+      parsedData.clientPhone = linkedClient?.phoneNumber ?? linkedLead?.phoneNumber ?? "";
+      parsedData.clientEmail = linkedClient?.email ?? linkedLead?.email ?? "";
+      parsedData.propertyName = linkedProperty?.name ?? linkedUnit?.propertyName ?? "";
+      parsedData.propertyReferenceNumber = linkedProperty?.referenceNumber ?? linkedUnit?.propertyReferenceNumber ?? "";
+      parsedData.unitName = linkedUnit?.unitNumber ?? "";
+      parsedData.dealOwnerName = dealOwner?.displayName ?? "";
+      parsedData.dealOwnerEmail = dealOwner?.email ?? "";
       parsedData.commissionAmount = commissionAmount;
     }
 
@@ -537,6 +694,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return clientOptions;
     }
 
+    if (field.optionSource === "leads") {
+      return leadOptions;
+    }
+
     if (field.optionSource === "properties") {
       return propertyOptions;
     }
@@ -598,6 +759,11 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   return (
     <Card>
       <CardContent>
+        {tourSteps.length ? (
+          <div className="mb-4 flex justify-end">
+            <GuidedTour autoStart={!id && config.collection === "deals"} storageKey={`beacon-tour:${config.collection}:form`} steps={tourSteps} />
+          </div>
+        ) : null}
         <form className="grid gap-5" onSubmit={handleSubmit(onSubmit)}>
           {error ? <ErrorState message={error} /> : null}
           <div className="grid gap-6">
@@ -638,34 +804,36 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                 ) : null}
                 <div className="grid gap-4 lg:grid-cols-2">
                   {section.fields.map((field) => (
-                    <Field className={cn(field.colSpan === "full" && "lg:col-span-2")} key={field.name} label={field.label} error={validationErrors[field.name]}>
-                      <div className="grid gap-1.5">
-                        {field.type === "textarea" ? (
-                          <Textarea placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} />
-                        ) : field.type === "select" ? (
-                          <Select {...register(field.name)}>
-                            <option value="">Select {field.label.toLowerCase()}</option>
-                            {optionsForField(field).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                          </Select>
-                        ) : config.collection === "properties" && field.name === "agencyFee" ? (
-                          <Input readOnly type="number" value={calculatedAgencyFee} />
-                        ) : field.name === "commissionAmount" ? (
-                          <Input readOnly type="number" value={commissionAmount} />
-                        ) : field.name === "totalInitialPayment" ? (
-                          <Input readOnly type="number" value={totalInitialPayment} />
-                        ) : (
-                          <Input placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} type={field.type} />
-                        )}
-                        {field.helpText ? <span className="text-xs font-normal text-muted-foreground">{field.helpText}</span> : null}
-                      </div>
-                    </Field>
+                    <div className={cn(field.colSpan === "full" && "lg:col-span-2")} data-tour={fieldTourTarget(config.collection, field.name)} key={field.name}>
+                      <Field label={field.label} error={validationErrors[field.name]}>
+                        <div className="grid gap-1.5">
+                          {field.type === "textarea" ? (
+                            <Textarea placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} />
+                          ) : field.type === "select" ? (
+                            <Select {...register(field.name)}>
+                              <option value="">Select {field.label.toLowerCase()}</option>
+                              {optionsForField(field).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </Select>
+                          ) : config.collection === "properties" && field.name === "agencyFee" ? (
+                            <Input readOnly type="number" value={calculatedAgencyFee} />
+                          ) : field.name === "commissionAmount" ? (
+                            <Input readOnly type="number" value={commissionAmount} />
+                          ) : field.name === "totalInitialPayment" ? (
+                            <Input readOnly type="number" value={totalInitialPayment} />
+                          ) : (
+                            <Input placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} type={field.type} />
+                          )}
+                          {field.helpText ? <span className="text-xs font-normal text-muted-foreground">{field.helpText}</span> : null}
+                        </div>
+                      </Field>
+                    </div>
                   ))}
                 </div>
               </section>
             ))}
           </div>
           <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] -mx-5 -mb-5 border-t bg-white p-4 md:static md:m-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0">
-            <Button className="h-12 w-full md:h-10 md:w-auto" disabled={isSubmitting} type="submit">
+            <Button className="h-12 w-full md:h-10 md:w-auto" data-tour={fieldTourTarget(config.collection, "save")} disabled={isSubmitting} type="submit">
               <Save className="h-4 w-4" />
               {isSubmitting ? "Saving" : "Save record"}
             </Button>

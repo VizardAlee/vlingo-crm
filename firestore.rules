@@ -20,12 +20,50 @@ service cloud.firestore {
       return get(memberPath(orgId)).data.permissions;
     }
 
+    function role(orgId) {
+      return get(memberPath(orgId)).data.role;
+    }
+
     function hasPermission(orgId, permission) {
       return isActiveMember(orgId) && permissions(orgId).hasAny([permission]);
     }
 
     function hasAnyPermission(orgId, allowed) {
       return isActiveMember(orgId) && permissions(orgId).hasAny(allowed);
+    }
+
+    function hasRole(orgId, allowed) {
+      return isActiveMember(orgId) && allowed.hasAny([role(orgId)]);
+    }
+
+    function canReadDeals(orgId) {
+      return hasAnyPermission(orgId, ["deals.read", "reports.viewFinancial"]) ||
+        hasRole(orgId, [
+          "superAdmin",
+          "managingDirector",
+          "operationsManager",
+          "salesManager",
+          "salesExecutive",
+          "propertyManager",
+          "financeManager",
+          "accountant",
+          "legalOfficer",
+          "auditor"
+        ]);
+    }
+
+    function canCreateDeals(orgId) {
+      return hasPermission(orgId, "deals.create") ||
+        hasRole(orgId, ["superAdmin", "operationsManager", "salesManager", "salesExecutive"]);
+    }
+
+    function canUpdateDeals(orgId) {
+      return hasPermission(orgId, "deals.update") ||
+        hasRole(orgId, ["superAdmin", "operationsManager", "salesManager", "salesExecutive"]);
+    }
+
+    function canUseDeals(orgId) {
+      return canReadDeals(orgId) || canCreateDeals(orgId) || canUpdateDeals(orgId);
     }
 
     function organizationMatches(orgId) {
@@ -43,6 +81,41 @@ service cloud.firestore {
         request.resource.data.createdBy is string &&
         request.resource.data.updatedBy is string &&
         request.resource.data.isDeleted is bool;
+    }
+
+    function changesFinanceApprovalState() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        "approvalStatus",
+        "approvedAt",
+        "approvedBy",
+        "paidAt",
+        "paidBy",
+        "rejectedAt",
+        "rejectedBy",
+        "rejectionReason",
+        "verificationStatus",
+        "verifiedAt",
+        "verifiedBy"
+      ]);
+    }
+
+    function canUpdateFinanceRecord(orgId) {
+      return organizationUnchanged(orgId) &&
+        (hasPermission(orgId, "finance.approve") ||
+        (hasPermission(orgId, "finance.update") && !changesFinanceApprovalState()));
+    }
+
+    function canUpdateOwnNotification(orgId) {
+      return organizationUnchanged(orgId) &&
+        resource.data.recipientId == request.auth.uid &&
+        request.resource.data.recipientId == resource.data.recipientId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "organizationId",
+          "readAt",
+          "readBy",
+          "updatedAt",
+          "updatedBy"
+        ]);
     }
 
     match /organizations/{orgId} {
@@ -66,7 +139,8 @@ service cloud.firestore {
       }
 
       match /leads/{leadId} {
-        allow read: if hasPermission(orgId, "leads.readAll") ||
+        allow read: if hasPermission(orgId, "reports.viewFinancial") ||
+          hasPermission(orgId, "leads.readAll") ||
           (hasPermission(orgId, "leads.readAssigned") && resource.data.assignedTo == request.auth.uid);
         allow create: if hasPermission(orgId, "leads.create") && hasMetadata(orgId);
         allow update: if organizationUnchanged(orgId) &&
@@ -76,14 +150,21 @@ service cloud.firestore {
       }
 
       match /clients/{clientId} {
-        allow read: if hasAnyPermission(orgId, ["clients.read", "rentals.create", "rentals.read", "rentals.update"]);
+        allow read: if canUseDeals(orgId) || hasAnyPermission(orgId, ["clients.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "clients.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "clients.update") && organizationUnchanged(orgId);
         allow delete: if false;
       }
 
+      match /deals/{dealId} {
+        allow read: if canReadDeals(orgId);
+        allow create: if canCreateDeals(orgId) && hasMetadata(orgId);
+        allow update: if canUpdateDeals(orgId) && organizationUnchanged(orgId);
+        allow delete: if false;
+      }
+
       match /properties/{propertyId} {
-        allow read: if hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]);
+        allow read: if canUseDeals(orgId) || hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);
         allow delete: if false;
@@ -97,7 +178,7 @@ service cloud.firestore {
       }
 
       match /propertyUnits/{unitId} {
-        allow read: if hasAnyPermission(orgId, ["units.read", "rentals.create", "rentals.read", "rentals.update"]);
+        allow read: if canUseDeals(orgId) || hasAnyPermission(orgId, ["units.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "units.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "units.update") && organizationUnchanged(orgId);
         allow delete: if false;
@@ -124,6 +205,15 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /notifications/{notificationId} {
+        allow read: if isActiveMember(orgId) && resource.data.recipientId == request.auth.uid;
+        allow create: if isActiveMember(orgId) &&
+          hasMetadata(orgId) &&
+          request.resource.data.recipientId == request.auth.uid;
+        allow update: if canUpdateOwnNotification(orgId);
+        allow delete: if false;
+      }
+
       match /tasks/{taskId} {
         allow read: if hasPermission(orgId, "tasks.read") &&
           (resource.data.assignedTo == request.auth.uid || hasAnyPermission(orgId, ["dashboard.viewExecutive", "users.manage"]));
@@ -142,6 +232,27 @@ service cloud.firestore {
         allow read: if isActiveMember(orgId);
         allow create: if isActiveMember(orgId) && hasMetadata(orgId);
         allow update, delete: if hasPermission(orgId, "users.manage");
+      }
+
+      match /financePayments/{paymentId} {
+        allow read: if hasPermission(orgId, "reports.viewFinancial");
+        allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);
+        allow update: if canUpdateFinanceRecord(orgId);
+        allow delete: if false;
+      }
+
+      match /financeExpenses/{expenseId} {
+        allow read: if hasPermission(orgId, "reports.viewFinancial");
+        allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);
+        allow update: if canUpdateFinanceRecord(orgId);
+        allow delete: if false;
+      }
+
+      match /financeCommissions/{commissionId} {
+        allow read: if hasPermission(orgId, "reports.viewFinancial");
+        allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);
+        allow update: if canUpdateFinanceRecord(orgId);
+        allow delete: if false;
       }
 
       match /auditLogs/{auditLogId} {

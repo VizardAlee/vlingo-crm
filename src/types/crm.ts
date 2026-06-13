@@ -8,6 +8,9 @@ export type Permission =
   | "clients.create"
   | "clients.read"
   | "clients.update"
+  | "deals.create"
+  | "deals.read"
+  | "deals.update"
   | "properties.create"
   | "properties.read"
   | "properties.update"
@@ -29,6 +32,9 @@ export type Permission =
   | "tasks.update"
   | "activities.create"
   | "activities.read"
+  | "finance.create"
+  | "finance.update"
+  | "finance.approve"
   | "reports.viewFinancial"
   | "users.manage"
   | "roles.manage"
@@ -189,6 +195,67 @@ export interface Client extends EntityMetadata {
   notes?: string;
 }
 
+export type DealStatus =
+  | "new"
+  | "qualified"
+  | "propertyRecommended"
+  | "inspectionScheduled"
+  | "inspectionCompleted"
+  | "negotiation"
+  | "offerMade"
+  | "paymentPending"
+  | "won"
+  | "lost"
+  | "dormant";
+
+export type DealType = "sale" | "rent" | "lease" | "reservation" | "investment" | "other";
+export type DealFinanceStatus = "notInvoiced" | "paymentPending" | "partPaid" | "paid" | "overdue";
+export type DealLegalStatus = "notStarted" | "drafting" | "inReview" | "signed" | "completed" | "blocked";
+
+export interface Deal extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  title: string;
+  dealType: DealType;
+  leadId?: string;
+  leadName?: string;
+  clientId?: string;
+  clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  propertyId?: string;
+  propertyName?: string;
+  propertyReferenceNumber?: string;
+  unitId?: string;
+  unitName?: string;
+  dealOwnerId?: string;
+  dealOwnerName?: string;
+  dealOwnerEmail?: string;
+  offerAmount?: number;
+  agreedAmount?: number;
+  reservationAmount?: number;
+  depositAmount?: number;
+  expectedCloseDate?: Date | string | null;
+  closeProbability?: number;
+  paymentPlan?: string;
+  financeStatus?: DealFinanceStatus;
+  legalStatus?: DealLegalStatus;
+  commissionType?: string;
+  commissionValue?: number;
+  commissionAmount?: number;
+  stageHistory?: Array<{
+    at: string;
+    from: string;
+    note: string;
+    reason?: string;
+    to: string;
+    userId: string;
+  }>;
+  status: DealStatus;
+  lostReason?: string;
+  notes?: string;
+}
+
 export type PropertyStatus =
   | "draft"
   | "available"
@@ -312,8 +379,11 @@ export interface RentalPaymentRecord {
   at: string;
   method: RentalPaymentMethod;
   note?: string;
+  paymentId?: string;
   reference?: string;
+  receiptNumber?: string;
   userId: string;
+  verificationStatus?: PaymentVerificationStatus;
 }
 
 export interface RentalStatusHistoryEntry {
@@ -363,6 +433,109 @@ export interface RentalTenancy extends EntityMetadata {
   status: RentalTenancyStatus;
   notes?: string;
 }
+
+export type PaymentVerificationStatus = "pending" | "verified" | "rejected";
+export type FinanceApprovalStatus = "pendingApproval" | "approved" | "rejected" | "paid" | "void";
+export type FinancePaymentSourceType = "deal" | "lead" | "rental" | "property" | "unit" | "other";
+
+export interface FinancePayment extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  receiptNumber: string;
+  sourceType: FinancePaymentSourceType;
+  sourceId: string;
+  sourceReference?: string;
+  tenancyId?: string;
+  tenancyReference?: string;
+  tenantName?: string;
+  payerName: string;
+  propertyName?: string;
+  amount: number;
+  at: string;
+  method: RentalPaymentMethod;
+  paymentReference?: string;
+  note?: string;
+  verificationStatus: PaymentVerificationStatus;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+}
+
+export interface FinanceExpense extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  date: string;
+  category: string;
+  vendor?: string;
+  amount: number;
+  method?: RentalPaymentMethod;
+  paymentReference?: string;
+  description?: string;
+  relatedEntityType?: "deal" | "property" | "unit" | "tenancy" | "development" | "marketing" | "office" | "other";
+  relatedEntityId?: string;
+  approvalStatus: FinanceApprovalStatus;
+  approvedAt?: string;
+  approvedBy?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  paidAt?: string;
+  paidBy?: string;
+}
+
+export interface FinanceCommission extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  sourceType: "deal" | "property" | "unit" | "rental";
+  sourceId: string;
+  sourceReference?: string;
+  beneficiaryName: string;
+  basis?: string;
+  amount: number;
+  dueAt?: string;
+  approvalStatus: FinanceApprovalStatus;
+  approvedAt?: string;
+  approvedBy?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  paidAt?: string;
+  paidBy?: string;
+}
+
+export type NotificationKind = "task" | "lead" | "rent" | "renewal" | "activity" | "deal" | "finance" | "system";
+export type NotificationTone = "danger" | "warning" | "info" | "success" | "muted";
+
+export interface AppNotification extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  body: string;
+  dedupeKey: string;
+  href: string;
+  kind: NotificationKind;
+  recipientId: string;
+  readAt?: Date | string | null;
+  readBy?: string;
+  sourceCollection?: OrgCollectionName;
+  sourceId?: string;
+  title: string;
+  tone: NotificationTone;
+  triggerAt?: Date | string | null;
+  status: "active" | "archived";
+}
+
+export type OrgCollectionName =
+  | "activities"
+  | "clients"
+  | "deals"
+  | "financePayments"
+  | "leads"
+  | "properties"
+  | "propertyUnits"
+  | "rentalTenancies"
+  | "tasks";
 
 export type DevelopmentProjectStatus =
   | "concept"
@@ -453,7 +626,7 @@ export interface Task extends EntityMetadata {
   assignedTo?: string;
   assignedToEmail?: string;
   assignedToName?: string;
-  relatedEntityType?: "lead" | "client" | "property" | "unit" | "tenancy" | "development" | "marketing";
+  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "tenancy" | "development" | "marketing";
   relatedEntityId?: string;
   status: TaskStatus;
 }
@@ -477,7 +650,7 @@ export interface Activity extends EntityMetadata {
   subject: string;
   body?: string;
   status: string;
-  relatedEntityType?: "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
+  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
   relatedEntityId?: string;
 }
 

@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   FileText,
   FolderKanban,
+  Handshake,
   Home,
   Landmark,
   LayoutDashboard,
@@ -43,6 +44,7 @@ export const navigation: NavSection[] = [
     items: [
       { href: "/leads", icon: Users, label: "Leads", permissions: ["leads.readAssigned", "leads.readAll"] },
       { href: "/clients", icon: ClipboardCheck, label: "Clients", permissions: ["clients.read"] },
+      { href: "/deals", icon: Handshake, label: "Deals", permissions: ["deals.read"] },
       { href: "/activities", icon: Activity, label: "Activities", permissions: ["activities.read"] },
     ],
   },

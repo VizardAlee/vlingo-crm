@@ -6,7 +6,7 @@ import { db, storage } from "@/lib/firebase/client";
 import { createReference } from "@/lib/utils";
 import { orgCollectionPath } from "@/services/firestore-paths";
 
-export type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "owner" | "developer" | "management";
+export type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "owner" | "developer" | "management";
 
 export interface DocumentRecord {
   id: string;

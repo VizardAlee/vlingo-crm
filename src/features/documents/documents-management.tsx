@@ -24,6 +24,7 @@ type RelatedConfig = {
 };
 
 const relatedConfigs: RelatedConfig[] = [
+  { collection: "deals", label: "Deal", type: "deal" },
   { collection: "leads", label: "Lead", type: "lead" },
   { collection: "clients", label: "Client", type: "client" },
   { collection: "properties", label: "Property", type: "property" },
@@ -38,6 +39,11 @@ const relatedConfigs: RelatedConfig[] = [
 ];
 
 function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
+  if (type === "deal") {
+    const detail = [record.clientName ?? record.leadName, record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.title ?? "Deal")} (${detail})` : String(record.title ?? record.referenceNumber ?? record.id);
+  }
+
   if (type === "lead" || type === "client") {
     const detail = [record.phoneNumber, record.email, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.fullName ?? "Unnamed")} (${detail})` : String(record.fullName ?? record.referenceNumber ?? record.id);
@@ -84,6 +90,10 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
 
   if (type === "lead") {
     return `/leads/${id}`;
+  }
+
+  if (type === "deal") {
+    return `/deals/${id}`;
   }
 
   if (type === "client") {

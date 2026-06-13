@@ -199,6 +199,254 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
+  it("allows sales users to create deals and finance users to read them", async () => {
+    await seedMember("sales-1", "org-a", ["deals.create", "deals.read", "deals.update"], "salesExecutive");
+    await seedMember("finance-1", "org-a", ["reports.viewFinancial"], "accountant");
+    const salesDb = testEnv.authenticatedContext("sales-1").firestore();
+    const financeDb = testEnv.authenticatedContext("finance-1").firestore();
+    const dealRef = doc(salesDb, "organizations/org-a/deals/deal-1");
+
+    await assertSucceeds(setDoc(dealRef, {
+      branchId: "head-office",
+      createdBy: "sales-1",
+      dealType: "sale",
+      isDeleted: false,
+      organizationId: "org-a",
+      status: "negotiation",
+      title: "Test sale deal",
+      updatedBy: "sales-1",
+    }));
+
+    await assertSucceeds(updateDoc(dealRef, {
+      agreedAmount: 25000000,
+      financeStatus: "paymentPending",
+      organizationId: "org-a",
+      updatedBy: "sales-1",
+    }));
+    await assertSucceeds(getDoc(doc(financeDb, "organizations/org-a/deals/deal-1")));
+  });
+
+  it("allows existing sales roles to use deals before permission backfill", async () => {
+    await seedMember("sales-1", "org-a", [], "salesExecutive");
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+    const dealRef = doc(db, "organizations/org-a/deals/deal-1");
+
+    await assertSucceeds(setDoc(dealRef, {
+      branchId: "head-office",
+      createdBy: "sales-1",
+      dealType: "sale",
+      isDeleted: false,
+      organizationId: "org-a",
+      status: "new",
+      title: "Role-backed deal",
+      updatedBy: "sales-1",
+    }));
+
+    await assertSucceeds(getDoc(dealRef));
+    await assertSucceeds(updateDoc(dealRef, {
+      organizationId: "org-a",
+      status: "negotiation",
+      updatedBy: "sales-1",
+    }));
+  });
+
+  it("blocks deal writes without deal permission", async () => {
+    await seedMember("agent-1", "org-a", ["leads.readAssigned"], "agent");
+    const db = testEnv.authenticatedContext("agent-1").firestore();
+
+    await assertFails(setDoc(doc(db, "organizations/org-a/deals/deal-1"), {
+      branchId: "head-office",
+      createdBy: "agent-1",
+      dealType: "sale",
+      isDeleted: false,
+      organizationId: "org-a",
+      status: "new",
+      title: "Unauthorized deal",
+      updatedBy: "agent-1",
+    }));
+  });
+
+  it("allows users to persist and mark their own notifications read", async () => {
+    await seedMember("sales-1", "org-a", [], "salesExecutive");
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+    const notificationRef = doc(db, "organizations/org-a/notifications/notification-1");
+
+    await assertSucceeds(setDoc(notificationRef, {
+      body: "Follow up lead today.",
+      branchId: "head-office",
+      createdBy: "sales-1",
+      dedupeKey: "lead-followup:lead-1:2026-06-12",
+      href: "/leads/lead-1",
+      isDeleted: false,
+      kind: "lead",
+      organizationId: "org-a",
+      recipientId: "sales-1",
+      status: "active",
+      title: "Follow up Test Lead",
+      tone: "warning",
+      updatedBy: "sales-1",
+    }));
+
+    await assertSucceeds(getDoc(notificationRef));
+    await assertSucceeds(updateDoc(notificationRef, {
+      organizationId: "org-a",
+      readAt: "2026-06-12T12:00:00.000Z",
+      readBy: "sales-1",
+      updatedBy: "sales-1",
+    }));
+  });
+
+  it("blocks users from reading or mutating another user's notifications", async () => {
+    await seedMember("sales-1", "org-a", [], "salesExecutive");
+    await seedMember("sales-2", "org-a", [], "salesExecutive");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/notifications/notification-1"), {
+        body: "Private reminder.",
+        branchId: "head-office",
+        createdBy: "sales-1",
+        dedupeKey: "task:task-1:2026-06-12",
+        href: "/tasks/task-1",
+        isDeleted: false,
+        kind: "task",
+        organizationId: "org-a",
+        recipientId: "sales-1",
+        status: "active",
+        title: "Private task",
+        tone: "warning",
+        updatedBy: "sales-1",
+      });
+    });
+    const db = testEnv.authenticatedContext("sales-2").firestore();
+    const notificationRef = doc(db, "organizations/org-a/notifications/notification-1");
+
+    await assertFails(getDoc(notificationRef));
+    await assertFails(updateDoc(notificationRef, {
+      organizationId: "org-a",
+      readAt: "2026-06-12T12:00:00.000Z",
+      readBy: "sales-2",
+      updatedBy: "sales-2",
+    }));
+  });
+
+  it("blocks notification content edits during read-state updates", async () => {
+    await seedMember("sales-1", "org-a", [], "salesExecutive");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/notifications/notification-1"), {
+        body: "Follow up lead today.",
+        branchId: "head-office",
+        createdBy: "sales-1",
+        dedupeKey: "lead-followup:lead-1:2026-06-12",
+        href: "/leads/lead-1",
+        isDeleted: false,
+        kind: "lead",
+        organizationId: "org-a",
+        recipientId: "sales-1",
+        status: "active",
+        title: "Follow up Test Lead",
+        tone: "warning",
+        updatedBy: "sales-1",
+      });
+    });
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+    await assertFails(updateDoc(doc(db, "organizations/org-a/notifications/notification-1"), {
+      organizationId: "org-a",
+      readAt: "2026-06-12T12:00:00.000Z",
+      readBy: "sales-1",
+      title: "Changed title",
+      updatedBy: "sales-1",
+    }));
+  });
+
+  it("allows finance users to create finance records but not approve them", async () => {
+    await seedMember("accountant-1", "org-a", ["finance.create", "finance.update", "reports.viewFinancial"], "accountant");
+    const db = testEnv.authenticatedContext("accountant-1").firestore();
+    const expenseRef = doc(db, "organizations/org-a/financeExpenses/expense-1");
+
+    await assertSucceeds(setDoc(expenseRef, {
+      amount: 25000,
+      approvalStatus: "pendingApproval",
+      branchId: "head-office",
+      category: "Repairs",
+      createdBy: "accountant-1",
+      date: "2026-06-12",
+      isDeleted: false,
+      organizationId: "org-a",
+      updatedBy: "accountant-1",
+    }));
+
+    await assertSucceeds(getDoc(expenseRef));
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/leads/lead-finance-1"), {
+        assignedTo: "sales-1",
+        branchId: "head-office",
+        createdBy: "sales-1",
+        fullName: "Finance Visible Lead",
+        isDeleted: false,
+        organizationId: "org-a",
+        phoneNumber: "08010000000",
+        source: "Website",
+        status: "paymentPending",
+        updatedBy: "sales-1",
+      });
+    });
+    await assertSucceeds(getDoc(doc(db, "organizations/org-a/leads/lead-finance-1")));
+    await assertSucceeds(updateDoc(expenseRef, {
+      description: "Leak repair receipt attached.",
+      organizationId: "org-a",
+      updatedBy: "accountant-1",
+    }));
+
+    await assertFails(updateDoc(expenseRef, {
+      approvalStatus: "approved",
+      approvedBy: "accountant-1",
+      organizationId: "org-a",
+      updatedBy: "accountant-1",
+    }));
+  });
+
+  it("allows finance approvers to approve finance records", async () => {
+    await seedMember("finance-1", "org-a", ["finance.create", "finance.update", "finance.approve", "reports.viewFinancial"], "financeManager");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/financePayments/payment-1"), {
+        amount: 500000,
+        branchId: "head-office",
+        createdBy: "accountant-1",
+        isDeleted: false,
+        organizationId: "org-a",
+        receiptNumber: "RCT-20260612-00001",
+        tenantName: "Test Tenant",
+        updatedBy: "accountant-1",
+        verificationStatus: "pending",
+      });
+    });
+
+    const db = testEnv.authenticatedContext("finance-1").firestore();
+    await assertSucceeds(updateDoc(doc(db, "organizations/org-a/financePayments/payment-1"), {
+      organizationId: "org-a",
+      updatedBy: "finance-1",
+      verificationStatus: "verified",
+      verifiedBy: "finance-1",
+    }));
+  });
+
+  it("blocks finance records without finance permission", async () => {
+    await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertFails(setDoc(doc(db, "organizations/org-a/financeCommissions/commission-1"), {
+      amount: 100000,
+      approvalStatus: "pendingApproval",
+      beneficiaryName: "Agent One",
+      branchId: "head-office",
+      createdBy: "sales-1",
+      isDeleted: false,
+      organizationId: "org-a",
+      sourceId: "property-1",
+      sourceType: "property",
+      updatedBy: "sales-1",
+    }));
+  });
+
   it("blocks ordinary audit log writes", async () => {
     await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
     const db = testEnv.authenticatedContext("sales-1").firestore();

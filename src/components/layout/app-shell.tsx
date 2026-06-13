@@ -12,14 +12,18 @@ import { navigation } from "@/components/layout/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasAnyPermission } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
+import { listUserNotifications } from "@/services/notifications";
+
+const notificationsChangedEvent = "beacon:notifications-changed";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { activeBranchId, firebaseReady, loading, member, setActiveBranchId, signOutUser, user } = useAuth();
+  const { activeBranchId, activeOrganizationId, firebaseReady, loading, member, setActiveBranchId, signOutUser, user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   useEffect(() => {
     if (!loading && firebaseReady && !user) {
@@ -37,6 +41,47 @@ export function AppShell({ children }: { children: ReactNode }) {
         .filter((section) => section.items.length > 0),
     [member],
   );
+  const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "deals.read", "rentals.read", "activities.read", "reports.viewFinancial"]);
+
+  useEffect(() => {
+    const currentUserId = user?.uid;
+    if (!currentUserId || !canViewNotifications) {
+      return;
+    }
+
+    const notificationUserId: string = currentUserId;
+    let mounted = true;
+    async function loadUnreadCount() {
+      try {
+        const notifications = await listUserNotifications(activeOrganizationId, notificationUserId);
+        if (mounted) {
+          setUnreadNotificationCount(notifications.filter((item) => !item.readAt).length);
+        }
+      } catch {
+        if (mounted) {
+          setUnreadNotificationCount(0);
+        }
+      }
+    }
+
+    void loadUnreadCount();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadUnreadCount();
+      }
+    };
+    const onFocus = () => void loadUnreadCount();
+    window.addEventListener(notificationsChangedEvent, onFocus);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener(notificationsChangedEvent, onFocus);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [activeOrganizationId, canViewNotifications, pathname, user]);
 
   if (loading) {
     return <LoadingState />;
@@ -48,6 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     .map((href) => flatNavigation.find((item) => item.href === href))
     .filter((item) => item !== undefined);
   const currentSection = flatNavigation.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const displayedUnreadNotificationCount = user && canViewNotifications ? unreadNotificationCount : 0;
 
   const sidebar = (
     <aside className={cn("flex h-full min-h-0 flex-col border-r bg-white transition-all", collapsed ? "w-20" : "w-72")}>
@@ -251,8 +297,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button aria-label="Search" className="md:hidden" onClick={() => setMobileSearchOpen((value) => !value)} size="icon" variant="ghost">
               <Search className="h-5 w-5" />
             </Button>
-            <ButtonLink aria-label="Notifications" href="/notifications" size="icon" variant="outline">
+            <ButtonLink aria-label={displayedUnreadNotificationCount ? `${displayedUnreadNotificationCount} unread notifications` : "Notifications"} className="relative" href="/notifications" size="icon" variant="outline">
               <Bell className="h-4 w-4" />
+              {displayedUnreadNotificationCount ? (
+                <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-none text-white ring-2 ring-white">
+                  {displayedUnreadNotificationCount > 9 ? "9+" : displayedUnreadNotificationCount}
+                </span>
+              ) : null}
             </ButtonLink>
             <Button aria-label="Sign out" className="hidden md:inline-flex" onClick={signOutUser} size="icon" variant="ghost">
               <LogOut className="h-4 w-4" />

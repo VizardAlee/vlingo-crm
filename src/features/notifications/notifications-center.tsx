@@ -11,23 +11,13 @@ import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/stat
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
+import { ensureUserNotifications, listUserNotifications, markNotificationRead, markNotificationsRead, type NotificationDraft } from "@/services/notifications";
 import { listOrgRecords } from "@/services/repository";
-
-type NotificationTone = "danger" | "warning" | "info" | "success" | "muted";
-type NotificationKind = "task" | "lead" | "rent" | "renewal" | "activity";
-
-interface NotificationItem {
-  body: string;
-  date?: Date | null;
-  href: string;
-  id: string;
-  kind: NotificationKind;
-  title: string;
-  tone: NotificationTone;
-}
+import type { AppNotification, NotificationKind, NotificationTone } from "@/types/crm";
 
 const upcomingWindowDays = 7;
 const renewalWindowDays = 60;
+const notificationsChangedEvent = "beacon:notifications-changed";
 
 function parseDate(value: unknown) {
   if (!value) {
@@ -104,6 +94,10 @@ function routeForActivity(type: unknown, id: unknown) {
     return `/leads/${entityId}`;
   }
 
+  if (type === "deal") {
+    return `/deals/${entityId}`;
+  }
+
   if (type === "client") {
     return `/clients/${entityId}`;
   }
@@ -163,31 +157,17 @@ function notificationIcon(kind: NotificationKind) {
   return MessageSquare;
 }
 
-function seenStorageKey(organizationId: string, userId: string) {
-  return `beacon-notifications-seen:${organizationId}:${userId}`;
-}
-
-function readSeenIds(key: string) {
-  try {
-    const value = window.localStorage.getItem(key);
-    return value ? new Set(JSON.parse(value) as string[]) : new Set<string>();
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function writeSeenIds(key: string, ids: Set<string>) {
-  window.localStorage.setItem(key, JSON.stringify([...ids].slice(-500)));
-}
-
 export function NotificationsCenter() {
-  const { activeOrganizationId, member, user } = useAuth();
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "rentals.read", "activities.read"]);
-  const storageKey = user ? seenStorageKey(activeOrganizationId, user.uid) : "";
+  const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "deals.read", "rentals.read", "activities.read", "reports.viewFinancial"]);
+  const context = useMemo(
+    () => user ? { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid } : null,
+    [activeBranchId, activeOrganizationId, user],
+  );
 
   const loadNotifications = useCallback(async () => {
     if (!user) {
@@ -207,7 +187,7 @@ export function NotificationsCenter() {
         hasPermission(member, "rentals.read") ? safeList(activeOrganizationId, "rentalTenancies") : [],
         hasPermission(member, "activities.read") ? safeList(activeOrganizationId, "activities") : [],
       ]);
-      const nextItems: NotificationItem[] = [];
+      const generated: NotificationDraft[] = [];
 
       tasks.forEach((task) => {
         if (!isOpenStatus(task.status)) {
@@ -217,12 +197,15 @@ export function NotificationsCenter() {
         const dueDays = daysUntil(task.dueAt);
         if (String(task.status) === "overdue" || (dueDays !== null && dueDays <= upcomingWindowDays)) {
           const overdue = String(task.status) === "overdue" || (dueDays !== null && dueDays < 0);
-          nextItems.push({
+          generated.push({
             body: `${compactDueLabel(task.dueAt)} · ${titleCase(String(task.priority ?? "normal"))} priority`,
-            date: parseDate(task.dueAt),
+            triggerAt: parseDate(task.dueAt),
             href: `/tasks/${task.id}`,
-            id: `task:${task.id}:${String(task.dueAt ?? "")}:${String(task.status ?? "")}`,
+            dedupeKey: `task:${task.id}:${String(task.dueAt ?? "")}:${String(task.status ?? "")}`,
             kind: "task",
+            recipientId: user.uid,
+            sourceCollection: "tasks",
+            sourceId: task.id,
             title: String(task.title ?? "Task needs attention"),
             tone: overdue ? "danger" : "warning",
           });
@@ -236,12 +219,15 @@ export function NotificationsCenter() {
 
         const followUpDays = daysUntil(lead.nextFollowUpAt);
         if (followUpDays !== null && followUpDays <= upcomingWindowDays) {
-          nextItems.push({
+          generated.push({
             body: `${compactDueLabel(lead.nextFollowUpAt)} · ${titleCase(String(lead.status ?? "lead"))}`,
-            date: parseDate(lead.nextFollowUpAt),
+            triggerAt: parseDate(lead.nextFollowUpAt),
             href: `/leads/${lead.id}`,
-            id: `lead-followup:${lead.id}:${String(lead.nextFollowUpAt ?? "")}`,
+            dedupeKey: `lead-followup:${lead.id}:${String(lead.nextFollowUpAt ?? "")}`,
             kind: "lead",
+            recipientId: user.uid,
+            sourceCollection: "leads",
+            sourceId: lead.id,
             title: `Follow up ${String(lead.fullName ?? "lead")}`,
             tone: followUpDays < 0 ? "danger" : "warning",
           });
@@ -257,12 +243,15 @@ export function NotificationsCenter() {
         const paymentStatus = String(rental.paymentStatus ?? "notInvoiced");
         if (paymentStatus === "overdue" || (rentDays !== null && rentDays <= upcomingWindowDays)) {
           const overdue = paymentStatus === "overdue" || (rentDays !== null && rentDays < 0);
-          nextItems.push({
+          generated.push({
             body: `${formatCurrency(Number(rental.rentAmount ?? 0))} · ${compactDueLabel(rental.nextRentDueDate)}`,
-            date: parseDate(rental.nextRentDueDate),
+            triggerAt: parseDate(rental.nextRentDueDate),
             href: `/rentals/${rental.id}`,
-            id: `rent:${rental.id}:${String(rental.nextRentDueDate ?? "")}:${paymentStatus}`,
+            dedupeKey: `rent:${rental.id}:${String(rental.nextRentDueDate ?? "")}:${paymentStatus}`,
             kind: "rent",
+            recipientId: user.uid,
+            sourceCollection: "rentalTenancies",
+            sourceId: rental.id,
             title: `Rent due: ${String(rental.tenantName ?? rental.referenceNumber ?? "Tenant")}`,
             tone: overdue ? "danger" : "warning",
           });
@@ -270,12 +259,15 @@ export function NotificationsCenter() {
 
         const leaseDays = daysUntil(rental.leaseEndDate);
         if (leaseDays !== null && leaseDays <= renewalWindowDays) {
-          nextItems.push({
+          generated.push({
             body: `Lease ends ${dateLabel(rental.leaseEndDate)} · ${leaseDays < 0 ? `${Math.abs(leaseDays)} days expired` : `${leaseDays} days left`}`,
-            date: parseDate(rental.leaseEndDate),
+            triggerAt: parseDate(rental.leaseEndDate),
             href: `/rentals/${rental.id}`,
-            id: `renewal:${rental.id}:${String(rental.leaseEndDate ?? "")}`,
+            dedupeKey: `renewal:${rental.id}:${String(rental.leaseEndDate ?? "")}`,
             kind: "renewal",
+            recipientId: user.uid,
+            sourceCollection: "rentalTenancies",
+            sourceId: rental.id,
             title: `Renewal review: ${String(rental.tenantName ?? rental.referenceNumber ?? "Tenant")}`,
             tone: leaseDays < 0 ? "danger" : leaseDays <= 14 ? "warning" : "info",
           });
@@ -283,34 +275,40 @@ export function NotificationsCenter() {
       });
 
       activities.slice(0, 8).forEach((activity) => {
-        nextItems.push({
+        generated.push({
           body: `${titleCase(String(activity.type ?? "activity"))} · ${dateLabel(activity.updatedAt)}`,
-          date: parseDate(activity.updatedAt),
+          triggerAt: parseDate(activity.updatedAt),
           href: routeForActivity(activity.relatedEntityType, activity.relatedEntityId),
-          id: `activity:${activity.id}:${String(activity.updatedAt ?? "")}`,
+          dedupeKey: `activity:${activity.id}:${String(activity.updatedAt ?? "")}`,
           kind: "activity",
+          recipientId: user.uid,
+          sourceCollection: "activities",
+          sourceId: activity.id,
           title: String(activity.subject ?? "Recent activity"),
           tone: "muted",
         });
       });
 
-      nextItems.sort((first, second) => {
+      const existing = await listUserNotifications(activeOrganizationId, user.uid);
+      const createdCount = context ? await ensureUserNotifications(context, generated, existing) : 0;
+      const persisted = createdCount ? await listUserNotifications(activeOrganizationId, user.uid) : existing;
+      persisted.sort((first, second) => {
         const toneWeight: Record<NotificationTone, number> = { danger: 0, warning: 1, info: 2, success: 3, muted: 4 };
         const toneDelta = toneWeight[first.tone] - toneWeight[second.tone];
         if (toneDelta) {
           return toneDelta;
         }
 
-        return (first.date?.getTime() ?? Number.MAX_SAFE_INTEGER) - (second.date?.getTime() ?? Number.MAX_SAFE_INTEGER);
+        return (parseDate(first.triggerAt)?.getTime() ?? Number.MAX_SAFE_INTEGER) - (parseDate(second.triggerAt)?.getTime() ?? Number.MAX_SAFE_INTEGER);
       });
-      setItems(nextItems);
-      setSeenIds(readSeenIds(seenStorageKey(activeOrganizationId, user.uid)));
+      setItems(persisted);
+      window.dispatchEvent(new Event(notificationsChangedEvent));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to load notifications.");
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, member, user]);
+  }, [activeOrganizationId, context, member, user]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -321,33 +319,54 @@ export function NotificationsCenter() {
   }, [loadNotifications]);
 
   const summary = useMemo(() => {
-    const unread = items.filter((item) => !seenIds.has(item.id));
+    const unread = items.filter((item) => !item.readAt);
     return {
       attention: unread.filter((item) => item.tone === "danger" || item.tone === "warning").length,
       total: items.length,
       unread: unread.length,
     };
-  }, [items, seenIds]);
+  }, [items]);
 
-  function markSeen(id: string) {
-    if (!storageKey) {
+  async function markSeen(id: string) {
+    if (!context) {
       return;
     }
 
-    const next = new Set(seenIds);
-    next.add(id);
-    setSeenIds(next);
-    writeSeenIds(storageKey, next);
+    setSaving(id);
+    setError(null);
+    try {
+      await markNotificationRead(context, id);
+      setItems((current) => current.map((item) => item.id === id ? { ...item, readAt: new Date().toISOString(), readBy: context.userId } : item));
+      window.dispatchEvent(new Event(notificationsChangedEvent));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to update notification.");
+    } finally {
+      setSaving(null);
+    }
   }
 
-  function markAllSeen() {
-    if (!storageKey) {
+  async function markAllSeen() {
+    if (!context) {
       return;
     }
 
-    const next = new Set(items.map((item) => item.id));
-    setSeenIds(next);
-    writeSeenIds(storageKey, next);
+    const unreadIds = items.filter((item) => !item.readAt).map((item) => item.id);
+    if (!unreadIds.length) {
+      return;
+    }
+
+    setSaving("all");
+    setError(null);
+    try {
+      await markNotificationsRead(context, unreadIds);
+      const readAt = new Date().toISOString();
+      setItems((current) => current.map((item) => unreadIds.includes(item.id) ? { ...item, readAt, readBy: context.userId } : item));
+      window.dispatchEvent(new Event(notificationsChangedEvent));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to update notifications.");
+    } finally {
+      setSaving(null);
+    }
   }
 
   if (!canViewNotifications) {
@@ -370,9 +389,9 @@ export function NotificationsCenter() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button disabled={!items.length} onClick={markAllSeen} type="button" variant="secondary">
+          <Button disabled={!items.some((item) => !item.readAt) || saving === "all"} onClick={() => void markAllSeen()} type="button" variant="secondary">
             <CheckCircle2 className="h-4 w-4" />
-            Mark all seen
+            {saving === "all" ? "Saving" : "Mark all read"}
           </Button>
         </div>
       </div>
@@ -407,11 +426,11 @@ export function NotificationsCenter() {
         <CardContent className="grid gap-3">
           {items.length ? items.map((item) => {
             const Icon = notificationIcon(item.kind);
-            const seen = seenIds.has(item.id);
+            const seen = Boolean(item.readAt);
             return (
               <div className={cn("rounded-md border p-3", seen ? "bg-white opacity-75" : "bg-muted/40")} key={item.id}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <Link className="flex min-w-0 gap-3 text-foreground hover:text-primary" href={item.href} onClick={() => markSeen(item.id)}>
+                  <Link className="flex min-w-0 gap-3 text-foreground hover:text-primary" href={item.href} onClick={() => { if (!seen) void markSeen(item.id); }}>
                     <div className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-md", item.tone === "danger" ? "bg-destructive/10 text-destructive" : item.tone === "warning" ? "bg-warning/10 text-warning" : "bg-primary/10 text-primary")}>
                       <Icon className="h-5 w-5" />
                     </div>
@@ -421,8 +440,8 @@ export function NotificationsCenter() {
                     </div>
                   </Link>
                   <div className="flex shrink-0 items-center gap-2 md:justify-end">
-                    <Badge tone={seen ? "muted" : item.tone}>{seen ? "Seen" : titleCase(item.tone)}</Badge>
-                    <Button disabled={seen} onClick={() => markSeen(item.id)} size="sm" type="button" variant="outline">Seen</Button>
+                    <Badge tone={seen ? "muted" : item.tone}>{seen ? "Read" : titleCase(item.tone)}</Badge>
+                    <Button disabled={seen || saving === item.id} onClick={() => void markSeen(item.id)} size="sm" type="button" variant="outline">{saving === item.id ? "Saving" : "Mark read"}</Button>
                   </div>
                 </div>
               </div>
@@ -436,9 +455,9 @@ export function NotificationsCenter() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Browser Push</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Push Ready</CardTitle></CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          This inbox is live from CRM records. Browser push can be connected next through Firebase Cloud Messaging once notification delivery rules and templates are finalized.
+          This inbox now stores notification records and read state in Firestore. Firebase Cloud Messaging can reuse these records for browser push delivery when device tokens and templates are added.
         </CardContent>
       </Card>
     </section>

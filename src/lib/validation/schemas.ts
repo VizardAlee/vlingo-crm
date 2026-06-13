@@ -14,6 +14,10 @@ const optionalDateString = z.preprocess(
   (value) => value === "" || value === null || value === undefined ? undefined : value,
   z.string().optional(),
 );
+const optionalEnum = <T extends [string, ...string[]]>(values: T) => z.preprocess(
+  (value) => value === "" || value === null || value === undefined ? undefined : value,
+  z.enum(values).optional(),
+);
 const tagString = z.preprocess(
   (value) => {
     if (Array.isArray(value)) {
@@ -60,7 +64,7 @@ export const leadSchema = z.object({
   assignedTo: z.string().optional(),
   assignedAgentId: z.string().optional(),
   score: z.coerce.number().min(0).max(100).default(25),
-  leadTemperature: z.enum(["cold", "warm", "hot"]).optional(),
+  leadTemperature: optionalEnum(["cold", "warm", "hot"]),
   status: z.enum([
     "new",
     "contacted",
@@ -101,6 +105,55 @@ export const clientSchema = z.object({
   assignedRelationshipManager: z.string().optional(),
   status: z.string().default("active"),
   tags: tagString.default([]),
+  notes: z.string().optional(),
+});
+
+export const dealSchema = z.object({
+  title: z.string().min(2, "Deal title is required."),
+  dealType: z.enum(["sale", "rent", "lease", "reservation", "investment", "other"]),
+  leadId: z.string().optional(),
+  leadName: z.string().optional(),
+  clientId: z.string().optional(),
+  clientName: z.string().optional(),
+  clientPhone: z.string().optional(),
+  clientEmail: optionalEmail,
+  propertyId: z.string().optional(),
+  propertyName: z.string().optional(),
+  propertyReferenceNumber: z.string().optional(),
+  unitId: z.string().optional(),
+  unitName: z.string().optional(),
+  dealOwnerId: z.string().optional(),
+  dealOwnerName: z.string().optional(),
+  dealOwnerEmail: z.string().optional(),
+  offerAmount: optionalNumber,
+  agreedAmount: optionalNumber,
+  reservationAmount: optionalNumber,
+  depositAmount: optionalNumber,
+  expectedCloseDate: optionalDateString,
+  closeProbability: z.preprocess(
+    (value) => value === "" || value === null || value === undefined ? undefined : value,
+    z.coerce.number().min(0).max(100).optional(),
+  ),
+  paymentPlan: z.string().optional(),
+  financeStatus: optionalEnum(["notInvoiced", "paymentPending", "partPaid", "paid", "overdue"]),
+  legalStatus: optionalEnum(["notStarted", "drafting", "inReview", "signed", "completed", "blocked"]),
+  commissionType: optionalEnum(["percentage", "fixed", "none"]),
+  commissionValue: optionalNumber,
+  commissionAmount: optionalNumber,
+  status: z.enum([
+    "new",
+    "qualified",
+    "propertyRecommended",
+    "inspectionScheduled",
+    "inspectionCompleted",
+    "negotiation",
+    "offerMade",
+    "paymentPending",
+    "won",
+    "lost",
+    "dormant",
+  ]),
+  lostReason: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -213,10 +266,10 @@ export const rentalTenancySchema = z.object({
   agencyFee: optionalNumber,
   legalFee: optionalNumber,
   totalInitialPayment: optionalNumber,
-  paymentStatus: z.enum(["notInvoiced", "invoiced", "partPaid", "paid", "overdue"]).optional(),
+  paymentStatus: optionalEnum(["notInvoiced", "invoiced", "partPaid", "paid", "overdue"]),
   renewalNoticeDate: optionalDateString,
   nextRentDueDate: optionalDateString,
-  agreementStatus: z.enum(["notStarted", "drafting", "sent", "signed", "expired"]).optional(),
+  agreementStatus: optionalEnum(["notStarted", "drafting", "sent", "signed", "expired"]),
   status: z.enum(["draft", "active", "expiringSoon", "renewalDue", "renewed", "terminated", "defaulting", "movedOut"]),
   notes: z.string().optional(),
 });
@@ -237,7 +290,7 @@ export const developmentProjectSchema = z.object({
   contractorPhone: z.string().optional(),
   contractorEmail: optionalEmail,
   currentPhase: z.string().optional(),
-  permitStatus: z.enum(["notStarted", "inReview", "approved", "rejected", "notRequired"]).optional(),
+  permitStatus: optionalEnum(["notStarted", "inReview", "approved", "rejected", "notRequired"]),
   startDate: optionalDateString,
   expectedCompletionDate: optionalDateString,
   actualCompletionDate: optionalDateString,
@@ -247,8 +300,8 @@ export const developmentProjectSchema = z.object({
     (value) => value === "" || value === null || value === undefined ? undefined : value,
     z.coerce.number().min(0).max(100).optional(),
   ),
-  riskLevel: z.enum(["low", "medium", "high", "critical"]).optional(),
-  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+  riskLevel: optionalEnum(["low", "medium", "high", "critical"]),
+  priority: optionalEnum(["low", "medium", "high", "urgent"]),
   status: z.enum(["concept", "planning", "approval", "procurement", "construction", "inspection", "handover", "completed", "onHold", "cancelled"]),
   notes: z.string().optional(),
 });
@@ -276,7 +329,7 @@ export const marketingCampaignSchema = z.object({
   actualLeads: optionalNumber,
   qualifiedLeads: optionalNumber,
   convertedLeads: optionalNumber,
-  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+  priority: optionalEnum(["low", "medium", "high", "urgent"]),
   status: z.enum(["draft", "planned", "active", "paused", "completed", "cancelled"]),
   notes: z.string().optional(),
 });
@@ -290,7 +343,7 @@ export const taskSchema = z.object({
   assignedTo: z.string().optional(),
   assignedToEmail: z.string().optional(),
   assignedToName: z.string().optional(),
-  relatedEntityType: z.enum(["lead", "client", "property", "unit", "tenancy", "development", "marketing"]).optional(),
+  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing"]),
   relatedEntityId: z.string().optional(),
 });
 
@@ -299,6 +352,6 @@ export const activitySchema = z.object({
   subject: z.string().min(2, "Subject is required."),
   body: z.string().optional(),
   status: z.string().optional(),
-  relatedEntityType: z.enum(["lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"]).optional(),
+  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"]),
   relatedEntityId: z.string().optional(),
 });

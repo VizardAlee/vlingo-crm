@@ -3,9 +3,9 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { WhatsAppPhoneLink } from "@/components/ui/whatsapp-link";
 import { formatCurrency, statusTone, titleCase } from "@/lib/utils";
-import type { Activity, Client, DevelopmentProject, Lead, MarketingCampaign, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
+import type { Activity, Client, Deal, DevelopmentProject, Lead, MarketingCampaign, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
 
-export type ModuleKey = "leads" | "clients" | "properties" | "propertyUnits" | "rentalTenancies" | "developmentProjects" | "marketingCampaigns" | "tasks" | "activities";
+export type ModuleKey = "leads" | "clients" | "deals" | "properties" | "propertyUnits" | "rentalTenancies" | "developmentProjects" | "marketingCampaigns" | "tasks" | "activities";
 
 export interface FormField {
   colSpan?: "full";
@@ -13,7 +13,7 @@ export interface FormField {
   name: string;
   label: string;
   options?: string[];
-  optionSource?: "clients" | "internalManagers" | "managementCompanies" | "properties" | "propertyDevelopers" | "propertyOwners" | "propertyUnits";
+  optionSource?: "clients" | "internalManagers" | "leads" | "managementCompanies" | "properties" | "propertyDevelopers" | "propertyOwners" | "propertyUnits";
   readOnly?: boolean;
   placeholder?: string;
   required?: boolean;
@@ -35,6 +35,10 @@ export interface ModuleConfig {
 
 const leadStatuses = ["new", "contacted", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
 const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Property portal", "Event", "Other"];
+const dealStatuses = ["new", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "won", "lost", "dormant"];
+const dealTypes = ["sale", "rent", "lease", "reservation", "investment", "other"];
+const dealFinanceStatuses = ["notInvoiced", "paymentPending", "partPaid", "paid", "overdue"];
+const dealLegalStatuses = ["notStarted", "drafting", "inReview", "signed", "completed", "blocked"];
 const propertyCategories = ["Residential", "Commercial", "Land", "Estate", "Apartment", "Detached house", "Semi-detached house", "Terrace", "Office", "Shop", "Warehouse", "Mixed-use", "Short-let", "Other"];
 const listingStatuses = ["listed", "draft", "private", "offMarket"];
 const marketingStatuses = ["active", "paused", "needsMedia", "comingSoon", "archived"];
@@ -121,6 +125,43 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "status", label: "Status", type: "text" },
       { name: "tags", label: "Tags", type: "text" },
       { name: "notes", label: "Notes", type: "textarea" },
+    ],
+  },
+  deals: {
+    collection: "deals",
+    createPermission: "deals.create",
+    editPermission: "deals.update",
+    emptyTitle: "No deals have been opened yet.",
+    listPermission: "deals.read",
+    prefix: "DEAL",
+    route: "/deals",
+    title: "Deals",
+    fields: [
+      { name: "title", label: "Deal title", placeholder: "Example: Lekki Phase 1 Duplex Sale", required: true, section: "Deal basics", type: "text" },
+      { name: "dealType", label: "Deal type", options: dealTypes, required: true, section: "Deal basics", type: "select" },
+      { name: "status", label: "Deal stage", options: dealStatuses, required: true, section: "Deal basics", type: "select" },
+      { helpText: "Internal owner responsible for moving this deal forward.", name: "dealOwnerId", label: "Deal owner", optionSource: "internalManagers", section: "Deal basics", type: "select" },
+      { name: "expectedCloseDate", label: "Expected close date", section: "Deal basics", type: "date" },
+      { name: "closeProbability", label: "Close probability %", section: "Deal basics", type: "number" },
+
+      { helpText: "Optional: link the original lead so history and source context are preserved.", name: "leadId", label: "Linked lead", optionSource: "leads", section: "Linked records", type: "select" },
+      { helpText: "Optional until the buyer, tenant, or investor has a client record.", name: "clientId", label: "Client", optionSource: "clients", section: "Linked records", type: "select" },
+      { name: "propertyId", label: "Property", optionSource: "properties", section: "Linked records", type: "select" },
+      { helpText: "Optional if the deal is for the full property.", name: "unitId", label: "Unit", optionSource: "propertyUnits", section: "Linked records", type: "select" },
+
+      { name: "offerAmount", label: "Offer amount", section: "Commercial terms", type: "number" },
+      { name: "agreedAmount", label: "Agreed amount", section: "Commercial terms", type: "number" },
+      { name: "reservationAmount", label: "Reservation amount", section: "Commercial terms", type: "number" },
+      { name: "depositAmount", label: "Deposit amount", section: "Commercial terms", type: "number" },
+      { name: "financeStatus", label: "Finance status", options: dealFinanceStatuses, section: "Commercial terms", type: "select" },
+      { colSpan: "full", name: "paymentPlan", label: "Payment plan", section: "Commercial terms", type: "textarea" },
+
+      { name: "legalStatus", label: "Legal status", options: dealLegalStatuses, section: "Legal and closing", type: "select" },
+      { name: "commissionType", label: "Commission type", options: ["percentage", "fixed", "none"], section: "Legal and closing", type: "select" },
+      { name: "commissionValue", label: "Commission value", section: "Legal and closing", type: "number" },
+      { helpText: "Calculated from agreed amount first, then offer amount.", name: "commissionAmount", label: "Calculated commission amount", readOnly: true, section: "Legal and closing", type: "number" },
+      { name: "lostReason", label: "Lost reason", section: "Legal and closing", type: "text" },
+      { colSpan: "full", name: "notes", label: "Deal notes", section: "Legal and closing", type: "textarea" },
     ],
   },
   properties: {
@@ -245,7 +286,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "status", label: "Status", options: ["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"], required: true, type: "select" },
       { name: "dueAt", label: "Due date", type: "date" },
       { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", type: "select" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "tenancy", "development", "marketing"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },
@@ -375,7 +416,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "subject", label: "Subject", required: true, type: "text" },
       { name: "body", label: "Details", type: "textarea" },
       { name: "status", label: "Status", type: "text" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },
@@ -407,6 +448,25 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Client", accessorKey: "fullName" },
       { header: "Type", cell: ({ row }) => titleCase(String(row.original.clientType ?? "")) },
       { header: "Phone", cell: ({ row }) => <WhatsAppPhoneLink displayNumber={String(row.original.phoneNumber ?? "")} phoneNumber={String(row.original.phoneNumber ?? "")} /> },
+      statusColumn,
+    ];
+  }
+
+  if (moduleKey === "deals") {
+    return [
+      {
+        header: "Deal",
+        cell: ({ row }) => (
+          <Link className="grid gap-0.5 font-semibold text-primary" href={`/deals/${row.original.id}`}>
+            <span>{String(row.original.title ?? "Deal")}</span>
+            <span className="text-xs font-medium text-muted-foreground">{String(row.original.referenceNumber ?? "Draft")}</span>
+          </Link>
+        ),
+      },
+      { header: "Client/lead", cell: ({ row }) => String(row.original.clientName ?? row.original.leadName ?? "Not linked") },
+      { header: "Property", cell: ({ row }) => String(row.original.unitName ?? row.original.propertyName ?? "Not linked") },
+      { header: "Value", cell: ({ row }) => formatCurrency(Number(row.original.agreedAmount ?? row.original.offerAmount ?? row.original.depositAmount ?? row.original.reservationAmount ?? 0)) },
+      { header: "Owner", cell: ({ row }) => String(row.original.dealOwnerName ?? row.original.dealOwnerEmail ?? "Unassigned") },
       statusColumn,
     ];
   }
@@ -562,4 +622,4 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
   ];
 }
 
-export type ModuleEntity = Activity | Client | DevelopmentProject | Lead | MarketingCampaign | Property | PropertyUnit | RentalTenancy | Task;
+export type ModuleEntity = Activity | Client | Deal | DevelopmentProject | Lead | MarketingCampaign | Property | PropertyUnit | RentalTenancy | Task;

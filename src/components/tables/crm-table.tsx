@@ -5,17 +5,16 @@ import {
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
-  getSortedRowModel,
   useReactTable,
   type ColumnDef,
 } from "@tanstack/react-table";
 import Link from "next/link";
-import { Download, LayoutGrid, List, Search, SlidersHorizontal } from "lucide-react";
-import { useState } from "react";
+import { ArrowDownAZ, Download, LayoutGrid, List, Search, SlidersHorizontal } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/state";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 
 function headerLabel<TData>(column: ColumnDef<TData>) {
   return typeof column.header === "string" ? column.header : "Detail";
@@ -27,13 +26,122 @@ interface CompactContactView<TData> {
   getPhone: (row: TData) => string;
 }
 
-export function CrmTable<TData>({
+const filterCandidateKeys = [
+  "status",
+  "propertyStatus",
+  "paymentStatus",
+  "agreementStatus",
+  "listingStatus",
+  "marketingStatus",
+  "priority",
+  "leadTemperature",
+  "source",
+  "transactionInterest",
+  "category",
+  "city",
+  "propertyType",
+  "clientType",
+  "relatedEntityType",
+  "type",
+];
+
+const sortCandidateKeys = [
+  "updatedAt",
+  "createdAt",
+  "referenceNumber",
+  "fullName",
+  "name",
+  "title",
+  "subject",
+  "tenantName",
+  "unitNumber",
+  "status",
+];
+
+function rawValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+
+  if (typeof value === "object") {
+    if ("toDate" in value && typeof value.toDate === "function") {
+      return (value.toDate() as Date).toISOString();
+    }
+
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function timestampValue(value: unknown) {
+  const raw = rawValue(value);
+  if (!raw) {
+    return 0;
+  }
+
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function compareValues(a: unknown, b: unknown, direction: "asc" | "desc") {
+  const first = rawValue(a);
+  const second = rawValue(b);
+  const firstDate = timestampValue(a);
+  const secondDate = timestampValue(b);
+  const result = firstDate || secondDate
+    ? firstDate - secondDate
+    : first.localeCompare(second, undefined, { numeric: true, sensitivity: "base" });
+
+  return direction === "asc" ? result : -result;
+}
+
+function csvEscape(value: unknown) {
+  const text = rawValue(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
+}
+
+function downloadCsv<TData extends Record<string, unknown>>(filename: string, rows: TData[]) {
+  const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).filter((key) => !["id", "isDeleted"].includes(key));
+  const csv = [
+    keys.map(csvEscape).join(","),
+    ...rows.map((row) => keys.map((key) => csvEscape(row[key])).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function filterOptions<TData extends Record<string, unknown>>(data: TData[], key: string) {
+  const values = Array.from(new Set(data.map((row) => rawValue(row[key])).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  return values.length > 1 && values.length <= 40 ? values : [];
+}
+
+function defaultSortKey<TData extends Record<string, unknown>>(data: TData[]) {
+  const keys = new Set(data.flatMap((row) => Object.keys(row)));
+  return sortCandidateKeys.find((key) => keys.has(key)) ?? "";
+}
+
+export function CrmTable<TData extends Record<string, unknown>>({
   compactContactView,
   columns,
   data,
   emptyActionHref,
   emptyActionLabel,
   emptyTitle,
+  exportFilename = "records.csv",
 }: {
   compactContactView?: CompactContactView<TData>;
   columns: ColumnDef<TData>[];
@@ -41,27 +149,52 @@ export function CrmTable<TData>({
   emptyActionHref?: string;
   emptyActionLabel?: string;
   emptyTitle: string;
+  exportFilename?: string;
 }) {
   const [globalFilter, setGlobalFilter] = useState("");
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"cards" | "contacts">("cards");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState(() => defaultSortKey(data));
+  const availableFilters = useMemo(() => filterCandidateKeys
+    .map((key) => ({ key, label: titleCase(key), options: filterOptions(data, key) }))
+    .filter((filter) => filter.options.length), [data]);
+  const availableSorts = useMemo(() => sortCandidateKeys
+    .filter((key) => data.some((row) => rawValue(row[key])))
+    .map((key) => ({ key, label: titleCase(key) })), [data]);
+  const operationalData = useMemo(() => {
+    const entries = Object.entries(activeFilters).filter(([, value]) => value);
+    const filtered = entries.length
+      ? data.filter((row) => entries.every(([key, value]) => rawValue(row[key]) === value))
+      : data;
+    const search = globalFilter.trim().toLowerCase();
+    const searched = search
+      ? filtered.filter((row) => Object.values(row).some((value) => rawValue(value).toLowerCase().includes(search)))
+      : filtered;
+
+    if (!sortKey) {
+      return searched;
+    }
+
+    return searched.slice().sort((a, b) => compareValues(a[sortKey], b[sortKey], sortDirection));
+  }, [activeFilters, data, globalFilter, sortDirection, sortKey]);
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     columns,
-    data,
+    data: operationalData,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    globalFilterFn: "includesString",
-    state: { globalFilter },
-    onGlobalFilterChange: setGlobalFilter,
   });
   const filteredCount = table.getFilteredRowModel().rows.length;
+  const exportRows = table.getFilteredRowModel().rows.map((row) => row.original);
   const pageRows = table.getRowModel().rows;
   const pageIndex = table.getState().pagination.pageIndex;
   const pageSize = table.getState().pagination.pageSize;
   const pageStart = filteredCount ? pageIndex * pageSize + 1 : 0;
   const pageEnd = Math.min((pageIndex + 1) * pageSize, filteredCount);
+  const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
 
   if (!data.length) {
     return <EmptyState actionHref={emptyActionHref} actionLabel={emptyActionLabel} title={emptyTitle} />;
@@ -83,7 +216,7 @@ export function CrmTable<TData>({
           />
         </div>
         {compactContactView ? (
-          <div className="grid grid-cols-2 gap-1 rounded-md border bg-muted p-1 lg:hidden">
+          <div className="grid grid-cols-2 gap-1 rounded-md border bg-muted p-1 md:w-52 lg:hidden">
             <Button className="h-9 shadow-none" onClick={() => setMobileView("cards")} size="sm" type="button" variant={mobileView === "cards" ? "primary" : "ghost"}>
               <LayoutGrid className="h-4 w-4" />
               Cards
@@ -95,15 +228,57 @@ export function CrmTable<TData>({
           </div>
         ) : null}
         <div className="grid grid-cols-2 gap-2 md:flex">
-          <Button className="h-11 md:h-10" type="button" variant="outline">
+          <Button className="h-11 md:h-10" disabled={!availableFilters.length && !availableSorts.length} onClick={() => setFiltersOpen((value) => !value)} type="button" variant={filtersOpen || activeFilterCount ? "secondary" : "outline"}>
             <SlidersHorizontal className="h-4 w-4" />
-            Filters
+            Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
           </Button>
-          <Button className="h-11 md:h-10" type="button" variant="outline">
+          <Button className="h-11 md:h-10" disabled={!exportRows.length} onClick={() => downloadCsv(exportFilename, exportRows)} type="button" variant="outline">
             <Download className="h-4 w-4" />
             Export
           </Button>
         </div>
+      </div>
+      <div className={cn("grid gap-3 border-b bg-muted/30 p-3 md:grid-cols-[1fr_auto_auto] md:items-end md:p-4", !filtersOpen && !activeFilterCount && "hidden")}>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {availableFilters.map((filter) => (
+            <label className="grid gap-1.5 text-sm font-medium" key={filter.key}>
+              <span>{filter.label}</span>
+              <Select
+                className="h-10"
+                value={activeFilters[filter.key] ?? ""}
+                onChange={(event) => {
+                  setActiveFilters((current) => ({ ...current, [filter.key]: event.target.value }));
+                  table.setPageIndex(0);
+                }}
+              >
+                <option value="">All</option>
+                {filter.options.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
+              </Select>
+            </label>
+          ))}
+        </div>
+        {availableSorts.length ? (
+          <>
+            <label className="grid gap-1.5 text-sm font-medium md:w-56">
+              <span>Sort by</span>
+              <Select className="h-10" value={sortKey} onChange={(event) => setSortKey(event.target.value)}>
+                {availableSorts.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              </Select>
+            </label>
+            <Button className="h-10" onClick={() => setSortDirection((value) => value === "asc" ? "desc" : "asc")} type="button" variant="outline">
+              <ArrowDownAZ className="h-4 w-4" />
+              {sortDirection === "asc" ? "Ascending" : "Descending"}
+            </Button>
+          </>
+        ) : null}
+        {activeFilterCount ? (
+          <Button className="h-10 md:col-start-3" onClick={() => {
+            setActiveFilters({});
+            table.setPageIndex(0);
+          }} type="button" variant="ghost">
+            Clear filters
+          </Button>
+        ) : null}
       </div>
       {pageRows.length ? (
         compactContactView && mobileView === "contacts" ? (

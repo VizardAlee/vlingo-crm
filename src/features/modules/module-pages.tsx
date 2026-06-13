@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Home, ListTodo, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, XCircle } from "lucide-react";
+import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,7 @@ import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
 import type { Member } from "@/types/crm";
 
-type RelatedEntityType = "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
+type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
 
 function relatedTypeForCollection(collection: ModuleConfig["collection"]): RelatedEntityType | null {
   if (collection === "leads") {
@@ -32,6 +32,10 @@ function relatedTypeForCollection(collection: ModuleConfig["collection"]): Relat
 
   if (collection === "clients") {
     return "client";
+  }
+
+  if (collection === "deals") {
+    return "deal";
   }
 
   if (collection === "properties") {
@@ -68,6 +72,10 @@ function collectionForRelatedEntity(type: unknown): ModuleConfig["collection"] |
 
   if (type === "client") {
     return "clients";
+  }
+
+  if (type === "deal") {
+    return "deals";
   }
 
   if (type === "property") {
@@ -117,6 +125,10 @@ function routeForRelatedEntity(type: unknown, id: string) {
 
   if (collectionName === "marketingCampaigns") {
     return `/marketing/${id}`;
+  }
+
+  if (collectionName === "deals") {
+    return `/deals/${id}`;
   }
 
   return `/${collectionName}/${id}`;
@@ -776,6 +788,8 @@ function LeadJourneyPanel({
   const context = user ? { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid } : null;
   const canUpdateLead = hasAnyPermission(member, ["leads.assign", "leads.updateAssigned"]);
   const canCreateActivity = hasPermission(member, "activities.create");
+  const canCreateDeal = hasPermission(member, "deals.create");
+  const canCreateFinance = hasPermission(member, "finance.create");
   const canCreateTask = hasPermission(member, "tasks.create");
 
   async function handleStageSubmit(event: FormEvent<HTMLFormElement>) {
@@ -954,6 +968,18 @@ function LeadJourneyPanel({
           <div className="flex flex-wrap gap-2">
             <Badge tone={statusTone(currentStatus)}>{titleCase(currentStatus)}</Badge>
             <Badge tone={openTasks.length ? "warning" : "muted"}>{openTasks.length} open follow-up{openTasks.length === 1 ? "" : "s"}</Badge>
+            {canCreateDeal && ["qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted"].includes(currentStatus) ? (
+              <ButtonLink href={`/deals/new?leadId=${id}`} size="sm" variant="outline">
+                <Handshake className="h-4 w-4" />
+                Open deal
+              </ButtonLink>
+            ) : null}
+            {canCreateFinance && ["negotiation", "offerMade", "paymentPending", "converted"].includes(currentStatus) ? (
+              <ButtonLink href={`/finance?source=lead:${id}`} size="sm" variant="outline">
+                <ReceiptText className="h-4 w-4" />
+                Create receipt
+              </ButtonLink>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent className="grid gap-5">
@@ -1305,7 +1331,7 @@ export function ModuleListPage({
       </div>
       {config.collection === "propertyUnits" && !error && !loading && records.length ? <UnitInventoryOverview records={records} /> : null}
       {error ? <ErrorState message={error} /> : loading ? <LoadingState label={`Loading ${config.title.toLowerCase()}`} /> : (
-        <CrmTable compactContactView={compactContactView} columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${config.title.slice(0, -1)}`} emptyTitle={config.emptyTitle} />
+        <CrmTable compactContactView={compactContactView} columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${config.title.slice(0, -1)}`} emptyTitle={config.emptyTitle} exportFilename={`${config.collection}.csv`} />
       )}
     </section>
   );
@@ -1490,6 +1516,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
             <GitBranch className="h-4 w-4" />
             Attach document
           </ButtonLink>
+          {config.collection === "deals" && hasPermission(member, "finance.create") ? (
+            <ButtonLink href={`/finance?source=deal:${id}`} variant="outline">
+              <ReceiptText className="h-4 w-4" />
+              Create receipt
+            </ButtonLink>
+          ) : null}
           {config.collection === "properties" && hasPermission(member, "units.create") ? (
             <ButtonLink href={`/units/new?propertyId=${id}`} variant="outline">
               <Building2 className="h-4 w-4" />

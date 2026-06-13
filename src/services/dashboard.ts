@@ -43,6 +43,7 @@ const pipelineStages = [
 
 const sourceColors = ["#b11226", "#202124", "#047857", "#2563eb", "#7c3aed", "#c2410c"];
 const activeDealStatuses = ["qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending"];
+const activeRealDealStatuses = [...activeDealStatuses, "new"];
 const openPipelineStatuses = [...activeDealStatuses, "new", "contacted"];
 
 async function count(path: string, filters: QueryConstraint[] = []) {
@@ -121,6 +122,12 @@ function pipelineValue(rows: Record<string, unknown>[]) {
     .reduce((total, row) => total + Number(row.budgetMaximum ?? row.budgetMinimum ?? 0), 0);
 }
 
+function dealPipelineValue(rows: Record<string, unknown>[]) {
+  return rows
+    .filter((row) => activeRealDealStatuses.includes(String(row.status ?? "")))
+    .reduce((total, row) => total + Number(row.agreedAmount ?? row.offerAmount ?? row.depositAmount ?? row.reservationAmount ?? 0), 0);
+}
+
 function dateFromValue(value: unknown) {
   if (!value) {
     return null;
@@ -162,8 +169,9 @@ function upcomingInspectionCount(rows: Record<string, unknown>[]) {
 export async function getDashboardMetrics(organizationId: string, options: { assignedTo?: string } = {}): Promise<DashboardMetrics> {
   const leadFilters = options.assignedTo ? [where("assignedTo", "==", options.assignedTo)] : [];
   const leadsPath = orgCollectionPath(organizationId, "leads");
+  const dealsPath = orgCollectionPath(organizationId, "deals");
   const tasksPath = orgCollectionPath(organizationId, "tasks");
-  const [totalLeads, qualifiedLeads, activeClients, activeProperties, availableUnits, reservedUnits, overdueFollowUps, leads, recentActivities] =
+  const [totalLeads, qualifiedLeads, activeClients, activeProperties, availableUnits, reservedUnits, overdueFollowUps, leads, deals, recentActivities] =
     await Promise.all([
       count(leadsPath, leadFilters),
       count(leadsPath, [...leadFilters, where("status", "==", "qualified")]),
@@ -173,9 +181,11 @@ export async function getDashboardMetrics(organizationId: string, options: { ass
       count(orgCollectionPath(organizationId, "propertyUnits"), [where("status", "==", "reserved")]),
       count(tasksPath, [where("status", "==", "overdue")]),
       listRecords(leadsPath, leadFilters, 250),
+      listRecords(dealsPath, [], 250),
       listRecentActivities(organizationId),
     ]);
   const statusCounts = countRows(leads, "status");
+  const hasDeals = deals.length > 0;
 
   return {
     totalLeads,
@@ -184,8 +194,10 @@ export async function getDashboardMetrics(organizationId: string, options: { ass
     activeProperties,
     availableUnits,
     reservedUnits,
-    activeDeals: leads.filter((lead) => activeDealStatuses.includes(String(lead.status ?? ""))).length,
-    pipelineValue: pipelineValue(leads),
+    activeDeals: hasDeals
+      ? deals.filter((deal) => activeRealDealStatuses.includes(String(deal.status ?? ""))).length
+      : leads.filter((lead) => activeDealStatuses.includes(String(lead.status ?? ""))).length,
+    pipelineValue: hasDeals ? dealPipelineValue(deals) : pipelineValue(leads),
     upcomingInspections: upcomingInspectionCount(leads),
     overdueFollowUps,
     leadPipeline: pipelineStages.map((stage) => ({ name: stage.name, value: statusCounts[stage.key] ?? 0 })),
