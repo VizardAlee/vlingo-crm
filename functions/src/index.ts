@@ -2,7 +2,6 @@ import { initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import nodemailer from "nodemailer";
 
 initializeApp();
 
@@ -172,32 +171,6 @@ async function getOrCreateUser(email: string, displayName: string): Promise<User
   }
 }
 
-function smtpPort() {
-  const value = Number(process.env.SMTP_PORT ?? 587);
-  return Number.isFinite(value) ? value : 587;
-}
-
-function smtpConfig() {
-  const host = process.env.SMTP_HOST?.trim();
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASSWORD;
-  const from = process.env.SMTP_FROM?.trim() || user;
-
-  if (!host || !user || !pass || !from) {
-    return null;
-  }
-
-  const port = smtpPort();
-  return {
-    from,
-    host,
-    pass,
-    port,
-    secure: process.env.SMTP_SECURE === "true" || port === 465,
-    user,
-  };
-}
-
 function inviteUrl() {
   if (!appBaseUrl) {
     return undefined;
@@ -206,79 +179,22 @@ function inviteUrl() {
   return `${appBaseUrl.replace(/\/$/, "")}/login`;
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function inviteEmailText(params: { displayName: string; setupLink: string }) {
-  return [
-    `Hello ${params.displayName},`,
-    "",
-    "You have been invited to Beacon Operations CRM.",
-    "",
-    "Use the link below to set your password and sign in:",
-    params.setupLink,
-    "",
-    "If you were not expecting this invite, you can ignore this email.",
-  ].join("\n");
-}
-
-function inviteEmailHtml(params: { displayName: string; setupLink: string }) {
-  const displayName = escapeHtml(params.displayName);
-  const setupLink = escapeHtml(params.setupLink);
-
-  return `
-    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
-      <p>Hello ${displayName},</p>
-      <p>You have been invited to Beacon Operations CRM.</p>
-      <p><a href="${setupLink}" style="display:inline-block;background:#111827;color:#fff;padding:10px 14px;border-radius:6px;text-decoration:none">Set password</a></p>
-      <p>If the button does not work, copy and paste this link into your browser:</p>
-      <p style="word-break:break-all">${setupLink}</p>
-      <p>If you were not expecting this invite, you can ignore this email.</p>
-    </div>
-  `;
-}
-
-async function sendInviteEmail(params: { displayName: string; email: string }) {
-  const config = smtpConfig();
-  if (!config) {
-    return { error: "SMTP is not configured for Cloud Functions.", sent: false };
+async function generateInviteLink(email: string) {
+  const continueUrl = inviteUrl();
+  if (!continueUrl) {
+    return auth.generatePasswordResetLink(email);
   }
 
   try {
-    const continueUrl = inviteUrl();
-    const setupLink = await auth.generatePasswordResetLink(
-      params.email,
-      continueUrl ? { url: continueUrl } : undefined,
-    );
-    const transporter = nodemailer.createTransport({
-      auth: {
-        pass: config.pass,
-        user: config.user,
-      },
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-    });
-
-    await transporter.sendMail({
-      from: config.from,
-      html: inviteEmailHtml({ displayName: params.displayName, setupLink }),
-      subject: "You have been invited to Beacon Operations CRM",
-      text: inviteEmailText({ displayName: params.displayName, setupLink }),
-      to: params.email,
-    });
-
-    return { sent: true };
+    return await auth.generatePasswordResetLink(email, { url: continueUrl });
   } catch (error) {
-    console.error("invite email delivery failed", error);
-    const message = error instanceof Error ? error.message : "SMTP could not send the invite email.";
-    return { error: message, sent: false };
+    const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+    if (code === "auth/unauthorized-continue-uri") {
+      console.warn("APP_BASE_URL is not authorized in Firebase Authentication; generated invite link without continue URL.");
+      return auth.generatePasswordResetLink(email);
+    }
+
+    throw error;
   }
 }
 
@@ -352,7 +268,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
     };
 
     await memberRef.set(payload, { merge: true });
-    const inviteEmail = await sendInviteEmail({ displayName, email });
+    const setupLink = await generateInviteLink(email);
 
     await writeAuditLog({
       action: previous.exists ? "member.updateInvite" : "member.invite",
@@ -361,15 +277,14 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
       branchId,
       entityId: user.uid,
       entityType: "member",
-      newValue: { branchId, displayName, email, role, setupEmailSent: inviteEmail.sent, status: "active" },
+      newValue: { branchId, displayName, email, role, setupLinkGenerated: true, status: "active" },
       organizationId,
       previousValue: previous.exists ? previous.data() : null,
     });
 
     return {
       email,
-      setupEmailError: inviteEmail.sent ? undefined : inviteEmail.error,
-      setupEmailSent: inviteEmail.sent,
+      setupLink,
       uid: user.uid,
     };
   } catch (error) {

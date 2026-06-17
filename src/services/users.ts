@@ -24,8 +24,7 @@ export interface UpdateMemberInput {
 
 interface InviteUserResult {
   email: string;
-  setupEmailError?: string;
-  setupEmailSent: boolean;
+  setupLink: string;
   uid: string;
 }
 

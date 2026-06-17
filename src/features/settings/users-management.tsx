@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, MailPlus, Pencil, Power, PowerOff, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
+import { CheckCircle2, Copy, Link2, MailPlus, Pencil, Power, PowerOff, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ export function UsersManagement() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [generatedInvite, setGeneratedInvite] = useState<{ email: string; setupLink: string } | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const assignableRoles = useMemo(() => roles.filter((role) => canAssignRole(member, role)), [member]);
@@ -77,6 +78,7 @@ export function UsersManagement() {
     event.preventDefault();
     setSaving("invite");
     setError(null);
+    setGeneratedInvite(null);
     setSuccess(null);
     try {
       const payload: InviteUserInput = {
@@ -85,14 +87,26 @@ export function UsersManagement() {
       };
       const result = await inviteOrganizationMember(payload);
       setInvite({ ...defaultInvite, branchId: branches[0]?.id ?? "head-office" });
-      setSuccess(result.setupEmailSent
-        ? `Invitation email sent to ${payload.email}.`
-        : `User was created, but the invitation email was not sent. ${result.setupEmailError ?? "Check SMTP configuration."}`);
+      setGeneratedInvite({ email: result.email, setupLink: result.setupLink });
+      setSuccess(`User created. Copy the setup link and share it with ${payload.email}.`);
       await loadUsers();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to invite user.");
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function copyInviteLink() {
+    if (!generatedInvite) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(generatedInvite.setupLink);
+      setSuccess(`Setup link copied for ${generatedInvite.email}.`);
+    } catch {
+      setError("Unable to copy automatically. Select and copy the setup link manually.");
     }
   }
 
@@ -165,6 +179,27 @@ export function UsersManagement() {
         </div>
       ) : null}
 
+      {generatedInvite ? (
+        <div className="grid gap-3 rounded-md border bg-white p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+              <Link2 className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold">Setup link ready</p>
+              <p className="text-sm text-muted-foreground">Share this link with {generatedInvite.email}. The user will use it to set their password.</p>
+            </div>
+          </div>
+          <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+            <Input aria-label="Generated setup link" readOnly value={generatedInvite.setupLink} onFocus={(event) => event.currentTarget.select()} />
+            <Button className="h-10" onClick={copyInviteLink} type="button" variant="outline">
+              <Copy className="h-4 w-4" />
+              Copy link
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Invite User</CardTitle>
@@ -193,7 +228,7 @@ export function UsersManagement() {
             <div className="lg:col-span-5 lg:flex lg:justify-end">
               <Button className="h-11 w-full lg:w-auto" disabled={saving === "invite"} type="submit">
                 <MailPlus className="h-4 w-4" />
-                {saving === "invite" ? "Inviting" : "Invite and send setup email"}
+                {saving === "invite" ? "Generating link" : "Invite and generate link"}
               </Button>
             </div>
           </form>

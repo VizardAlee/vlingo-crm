@@ -52,19 +52,13 @@ gcloud projects add-iam-policy-binding beacon-operations-crm \
   --condition=None
 ```
 
-7. Configure SMTP for invite emails in the Functions runtime environment. The invite workflow provisions the user first, then sends a Firebase password setup link through SMTP. Required runtime variables are:
+7. Configure invite setup links in the Functions runtime environment. The invite workflow provisions the user first, then generates a Firebase password setup link that admins can copy and share manually. `APP_BASE_URL` is optional, but recommended so the setup flow returns to the app:
 
 ```bash
 APP_BASE_URL="https://your-app.example.com"
-SMTP_HOST="smtp.example.com"
-SMTP_PORT="587"
-SMTP_SECURE="false"
-SMTP_USER="no-reply@example.com"
-SMTP_PASSWORD="smtp-password"
-SMTP_FROM="Beacon Operations CRM <no-reply@example.com>"
 ```
 
-For local or Firebase CLI-managed Function deployments, put these in a Functions environment file such as `functions/.env.beacon-operations-crm`. For deployed Gen 2 Functions, confirm the same variables are present on the Cloud Run service for `provisionOrganizationMember`.
+If `APP_BASE_URL` is set, add its domain to Firebase Authentication authorized domains. For local or Firebase CLI-managed Function deployments, put the variable in a Functions environment file such as `functions/.env.beacon-operations-crm`. For deployed Gen 2 Functions, confirm the same variable is present on the Cloud Run service for `provisionOrganizationMember`.
 
 8. Create the first admin:
 
