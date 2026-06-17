@@ -60,13 +60,19 @@ APP_BASE_URL="https://your-app.example.com"
 
 If `APP_BASE_URL` is set, add its domain to Firebase Authentication authorized domains. For local or Firebase CLI-managed Function deployments, put the variable in a Functions environment file such as `functions/.env.beacon-operations-crm`. For deployed Gen 2 Functions, confirm the same variable is present on the Cloud Run service for `provisionOrganizationMember`.
 
-8. Create the first admin:
+8. Configure user SMTP settings encryption before enabling client/lead email. `MAIL_SETTINGS_ENCRYPTION_KEY` is required by the Functions runtime and must be at least 32 characters. Treat it as a secret; prefer Secret Manager or a protected Functions environment file:
+
+```bash
+MAIL_SETTINGS_ENCRYPTION_KEY="replace-with-a-long-random-secret"
+```
+
+9. Create the first admin:
 
 ```bash
 FIRST_ADMIN_UID="firebase-auth-uid" FIRST_ADMIN_EMAIL="admin@example.com" npm run create:first-admin
 ```
 
-9. Sync role permissions after role changes:
+10. Sync role permissions after role changes:
 
 ```bash
 npm run sync:roles

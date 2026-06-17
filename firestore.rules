@@ -232,6 +232,10 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /mailSettings/{userId} {
+        allow read, write: if false;
+      }
+
       match /tasks/{taskId} {
         allow read: if hasPermission(orgId, "tasks.read") &&
           (resource.data.assignedTo == request.auth.uid || hasAnyPermission(orgId, ["dashboard.viewExecutive", "users.manage"]));

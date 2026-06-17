@@ -1,7 +1,9 @@
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import nodemailer from "nodemailer";
 
 initializeApp();
 
@@ -72,9 +74,23 @@ const rolePermissions = {
 type RoleName = keyof typeof rolePermissions;
 
 interface ActorContext {
+  branchId: string;
   displayName: string;
+  email: string;
   permissions: string[];
   role: string;
+}
+
+interface EmailSettingsPayload {
+  enabled: boolean;
+  host: string;
+  password?: string;
+  port: number;
+  replyTo?: string;
+  secureMode: "none" | "ssl" | "starttls";
+  senderEmail: string;
+  senderName: string;
+  username: string;
 }
 
 function requireString(value: unknown, field: string) {
@@ -103,21 +119,51 @@ function requireEmail(value: unknown) {
   return email;
 }
 
+function requireNumber(value: unknown, field: string) {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) {
+    throw new HttpsError("invalid-argument", `${field} must be a number.`);
+  }
+
+  return number;
+}
+
+function requireSecureMode(value: unknown) {
+  const mode = typeof value === "string" ? value : "";
+  if (!["none", "ssl", "starttls"].includes(mode)) {
+    throw new HttpsError("invalid-argument", "secureMode must be none, ssl, or starttls.");
+  }
+
+  return mode as EmailSettingsPayload["secureMode"];
+}
+
 function isPrivilegedRole(role: RoleName) {
   return role === "superAdmin" || role === "managingDirector" || rolePermissions[role].some((permission) => ["users.manage", "roles.manage"].includes(permission));
 }
 
 async function getActor(uid: string, organizationId: string): Promise<ActorContext> {
+  const actor = await getActiveMember(uid, organizationId);
+
+  if (!actor.permissions.includes("users.manage")) {
+    throw new HttpsError("permission-denied", "You do not have permission to manage organization members.");
+  }
+
+  return actor;
+}
+
+async function getActiveMember(uid: string, organizationId: string): Promise<ActorContext> {
   const member = await db.doc(`organizations/${organizationId}/members/${uid}`).get();
   const data = member.data();
   const permissions = data?.permissions as string[] | undefined;
 
-  if (!member.exists || data?.status !== "active" || !permissions?.includes("users.manage")) {
-    throw new HttpsError("permission-denied", "You do not have permission to manage organization members.");
+  if (!member.exists || data?.status !== "active" || !permissions) {
+    throw new HttpsError("permission-denied", "You do not have access to this organization.");
   }
 
   return {
+    branchId: typeof data?.branchId === "string" ? data.branchId : "",
     displayName: typeof data?.displayName === "string" ? data.displayName : uid,
+    email: typeof data?.email === "string" ? data.email : "",
     permissions,
     role: typeof data?.role === "string" ? data.role : "unknown",
   };
@@ -152,6 +198,99 @@ async function writeAuditLog(params: {
     organizationId: params.organizationId,
     previousValue: params.previousValue ?? null,
   });
+}
+
+function encryptionKey() {
+  const secret = process.env.MAIL_SETTINGS_ENCRYPTION_KEY;
+  if (!secret || secret.length < 32) {
+    throw new HttpsError("failed-precondition", "MAIL_SETTINGS_ENCRYPTION_KEY must be configured with at least 32 characters.");
+  }
+
+  return createHash("sha256").update(secret).digest();
+}
+
+function encryptSecret(value: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, tag, encrypted].map((part) => part.toString("base64url")).join(".");
+}
+
+function decryptSecret(value: string) {
+  const [ivValue, tagValue, encryptedValue] = value.split(".");
+  if (!ivValue || !tagValue || !encryptedValue) {
+    throw new HttpsError("failed-precondition", "Saved SMTP password is not readable.");
+  }
+
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivValue, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedValue, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
+function parseEmailSettingsPayload(data: unknown): EmailSettingsPayload {
+  const record = typeof data === "object" && data ? data as Record<string, unknown> : {};
+  const port = requireNumber(record.port, "port");
+  if (port < 1 || port > 65535) {
+    throw new HttpsError("invalid-argument", "port must be between 1 and 65535.");
+  }
+
+  return {
+    enabled: record.enabled === true,
+    host: requireString(record.host, "host"),
+    password: typeof record.password === "string" && record.password ? record.password : undefined,
+    port,
+    replyTo: typeof record.replyTo === "string" && record.replyTo.trim() ? requireEmail(record.replyTo) : undefined,
+    secureMode: requireSecureMode(record.secureMode),
+    senderEmail: requireEmail(record.senderEmail),
+    senderName: requireString(record.senderName, "senderName"),
+    username: requireString(record.username, "username"),
+  };
+}
+
+function sanitizeEmailSettings(data: DocumentData | undefined, member: ActorContext) {
+  return {
+    enabled: data?.enabled === true,
+    hasPassword: typeof data?.encryptedPassword === "string" && Boolean(data.encryptedPassword),
+    host: typeof data?.host === "string" ? data.host : "",
+    port: typeof data?.port === "number" ? data.port : 587,
+    replyTo: typeof data?.replyTo === "string" ? data.replyTo : "",
+    secureMode: typeof data?.secureMode === "string" ? data.secureMode : "starttls",
+    senderEmail: typeof data?.senderEmail === "string" ? data.senderEmail : member.email,
+    senderName: typeof data?.senderName === "string" ? data.senderName : member.displayName,
+    username: typeof data?.username === "string" ? data.username : member.email,
+    updatedAt: data?.updatedAt ?? null,
+  };
+}
+
+function emailSettingsDoc(organizationId: string, uid: string) {
+  return db.doc(`organizations/${organizationId}/mailSettings/${uid}`);
+}
+
+function smtpTransport(settings: DocumentData) {
+  if (!settings.encryptedPassword || typeof settings.encryptedPassword !== "string") {
+    throw new HttpsError("failed-precondition", "Save your SMTP password before sending a test email.");
+  }
+
+  const secureMode = settings.secureMode === "ssl" ? "ssl" : settings.secureMode === "none" ? "none" : "starttls";
+  return nodemailer.createTransport({
+    auth: {
+      pass: decryptSecret(settings.encryptedPassword),
+      user: String(settings.username),
+    },
+    host: String(settings.host),
+    port: Number(settings.port),
+    requireTLS: secureMode === "starttls",
+    secure: secureMode === "ssl",
+  });
+}
+
+function formattedSender(settings: DocumentData) {
+  const name = String(settings.senderName ?? "").replace(/"/g, "'");
+  return name ? `"${name}" <${String(settings.senderEmail)}>` : String(settings.senderEmail);
 }
 
 async function getOrCreateUser(email: string, displayName: string): Promise<UserRecord> {
@@ -290,6 +429,119 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
   } catch (error) {
     throw inviteError(error);
   }
+});
+
+export const getEmailSmtpSettings = onCall(callableOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const member = await getActiveMember(request.auth.uid, organizationId);
+  const snapshot = await emailSettingsDoc(organizationId, request.auth.uid).get();
+  return sanitizeEmailSettings(snapshot.data(), member);
+});
+
+export const saveEmailSmtpSettings = onCall(callableOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const member = await getActiveMember(request.auth.uid, organizationId);
+  const payload = parseEmailSettingsPayload(request.data);
+  const ref = emailSettingsDoc(organizationId, request.auth.uid);
+  const previous = await ref.get();
+  const previousData = previous.data();
+  const encryptedPassword = payload.password ? encryptSecret(payload.password) : previousData?.encryptedPassword;
+
+  if (!encryptedPassword) {
+    throw new HttpsError("failed-precondition", "Enter your SMTP password before saving email settings.");
+  }
+
+  await ref.set({
+    enabled: payload.enabled,
+    encryptedPassword,
+    host: payload.host,
+    organizationId,
+    ownerId: request.auth.uid,
+    port: payload.port,
+    replyTo: payload.replyTo ?? "",
+    secureMode: payload.secureMode,
+    senderEmail: payload.senderEmail,
+    senderName: payload.senderName,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid,
+    username: payload.username,
+  }, { merge: true });
+
+  await writeAuditLog({
+    action: previous.exists ? "emailSettings.update" : "emailSettings.create",
+    actorId: request.auth.uid,
+    actorName: member.displayName,
+    branchId: member.branchId,
+    entityId: request.auth.uid,
+    entityType: "mailSettings",
+    newValue: {
+      enabled: payload.enabled,
+      host: payload.host,
+      port: payload.port,
+      secureMode: payload.secureMode,
+      senderEmail: payload.senderEmail,
+      username: payload.username,
+    },
+    organizationId,
+    previousValue: previous.exists ? {
+      enabled: previousData?.enabled,
+      host: previousData?.host,
+      port: previousData?.port,
+      secureMode: previousData?.secureMode,
+      senderEmail: previousData?.senderEmail,
+      username: previousData?.username,
+    } : null,
+  });
+
+  const next = await ref.get();
+  return sanitizeEmailSettings(next.data(), member);
+});
+
+export const sendEmailSmtpTest = onCall(callableOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const member = await getActiveMember(request.auth.uid, organizationId);
+  const recipient = typeof request.data?.recipient === "string" && request.data.recipient.trim()
+    ? requireEmail(request.data.recipient)
+    : member.email;
+  const snapshot = await emailSettingsDoc(organizationId, request.auth.uid).get();
+  const settings = snapshot.data();
+  if (!snapshot.exists || !settings) {
+    throw new HttpsError("failed-precondition", "Save your SMTP settings before sending a test email.");
+  }
+
+  const transport = smtpTransport(settings);
+  await transport.sendMail({
+    from: formattedSender(settings),
+    replyTo: settings.replyTo || settings.senderEmail,
+    subject: "Beacon Operations CRM SMTP test",
+    text: "This is a test email from your Beacon Operations CRM email settings.",
+    to: recipient,
+  });
+
+  await writeAuditLog({
+    action: "emailSettings.test",
+    actorId: request.auth.uid,
+    actorName: member.displayName,
+    branchId: member.branchId,
+    entityId: request.auth.uid,
+    entityType: "mailSettings",
+    newValue: { recipient },
+    organizationId,
+  });
+
+  return { ok: true };
 });
 
 export const updateOrganizationMemberRole = onCall(callableOptions, async (request) => {
