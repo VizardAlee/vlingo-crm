@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { approvalTone, createReceiptNumber, paymentStatusForAmount, paymentTotal, rentalBalance } from "@/features/finance/finance-utils";
+import { approvalTone, createReceiptNumber, dealPaymentSummary, dealTargetAmount, paymentStatusForAmount, paymentTotal, rentalBalance } from "@/features/finance/finance-utils";
 import { hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
@@ -100,16 +100,21 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
   return [
     ...deals
       .filter((deal) => !["lost", "dormant"].includes(String(deal.status ?? "")))
-      .map((deal) => ({
-        amount: Number(deal.agreedAmount ?? deal.offerAmount ?? deal.depositAmount ?? deal.reservationAmount ?? 0),
-        label: `Deal: ${deal.title ?? deal.referenceNumber ?? "Deal"} (${titleCase(String(deal.status ?? "new"))})`,
-        payerName: deal.clientName ?? deal.leadName ?? "",
-        propertyName: [deal.unitName, deal.propertyName].filter(Boolean).join(" · "),
-        reference: deal.referenceNumber ?? "",
-        sourceId: deal.id,
-        sourceType: "deal" as const,
-        value: `deal:${deal.id}`,
-      })),
+      .map((deal) => {
+        const targetAmount = dealTargetAmount(deal);
+        const recordedAmount = Number(deal.paidAmount ?? 0) + Number(deal.pendingPaymentAmount ?? 0);
+
+        return {
+          amount: Math.max(targetAmount - recordedAmount, 0) || targetAmount,
+          label: `Deal: ${deal.title ?? deal.referenceNumber ?? "Deal"} (${titleCase(String(deal.financeStatus ?? deal.status ?? "new"))})`,
+          payerName: deal.clientName ?? deal.leadName ?? "",
+          propertyName: [deal.unitName, deal.propertyName].filter(Boolean).join(" · "),
+          reference: deal.referenceNumber ?? "",
+          sourceId: deal.id,
+          sourceType: "deal" as const,
+          value: `deal:${deal.id}`,
+        };
+      }),
     ...leads
       .filter((lead) => !["lost", "dormant"].includes(String(lead.status ?? "")))
       .map((lead) => ({
@@ -216,6 +221,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
   const canReadFinance = hasPermission(member, "reports.viewFinancial");
   const canCreateFinance = hasPermission(member, "finance.create");
   const canApproveFinance = hasPermission(member, "finance.approve");
+  const canUpdateDeal = hasPermission(member, "deals.update") || hasPermission(member, "finance.update") || hasPermission(member, "finance.approve");
   const canUpdateRental = hasPermission(member, "rentals.update");
   const canCreateActivity = hasPermission(member, "activities.create");
 
@@ -406,6 +412,21 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
         tenantName: rental?.tenantName ?? "",
         verificationStatus: "pending",
       }, context, "PAY");
+      const createdPayment = {
+        amount,
+        at: paymentForm.at,
+        id: paymentId,
+        method: paymentForm.method,
+        payerName: paymentForm.payerName.trim() || source.payerName || "Payer",
+        paymentReference: paymentForm.paymentReference.trim(),
+        propertyName: source.propertyName,
+        receiptNumber,
+        referenceNumber: receiptNumber,
+        sourceId: source.sourceId,
+        sourceReference: source.reference,
+        sourceType: source.sourceType,
+        verificationStatus: "pending" as const,
+      } as FinancePayment;
 
       if (rental && paymentStatus) {
         const paymentEntry: RentalPaymentRecord = {
@@ -427,6 +448,10 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
           paymentStatus,
           status: String(rental.status ?? "draft") === "draft" ? "active" : rental.status,
         }, context);
+      }
+
+      if (source.sourceType === "deal") {
+        await syncDealPaymentSummary(source.sourceId, [...payments, createdPayment]);
       }
 
       if (canCreateActivity) {
@@ -563,6 +588,29 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     await updateOrgRecord("rentalTenancies", rental.id, { paymentHistory: nextHistory, paymentStatus: nextPaymentStatus }, context);
   }
 
+  async function syncDealPaymentSummary(dealId: string, nextPayments: FinancePayment[]) {
+    const deal = deals.find((item) => item.id === dealId);
+    if (!deal || !context || !canUpdateDeal) {
+      return;
+    }
+
+    const dealPayments = nextPayments.filter((payment) => payment.sourceType === "deal" && payment.sourceId === dealId);
+    const summary = dealPaymentSummary(dealTargetAmount(deal), dealPayments);
+    const latestPayment = dealPayments
+      .slice()
+      .sort((a, b) => sortByDateDesc(a.at, b.at))[0];
+
+    await updateOrgRecord("deals", deal.id, {
+      balanceAmount: summary.balanceAmount,
+      financeStatus: summary.financeStatus,
+      lastPaymentAmount: latestPayment ? Number(latestPayment.amount ?? 0) : 0,
+      lastPaymentAt: latestPayment?.at ?? "",
+      lastReceiptNumber: latestPayment?.receiptNumber ?? "",
+      paidAmount: summary.paidAmount,
+      pendingPaymentAmount: summary.pendingPaymentAmount,
+    }, context);
+  }
+
   async function updateFinanceAction(collectionName: FinanceActionCollection, id: string, payload: Record<string, unknown>, label: string) {
     if (!context) {
       setError("You must be signed in to update finance records.");
@@ -590,11 +638,28 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
       return;
     }
 
-    const payload = verificationStatus === "verified"
+    const payload: Record<string, unknown> = verificationStatus === "verified"
       ? { verificationStatus, verifiedAt: new Date().toISOString(), verifiedBy: context.userId }
       : { rejectionReason: "Rejected from finance workspace.", rejectedAt: new Date().toISOString(), rejectedBy: context.userId, verificationStatus };
-    await updateFinanceAction("financePayments", payment.id, payload, `Receipt ${payment.receiptNumber} ${verificationStatus}.`);
-    await syncRentalPaymentVerification(payment, verificationStatus);
+    setSaving(`financePayments:${payment.id}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      await updateOrgRecord("financePayments", payment.id, payload, context);
+      await writeAuditLog(context, "finance.financePayments.update", "financePayments", payment.id, payload);
+      const nextPayment = { ...payment, ...payload };
+      const nextPayments = payments.map((item) => (item.id === payment.id ? nextPayment : item));
+      await syncRentalPaymentVerification(nextPayment, verificationStatus);
+      if (payment.sourceType === "deal") {
+        await syncDealPaymentSummary(payment.sourceId, nextPayments);
+      }
+      setSuccess(`Receipt ${payment.receiptNumber} ${verificationStatus}.`);
+      await loadFinance();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to update finance record.");
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function setApproval(collectionName: "financeExpenses" | "financeCommissions", id: string, status: FinanceApprovalStatus) {

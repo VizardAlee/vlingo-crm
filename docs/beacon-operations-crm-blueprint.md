@@ -11,7 +11,7 @@ Beacon Operations CRM is a Firebase-backed Next.js App Router platform for Beaco
 
 ## Firestore Structure
 
-Phase 1 uses `organizations/{organizationId}` plus subcollections for branches, members, roles, leads, clients, properties, propertyUnits, tasks, activities, documents, and auditLogs.
+The app uses `organizations/{organizationId}` plus subcollections for branches, members, roles, leads, clients, deals, properties, propertyUnits, rentalTenancies, developmentProjects, marketingCampaigns, tasks, activities, documents, notifications, financePayments, financeExpenses, financeCommissions, and auditLogs.
 
 Important business records include `organizationId`, `branchId`, creator/updater metadata, `status`, assignment fields, and soft-delete fields where applicable.
 
@@ -32,10 +32,9 @@ Important business records include `organizationId`, `branchId`, creator/updater
 - `npm run test`
 - `npm run test:rules`
 
-## Phase 2 Recommendations
+## Launch Hardening Recommendations
 
-- Complete deals, reservations, allocations, installment plans, payments, receipts, tenancies, leases, maintenance, commissions, and expenses.
 - Move all audit writes to `writeProtectedAuditLog`.
 - Add Cloud Function transactions for duplicate unit prevention and payment verification.
-- Add real document upload workflows with metadata records.
 - Add Playwright end-to-end tests for responsive navigation, forms, and permission routing.
+- Configure backups, monitoring, rollback, and production incident ownership before broad rollout.

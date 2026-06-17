@@ -42,6 +42,16 @@ describe("Beacon Storage rules", () => {
     await assertFails(uploadString(ref(storage, "organizations/org-b/properties/file.txt"), "unsafe"));
   });
 
+  it("blocks uploads for users without a member record", async () => {
+    const storage = testEnv.authenticatedContext("missing-member").storage();
+    await assertFails(uploadString(ref(storage, "organizations/org-a/properties/file.txt"), "unsafe"));
+  });
+
+  it("blocks unauthenticated uploads without null rule errors", async () => {
+    const storage = testEnv.unauthenticatedContext().storage();
+    await assertFails(uploadString(ref(storage, "organizations/org-a/properties/file.txt"), "unsafe"));
+  });
+
   it("allows permitted uploads in the user's organization", async () => {
     const storage = testEnv.authenticatedContext("manager-1").storage();
     await assertSucceeds(uploadString(ref(storage, "organizations/org-a/properties/file.txt"), "safe"));

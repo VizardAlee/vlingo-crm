@@ -62,6 +62,23 @@ service cloud.firestore {
         hasRole(orgId, ["superAdmin", "operationsManager", "salesManager", "salesExecutive"]);
     }
 
+    function canUpdateDealFinanceSummary(orgId) {
+      return organizationUnchanged(orgId) &&
+        hasAnyPermission(orgId, ["finance.update", "finance.approve"]) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "organizationId",
+          "updatedAt",
+          "updatedBy",
+          "balanceAmount",
+          "financeStatus",
+          "lastPaymentAmount",
+          "lastPaymentAt",
+          "lastReceiptNumber",
+          "paidAmount",
+          "pendingPaymentAmount"
+        ]);
+    }
+
     function canUseDeals(orgId) {
       return canReadDeals(orgId) || canCreateDeals(orgId) || canUpdateDeals(orgId);
     }
@@ -159,7 +176,8 @@ service cloud.firestore {
       match /deals/{dealId} {
         allow read: if canReadDeals(orgId);
         allow create: if canCreateDeals(orgId) && hasMetadata(orgId);
-        allow update: if canUpdateDeals(orgId) && organizationUnchanged(orgId);
+        allow update: if (canUpdateDeals(orgId) && organizationUnchanged(orgId)) ||
+          canUpdateDealFinanceSummary(orgId);
         allow delete: if false;
       }
 

@@ -11,9 +11,9 @@ import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/stat
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission } from "@/lib/permissions";
 import { leadSchema } from "@/lib/validation/schemas";
-import { createOrgRecord, writeAuditLog } from "@/services/repository";
+import { createOrgRecord, listOrgRecords, writeAuditLog } from "@/services/repository";
 import { listBranches, listMembers } from "@/services/users";
-import type { Branch, Member } from "@/types/crm";
+import type { Branch, Member, Property, PropertyUnit } from "@/types/crm";
 
 type LeadFormState = Record<string, string>;
 
@@ -51,6 +51,9 @@ const defaultLead: LeadFormState = {
   notes: "",
   paymentPreference: "notDecided",
   phoneNumber: "",
+  propertyId: "",
+  propertyName: "",
+  propertyReferenceNumber: "",
   preferredBedrooms: "",
   preferredBudgetCurrency: "NGN",
   preferredCity: "",
@@ -68,6 +71,8 @@ const defaultLead: LeadFormState = {
   status: "new",
   tags: "",
   transactionInterest: "buy",
+  unitId: "",
+  unitName: "",
   whatsappNumber: "",
 };
 
@@ -85,6 +90,9 @@ const headerAliases: Record<string, string[]> = {
   notes: ["notes", "comment", "comments", "remark", "remarks"],
   paymentPreference: ["paymentpreference", "paymentplan", "paymentmethod"],
   phoneNumber: ["phone", "phonenumber", "mobile", "mobilenumber", "telephone"],
+  propertyId: ["propertyid", "listingid"],
+  propertyName: ["property", "propertyname", "listing", "listingname"],
+  propertyReferenceNumber: ["propertyreference", "propertyreferencenumber", "listingreference", "propertyref", "listingref"],
   preferredBedrooms: ["bedrooms", "beds", "preferredbedrooms"],
   preferredBudgetCurrency: ["currency", "budgetcurrency", "preferredbudgetcurrency"],
   preferredCity: ["city", "preferredcity"],
@@ -102,6 +110,8 @@ const headerAliases: Record<string, string[]> = {
   status: ["status", "leadstatus", "stage", "pipeline"],
   tags: ["tags", "tag"],
   transactionInterest: ["interest", "transactioninterest", "transaction", "intent"],
+  unitId: ["unitid"],
+  unitName: ["unit", "unitname", "unitnumber"],
   whatsappNumber: ["whatsapp", "whatsappnumber"],
 };
 
@@ -116,6 +126,11 @@ const importFields = [
   { key: "campaignName", label: "Campaign name" },
   { key: "sourceReference", label: "External reference" },
   { key: "transactionInterest", label: "Transaction interest" },
+  { key: "propertyId", label: "Property ID" },
+  { key: "propertyName", label: "Property name" },
+  { key: "propertyReferenceNumber", label: "Property reference" },
+  { key: "unitId", label: "Unit ID" },
+  { key: "unitName", label: "Unit name/number" },
   { key: "propertyType", label: "Property type" },
   { key: "preferredPropertyCategory", label: "Property category" },
   { key: "preferredBedrooms", label: "Bedrooms" },
@@ -143,6 +158,10 @@ function normalizeHeader(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normalizeLookup(value: unknown) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function valueFromRow(row: Record<string, unknown>, field: string, mapping?: Record<string, string>) {
   const mappedHeader = mapping?.[field];
   if (mapping && !mappedHeader) {
@@ -167,6 +186,46 @@ function detectColumnMapping(headers: string[]) {
     const match = headers.find((header) => aliases.some((alias) => normalizeHeader(header) === normalizeHeader(alias)));
     return [key, match ?? ""];
   }));
+}
+
+function findProperty(values: Record<string, string>, properties: Property[]) {
+  const propertyId = values.propertyId;
+  const propertyName = values.propertyName;
+  const propertyReference = values.propertyReferenceNumber;
+  return properties.find((property) => {
+    const candidates = [property.id, property.name, property.referenceNumber].map(normalizeLookup).filter(Boolean);
+    return [propertyId, propertyName, propertyReference].some((value) => value && candidates.includes(normalizeLookup(value)));
+  });
+}
+
+function findUnit(values: Record<string, string>, propertyUnits: PropertyUnit[], propertyId?: string) {
+  const unitId = values.unitId;
+  const unitName = values.unitName;
+  return propertyUnits.find((unit) => {
+    if (propertyId && unit.propertyId !== propertyId) {
+      return false;
+    }
+
+    const candidates = [unit.id, unit.unitNumber, unit.referenceNumber].map(normalizeLookup).filter(Boolean);
+    return [unitId, unitName].some((value) => value && candidates.includes(normalizeLookup(value)));
+  });
+}
+
+function enrichLeadLinkage<T extends Record<string, unknown>>(payload: T, properties: Property[], propertyUnits: PropertyUnit[]) {
+  const values = Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value ?? "")]));
+  const linkedProperty = findProperty(values, properties);
+  const linkedUnit = findUnit(values, propertyUnits, linkedProperty?.id) ?? findUnit(values, propertyUnits);
+  const unitProperty = linkedUnit ? properties.find((property) => property.id === linkedUnit.propertyId) : undefined;
+  const property = linkedProperty ?? unitProperty;
+
+  return {
+    ...payload,
+    propertyId: property?.id ?? payload.propertyId ?? "",
+    propertyName: property?.name ?? linkedUnit?.propertyName ?? payload.propertyName ?? "",
+    propertyReferenceNumber: property?.referenceNumber ?? linkedUnit?.propertyReferenceNumber ?? payload.propertyReferenceNumber ?? "",
+    unitId: linkedUnit?.id ?? payload.unitId ?? "",
+    unitName: linkedUnit?.unitNumber ?? payload.unitName ?? "",
+  };
 }
 
 function cleanHeaderRow(headers: unknown[]) {
@@ -213,7 +272,7 @@ function formToLeadPayload(values: LeadFormState) {
   };
 }
 
-function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormState, mapping?: Record<string, string>) {
+function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormState, properties: Property[], propertyUnits: PropertyUnit[], mapping?: Record<string, string>) {
   return rows.map<PreviewLead>((row, index) => {
     const values = { ...defaults };
     importFields.forEach(({ key }) => {
@@ -230,9 +289,10 @@ function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormSta
     values.status = values.status || "new";
     values.assignedTo = values.assignedTo || defaults.assignedTo;
 
-    const parsed = leadSchema.safeParse(formToLeadPayload(values));
+    const enrichedPayload = enrichLeadLinkage(formToLeadPayload(values), properties, propertyUnits);
+    const parsed = leadSchema.safeParse(enrichedPayload);
     return {
-      data: parsed.success ? parsed.data as Record<string, unknown> : formToLeadPayload(values),
+      data: parsed.success ? parsed.data as Record<string, unknown> : enrichedPayload,
       errors: parsed.success ? [] : parsed.error.issues.map((issue) => `${String(issue.path[0])}: ${issue.message}`),
       rowNumber: index + 2,
     };
@@ -309,6 +369,8 @@ function downloadTemplate() {
     "sourcePlatform",
     "campaignName",
     "transactionInterest",
+    "propertyReferenceNumber",
+    "unitName",
     "propertyType",
     "preferredLocation",
     "preferredState",
@@ -329,6 +391,8 @@ function downloadTemplate() {
     "Meta",
     "Lekki Q2 Campaign",
     "buy",
+    "PROP-2026-001",
+    "Block A - Unit 3",
     "Apartment",
     "Lekki Phase 1",
     "Lagos",
@@ -354,6 +418,8 @@ export function LeadCreatePage() {
   const [mode, setMode] = useState<"manual" | "import">("manual");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [propertyUnits, setPropertyUnits] = useState<PropertyUnit[]>([]);
   const [branchId, setBranchId] = useState("");
   const [values, setValues] = useState<LeadFormState>(defaultLead);
   const [importHeaders, setImportHeaders] = useState<string[]>([]);
@@ -366,15 +432,38 @@ export function LeadCreatePage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const assignableMembers = useMemo(() => members.filter((item) => item.status === "active"), [members]);
+  const propertyOptions = useMemo(
+    () => properties.map((property) => {
+      const detail = [property.city, property.referenceNumber].filter(Boolean).join(" · ");
+      return { label: detail ? `${property.name} (${detail})` : property.name, value: property.id };
+    }),
+    [properties],
+  );
+  const unitOptions = useMemo(
+    () => propertyUnits
+      .filter((unit) => !values.propertyId || unit.propertyId === values.propertyId)
+      .map((unit) => {
+        const detail = [unit.propertyName, unit.referenceNumber].filter(Boolean).join(" · ");
+        return { label: detail ? `${unit.unitNumber} (${detail})` : unit.unitNumber, value: unit.id };
+      }),
+    [propertyUnits, values.propertyId],
+  );
   const validPreviewRows = preview.filter((row) => row.errors.length === 0);
 
   const loadOptions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [nextBranches, nextMembers] = await Promise.all([listBranches(activeOrganizationId), listMembers(activeOrganizationId)]);
+      const [nextBranches, nextMembers, nextProperties, nextPropertyUnits] = await Promise.all([
+        listBranches(activeOrganizationId),
+        listMembers(activeOrganizationId),
+        listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+        listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
+      ]);
       setBranches(nextBranches);
       setMembers(nextMembers);
+      setProperties(nextProperties);
+      setPropertyUnits(nextPropertyUnits);
       setBranchId((current) => current || nextBranches[0]?.id || "");
       setValues((current) => ({ ...current, assignedTo: current.assignedTo || user?.uid || nextMembers[0]?.id || "" }));
     } catch (nextError) {
@@ -393,7 +482,28 @@ export function LeadCreatePage() {
   }, [loadOptions]);
 
   function updateField(field: string, value: string) {
-    setValues((current) => ({ ...current, [field]: value }));
+    setValues((current) => {
+      if (field === "propertyId") {
+        const selectedUnit = propertyUnits.find((unit) => unit.id === current.unitId);
+        return {
+          ...current,
+          propertyId: value,
+          unitId: selectedUnit && selectedUnit.propertyId !== value ? "" : current.unitId,
+          unitName: selectedUnit && selectedUnit.propertyId !== value ? "" : current.unitName,
+        };
+      }
+
+      if (field === "unitId") {
+        const selectedUnit = propertyUnits.find((unit) => unit.id === value);
+        return {
+          ...current,
+          propertyId: selectedUnit?.propertyId ?? current.propertyId,
+          unitId: value,
+        };
+      }
+
+      return { ...current, [field]: value };
+    });
   }
 
   async function createLead(payload: Record<string, unknown>) {
@@ -413,7 +523,7 @@ export function LeadCreatePage() {
     setSuccess(null);
     setSaving(true);
     try {
-      const parsed = leadSchema.safeParse(formToLeadPayload(values));
+      const parsed = leadSchema.safeParse(enrichLeadLinkage(formToLeadPayload(values), properties, propertyUnits));
       if (!parsed.success) {
         setError(parsed.error.issues.map((issue) => `${String(issue.path[0])}: ${issue.message}`).join(" · "));
         return;
@@ -456,7 +566,7 @@ export function LeadCreatePage() {
       setImportHeaders(headers);
       setImportRows(rows);
       setColumnMapping(nextMapping);
-      setPreview(parsePreviewRows(rows, values, nextMapping));
+      setPreview(parsePreviewRows(rows, values, properties, propertyUnits, nextMapping));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to read spreadsheet.");
     }
@@ -466,12 +576,12 @@ export function LeadCreatePage() {
     const next = { ...columnMapping, [field]: header };
     setColumnMapping(next);
     if (importRows.length) {
-      setPreview(parsePreviewRows(importRows, values, next));
+      setPreview(parsePreviewRows(importRows, values, properties, propertyUnits, next));
     }
   }
 
   function refreshImportPreview() {
-    setPreview(parsePreviewRows(importRows, values, columnMapping));
+    setPreview(parsePreviewRows(importRows, values, properties, propertyUnits, columnMapping));
   }
 
   async function importValidRows() {
@@ -596,6 +706,21 @@ export function LeadCreatePage() {
                 <Field label="Bedrooms"><Input min="0" type="number" value={values.preferredBedrooms} onChange={(event) => updateField("preferredBedrooms", event.target.value)} /></Field>
               </div>
 
+              <div className="grid gap-4 rounded-md border bg-muted/30 p-4 lg:grid-cols-2">
+                <Field label="Linked property">
+                  <Select value={values.propertyId} onChange={(event) => updateField("propertyId", event.target.value)}>
+                    <option value="">Select property</option>
+                    {propertyOptions.map((property) => <option key={property.value} value={property.value}>{property.label}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Linked unit">
+                  <Select value={values.unitId} onChange={(event) => updateField("unitId", event.target.value)}>
+                    <option value="">Select unit</option>
+                    {unitOptions.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+                  </Select>
+                </Field>
+              </div>
+
               <div className="grid gap-4 lg:grid-cols-4">
                 <Field label="Preferred location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field>
                 <Field label="State"><Input value={values.preferredState} onChange={(event) => updateField("preferredState", event.target.value)} /></Field>
@@ -705,6 +830,7 @@ export function LeadCreatePage() {
                         <Badge tone={row.errors.length ? "danger" : "success"}>{row.errors.length ? "Issue" : "Valid"}</Badge>
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground">{String(row.data.phoneNumber ?? "No phone")} · {String(row.data.source ?? "No source")}</p>
+                      {row.data.propertyName || row.data.unitName ? <p className="mt-1 text-sm text-muted-foreground">{[row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ")}</p> : null}
                       {row.errors.length ? <p className="mt-2 text-sm text-destructive">{row.errors.join(" · ")}</p> : null}
                     </div>
                   ))}
@@ -717,6 +843,7 @@ export function LeadCreatePage() {
                         <th className="px-4 py-3">Name</th>
                         <th className="px-4 py-3">Phone</th>
                         <th className="px-4 py-3">Source</th>
+                        <th className="px-4 py-3">Linked offering</th>
                         <th className="px-4 py-3">Interest</th>
                         <th className="px-4 py-3">Status</th>
                       </tr>
@@ -731,6 +858,7 @@ export function LeadCreatePage() {
                           </td>
                           <td className="px-4 py-3">{String(row.data.phoneNumber ?? "")}</td>
                           <td className="px-4 py-3">{String(row.data.source ?? "")}</td>
+                          <td className="px-4 py-3">{[row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ") || "Not linked"}</td>
                           <td className="px-4 py-3">{String(row.data.transactionInterest ?? "")}</td>
                           <td className="px-4 py-3"><Badge tone={row.errors.length ? "danger" : "success"}>{row.errors.length ? "Needs fix" : "Ready"}</Badge></td>
                         </tr>

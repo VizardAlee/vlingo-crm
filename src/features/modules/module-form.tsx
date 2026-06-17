@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
-import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
+import { GuidedTour } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
+import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
 import { hasPermission } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
@@ -134,74 +135,34 @@ function monthsForPaymentCycle(value: unknown) {
   return 0;
 }
 
-function fieldTourTarget(collection: string, fieldName: string) {
-  return `module-${collection}-${fieldName}`;
-}
-
-function formTourSteps(config: ModuleConfig): GuidedTourStep[] {
-  if (config.collection === "deals") {
-    return [
-      {
-        body: "Give the opportunity a clear name. This becomes the label sales, finance, and management will recognize in lists and receipts.",
-        target: fieldTourTarget(config.collection, "title"),
-        title: "Name the deal",
-      },
-      {
-        body: "Link the original lead when this deal started from an enquiry. The deal keeps that source history without duplicating the lead.",
-        target: fieldTourTarget(config.collection, "leadId"),
-        title: "Connect the lead",
-      },
-      {
-        body: "Select the client once the person or company has a client record. Finance will use this as payer context for receipts.",
-        target: fieldTourTarget(config.collection, "clientId"),
-        title: "Attach the client",
-      },
-      {
-        body: "Pick the property or unit being sold, rented, leased, or reserved. Unit selection can also fill the parent property automatically.",
-        target: fieldTourTarget(config.collection, "propertyId"),
-        title: "Link inventory",
-      },
-      {
-        body: "Record the commercial value here. Agreed amount takes priority for finance and pipeline reporting; offer amount is useful before terms are final.",
-        target: fieldTourTarget(config.collection, "agreedAmount"),
-        title: "Set the value",
-      },
-      {
-        body: "Track whether the deal has been invoiced, partly paid, fully paid, or overdue. This keeps sales and finance looking at the same status.",
-        target: fieldTourTarget(config.collection, "financeStatus"),
-        title: "Sync finance status",
-      },
-      {
-        body: "Save writes the linked IDs and readable names together, so detail pages, receipts, documents, and reports do not break if users navigate later.",
-        target: fieldTourTarget(config.collection, "save"),
-        title: "Save the workflow",
-      },
-    ];
+function dealStatusFromLeadStatus(status: unknown) {
+  const value = String(status ?? "");
+  if (value === "converted") {
+    return "won";
   }
 
-  const requiredSteps = config.fields
-    .filter((field) => field.required)
-    .slice(0, 3)
-    .map((field) => ({
-      body: field.helpText ?? `${field.label} is required before this ${config.title.slice(0, -1).toLowerCase()} can be saved.`,
-      target: fieldTourTarget(config.collection, field.name),
-      title: field.label,
-    }));
-  const statusField = config.fields.find((field) => field.name === "status" || field.name.endsWith("Status"));
+  if (["qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "lost", "dormant"].includes(value)) {
+    return value;
+  }
 
-  return [
-    ...requiredSteps,
-    ...(statusField ? [{
-      body: "Use status to keep lists, reports, and follow-up workflows aligned.",
-      target: fieldTourTarget(config.collection, statusField.name),
-      title: statusField.label,
-    }] : []),
-    {
-      body: "Review the record, then save. You can return later to edit permitted fields.",
-      target: fieldTourTarget(config.collection, "save"),
-      title: "Save record",
-    },
-  ];
+  return "qualified";
+}
+
+function dealTypeFromLeadInterest(interest: unknown) {
+  const value = String(interest ?? "");
+  if (value === "buy") {
+    return "sale";
+  }
+
+  if (value === "invest") {
+    return "investment";
+  }
+
+  if (["rent", "lease"].includes(value)) {
+    return value;
+  }
+
+  return "other";
 }
 
 export function ModuleForm({ config, existing, id, initialValues }: { config: ModuleConfig; existing?: FormValues; id?: string; initialValues?: FormValues }) {
@@ -306,7 +267,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   );
 
   useEffect(() => {
-    if (config.collection !== "deals" && config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
+    if (config.collection !== "deals" && config.collection !== "leads" && config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
       return;
     }
 
@@ -379,6 +340,17 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         ]);
       }
 
+      if (config.collection === "leads") {
+        return Promise.all([
+          Promise.resolve<Client[]>([]),
+          Promise.resolve<Lead[]>([]),
+          Promise.resolve<PropertyStakeholder[]>([]),
+          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
+        ]);
+      }
+
       return Promise.all([
         Promise.resolve<Client[]>([]),
         Promise.resolve<Lead[]>([]),
@@ -409,7 +381,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   }, [activeOrganizationId, config.collection, member, user]);
 
   useEffect(() => {
-    if ((config.collection !== "rentalTenancies" && config.collection !== "deals") || !selectedUnitId) {
+    if ((config.collection !== "rentalTenancies" && config.collection !== "deals" && config.collection !== "leads") || !selectedUnitId) {
       return;
     }
 
@@ -438,13 +410,13 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       setLinkedDefault("serviceCharge", selectedUnit.serviceCharge);
       setLinkedDefault("cautionFee", selectedUnit.cautionFee);
       setLinkedDefault("legalFee", selectedUnit.legalFee);
-    } else {
+    } else if (config.collection === "deals") {
       setLinkedDefault("offerAmount", selectedUnit.askingPrice ?? selectedUnit.rentAmount);
     }
   }, [config.collection, getValues, propertyUnits, selectedUnitId, setValue]);
 
   useEffect(() => {
-    if ((config.collection !== "rentalTenancies" && config.collection !== "deals") || !selectedPropertyId) {
+    if ((config.collection !== "rentalTenancies" && config.collection !== "deals" && config.collection !== "leads") || !selectedPropertyId) {
       return;
     }
 
@@ -477,7 +449,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         setLinkedDefault("agencyFee", selectedProperty.agencyFee);
         setLinkedDefault("legalFee", selectedProperty.legalFee);
       }
-    } else if (!selectedUnitId) {
+    } else if (config.collection === "deals" && !selectedUnitId) {
       setLinkedDefault("offerAmount", selectedProperty.askingPrice ?? selectedProperty.rentAmount);
     }
   }, [config.collection, getValues, properties, propertyUnits, selectedPropertyId, selectedUnitId, setValue]);
@@ -492,8 +464,17 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return;
     }
 
-    function setDealDefault(fieldName: string, nextValue: FormValue) {
-      if (isBlankFormValue(nextValue) || !isBlankFormValue(getValues(fieldName))) {
+    function setDealDefault(fieldName: string, nextValue: FormValue, replaceInitialDefault = false) {
+      if (isBlankFormValue(nextValue)) {
+        return;
+      }
+
+      const currentValue = getValues(fieldName);
+      const canReplaceInitialDefault = replaceInitialDefault && !id && (
+        (fieldName === "dealType" && currentValue === "sale") ||
+        (fieldName === "status" && currentValue === "new")
+      );
+      if (!isBlankFormValue(currentValue) && !canReplaceInitialDefault) {
         return;
       }
 
@@ -501,11 +482,15 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
 
     setDealDefault("title", `${selectedLead.fullName} ${titleCase(selectedLead.transactionInterest)} deal`);
-    setDealDefault("dealType", selectedLead.transactionInterest === "buy" ? "sale" : selectedLead.transactionInterest);
+    setDealDefault("dealType", dealTypeFromLeadInterest(selectedLead.transactionInterest), true);
+    setDealDefault("status", dealStatusFromLeadStatus(selectedLead.status), true);
+    setDealDefault("financeStatus", "notInvoiced");
     setDealDefault("dealOwnerId", selectedLead.assignedTo);
+    setDealDefault("propertyId", selectedLead.propertyId);
+    setDealDefault("unitId", selectedLead.unitId);
     setDealDefault("offerAmount", selectedLead.budgetMaximum ?? selectedLead.budgetMinimum);
     setDealDefault("closeProbability", selectedLead.score);
-  }, [config.collection, getValues, leads, selectedLeadId, setValue]);
+  }, [config.collection, getValues, id, leads, selectedLeadId, setValue]);
 
   useEffect(() => {
     if (config.collection !== "rentalTenancies" || id) {
@@ -607,6 +592,14 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       parsedData.dealOwnerName = dealOwner?.displayName ?? "";
       parsedData.dealOwnerEmail = dealOwner?.email ?? "";
       parsedData.commissionAmount = commissionAmount;
+    }
+
+    if (config.collection === "leads") {
+      const linkedProperty = properties.find((item) => item.id === parsedData.propertyId);
+      const linkedUnit = propertyUnits.find((item) => item.id === parsedData.unitId);
+      parsedData.propertyName = linkedProperty?.name ?? linkedUnit?.propertyName ?? "";
+      parsedData.propertyReferenceNumber = linkedProperty?.referenceNumber ?? linkedUnit?.propertyReferenceNumber ?? "";
+      parsedData.unitName = linkedUnit?.unitNumber ?? "";
     }
 
     if (config.collection === "propertyUnits") {

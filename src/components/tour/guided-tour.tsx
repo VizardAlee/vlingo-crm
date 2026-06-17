@@ -160,7 +160,7 @@ export function GuidedTour({
             <div className="mt-4 flex items-center justify-between gap-3">
               <div className="flex gap-1.5">
                 {steps.map((step, index) => (
-                  <span className={cn("h-1.5 w-5 rounded-full", index === activeIndex ? "bg-primary" : "bg-muted")} key={step.target} />
+                  <span className={cn("h-1.5 w-5 rounded-full", index === activeIndex ? "bg-primary" : "bg-muted")} key={`${step.target}-${index}`} />
                 ))}
               </div>
               <div className="flex gap-2">

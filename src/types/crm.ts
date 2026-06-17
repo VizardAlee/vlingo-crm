@@ -140,6 +140,11 @@ export interface Lead extends EntityMetadata {
   budgetMaximum?: number;
   preferredBudgetCurrency?: string;
   transactionInterest: "buy" | "rent" | "lease" | "invest";
+  propertyId?: string;
+  propertyName?: string;
+  propertyReferenceNumber?: string;
+  unitId?: string;
+  unitName?: string;
   intendedUse?: string;
   paymentPreference?: string;
   preferredInspectionDate?: Date | null;
@@ -239,6 +244,12 @@ export interface Deal extends EntityMetadata {
   closeProbability?: number;
   paymentPlan?: string;
   financeStatus?: DealFinanceStatus;
+  paidAmount?: number;
+  pendingPaymentAmount?: number;
+  balanceAmount?: number;
+  lastPaymentAmount?: number;
+  lastPaymentAt?: Date | string | null;
+  lastReceiptNumber?: string;
   legalStatus?: DealLegalStatus;
   commissionType?: string;
   commissionValue?: number;

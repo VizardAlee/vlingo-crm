@@ -10,8 +10,13 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data;
     }
 
+    function hasMemberDoc(orgId) {
+      return signedIn() &&
+        firestore.exists(/databases/(default)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+    }
+
     function isActiveMember(orgId) {
-      return signedIn() && memberDoc(orgId).status == "active";
+      return hasMemberDoc(orgId) && memberDoc(orgId).status == "active";
     }
 
     function hasPermission(orgId, permission) {

@@ -11,20 +11,21 @@
 - Permission-aware navigation and settings role matrix.
 - Firestore-backed repositories for organization-scoped create, read, update, soft delete, and audit scaffolding.
 - Dashboard with count metrics, charts, widgets, loading states, and Naira formatting.
-- Phase 1 modules for leads, clients, properties, property units, tasks, and activities.
+- Modules for leads, clients, deals, properties, property units, rentals, tasks, activities, documents, finance, notifications, development, marketing, and reports.
 - Firestore rules, Storage rules, indexes, Functions v2 scaffolding, seed script, and emulator tests.
 
 ## Known Limitations
 
 - Firebase environment values are required before live auth and data loading work.
 - Audit writes are scaffolded client-side for development; production should use `writeProtectedAuditLog`.
-- Lead-to-client conversion function exists but is not yet connected to a detail-page action.
 - Duplicate phone and duplicate unit detection need transaction-backed Cloud Function enforcement before production.
-- Financial, rental, development, marketing, and document upload workflows are prepared routes, not complete modules.
-- Dashboard charts include sample distribution data until richer aggregation queries or reporting collections are added.
+- Production monitoring, backup, restore, and rollback steps must be configured and rehearsed before broad rollout.
+- Playwright-style browser workflow tests are still recommended for responsive navigation, forms, permissions, and finance flows.
 
 ## Deployment Notes
 
 Run validation before deployment: `npm run lint`, `npm run typecheck`, `npm run build`, `npm run test`, and `npm run test:rules`.
 
 Deploy Functions after installing dependencies in `functions/`: `cd functions && npm install && npm run build`.
+
+Use `docs/launch-readiness.md` for the complete launch checklist.

@@ -75,9 +75,9 @@ export default function DashboardPage() {
       <div className="grid gap-4 xl:grid-cols-[1.25fr_.75fr]">
         <Card>
           <CardHeader><CardTitle>Lead Pipeline</CardTitle></CardHeader>
-          <CardContent className="h-64 min-w-0 p-3 md:h-80 md:p-5">
+          <CardContent className="min-w-0 p-3 md:p-5">
             {hasPipelineData ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={metrics.leadPipeline}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" />
@@ -87,15 +87,15 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="grid h-full place-items-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground">No lead pipeline data yet.</div>
+              <div className="grid h-64 place-items-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground md:h-80">No lead pipeline data yet.</div>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Lead Sources</CardTitle></CardHeader>
-          <CardContent className="h-64 min-w-0 p-3 md:h-80 md:p-5">
+          <CardContent className="min-w-0 p-3 md:p-5">
             {hasSourceData ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
                   <Pie data={metrics.leadSources} dataKey="value" nameKey="name" innerRadius={58} outerRadius={96}>
                     {metrics.leadSources.map((entry) => <Cell fill={entry.color ?? "#b11226"} key={entry.name} />)}
@@ -104,7 +104,7 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="grid h-full place-items-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground">No lead source data yet.</div>
+              <div className="grid h-64 place-items-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground md:h-80">No lead source data yet.</div>
             )}
           </CardContent>
         </Card>

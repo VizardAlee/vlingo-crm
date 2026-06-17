@@ -1,4 +1,4 @@
-import type { FinanceApprovalStatus, PaymentVerificationStatus, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
+import type { Deal, DealFinanceStatus, FinanceApprovalStatus, FinancePayment, PaymentVerificationStatus, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
 
 export function createReceiptNumber() {
   const now = new Date();
@@ -26,6 +26,47 @@ export function rentalBalance(rental: Pick<RentalTenancy, "paymentHistory" | "re
 export function paymentStatusForAmount(amount: number, rental: Pick<RentalTenancy, "paymentHistory" | "rentAmount">) {
   const nextTotal = paymentTotal(rental.paymentHistory) + amount;
   return nextTotal >= Number(rental.rentAmount ?? 0) ? "paid" : "partPaid";
+}
+
+export function dealTargetAmount(deal: Pick<Deal, "agreedAmount" | "depositAmount" | "offerAmount" | "reservationAmount">) {
+  return Number(deal.agreedAmount ?? deal.offerAmount ?? deal.depositAmount ?? deal.reservationAmount ?? 0);
+}
+
+export function dealPaymentSummary(
+  targetAmount: number,
+  payments: Array<Pick<FinancePayment, "amount" | "verificationStatus">>,
+): {
+  balanceAmount: number;
+  financeStatus: DealFinanceStatus;
+  paidAmount: number;
+  pendingPaymentAmount: number;
+  recordedAmount: number;
+} {
+  const paidAmount = payments
+    .filter((payment) => payment.verificationStatus === "verified")
+    .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+  const pendingPaymentAmount = payments
+    .filter((payment) => payment.verificationStatus === "pending")
+    .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+  const normalizedTarget = Math.max(Number(targetAmount || 0), 0);
+  const balanceAmount = Math.max(normalizedTarget - paidAmount, 0);
+  let financeStatus: DealFinanceStatus = "notInvoiced";
+
+  if (normalizedTarget > 0 && paidAmount >= normalizedTarget) {
+    financeStatus = "paid";
+  } else if (paidAmount > 0) {
+    financeStatus = "partPaid";
+  } else if (pendingPaymentAmount > 0) {
+    financeStatus = "paymentPending";
+  }
+
+  return {
+    balanceAmount,
+    financeStatus,
+    paidAmount,
+    pendingPaymentAmount,
+    recordedAmount: paidAmount + pendingPaymentAmount,
+  };
 }
 
 export function approvalTone(status: FinanceApprovalStatus | PaymentVerificationStatus) {

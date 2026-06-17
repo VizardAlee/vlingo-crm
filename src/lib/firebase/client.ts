@@ -1,13 +1,17 @@
 "use client";
 
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
-import { getFirestore } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { getMessaging, isSupported } from "firebase/messaging";
-import { getStorage } from "firebase/storage";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { firebaseClientEnv, hasFirebaseClientConfig } from "@/lib/firebase/config";
+
+declare global {
+  var __beaconFirebaseEmulatorsConnected: boolean | undefined;
+}
 
 function app() {
   if (!hasFirebaseClientConfig()) {
@@ -29,6 +33,27 @@ export const auth = firebaseApp ? getAuth(firebaseApp) : null;
 export const db = firebaseApp ? getFirestore(firebaseApp) : null;
 export const functions = firebaseApp ? getFunctions(firebaseApp) : null;
 export const storage = firebaseApp ? getStorage(firebaseApp) : null;
+
+function connectBeaconEmulators() {
+  if (
+    firebaseClientEnv.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== "true" ||
+    globalThis.__beaconFirebaseEmulatorsConnected ||
+    !auth ||
+    !db ||
+    !functions ||
+    !storage
+  ) {
+    return;
+  }
+
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
+  globalThis.__beaconFirebaseEmulatorsConnected = true;
+}
+
+connectBeaconEmulators();
 
 export function initializeBeaconAppCheck() {
   if (!firebaseApp || !firebaseClientEnv.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY || typeof window === "undefined") {

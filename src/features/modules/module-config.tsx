@@ -87,6 +87,8 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "budgetMaximum", label: "Budget maximum", type: "number" },
       { name: "preferredBudgetCurrency", label: "Budget currency", type: "text" },
       { name: "transactionInterest", label: "Transaction interest", options: ["buy", "rent", "lease", "invest"], required: true, type: "select" },
+      { helpText: "Optional: link the primary property this lead is asking about.", name: "propertyId", label: "Linked property", optionSource: "properties", section: "Linked offering", type: "select" },
+      { helpText: "Optional if the interest is for a specific unit.", name: "unitId", label: "Linked unit", optionSource: "propertyUnits", section: "Linked offering", type: "select" },
       { name: "source", label: "Source", options: leadSources, required: true, type: "select" },
       { name: "sourcePlatform", label: "Source platform", type: "text" },
       { name: "campaignName", label: "Campaign name", type: "text" },

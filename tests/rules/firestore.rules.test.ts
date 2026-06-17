@@ -226,6 +226,44 @@ describe("Beacon Firestore rules", () => {
     await assertSucceeds(getDoc(doc(financeDb, "organizations/org-a/deals/deal-1")));
   });
 
+  it("allows finance users to sync only deal finance summary fields", async () => {
+    await seedMember("finance-1", "org-a", ["finance.update", "reports.viewFinancial"], "accountant");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/deals/deal-1"), {
+        branchId: "head-office",
+        createdBy: "sales-1",
+        dealType: "sale",
+        financeStatus: "notInvoiced",
+        isDeleted: false,
+        organizationId: "org-a",
+        status: "negotiation",
+        title: "Test sale deal",
+        updatedBy: "sales-1",
+      });
+    });
+
+    const db = testEnv.authenticatedContext("finance-1").firestore();
+    const dealRef = doc(db, "organizations/org-a/deals/deal-1");
+
+    await assertSucceeds(updateDoc(dealRef, {
+      balanceAmount: 15000000,
+      financeStatus: "partPaid",
+      lastPaymentAmount: 10000000,
+      lastPaymentAt: "2026-06-12",
+      lastReceiptNumber: "RCT-20260612-00001",
+      organizationId: "org-a",
+      paidAmount: 10000000,
+      pendingPaymentAmount: 5000000,
+      updatedBy: "finance-1",
+    }));
+
+    await assertFails(updateDoc(dealRef, {
+      organizationId: "org-a",
+      title: "Finance should not edit sales details",
+      updatedBy: "finance-1",
+    }));
+  });
+
   it("allows existing sales roles to use deals before permission backfill", async () => {
     await seedMember("sales-1", "org-a", [], "salesExecutive");
     const db = testEnv.authenticatedContext("sales-1").firestore();

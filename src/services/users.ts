@@ -1,6 +1,5 @@
 "use client";
 
-import { sendPasswordResetEmail } from "firebase/auth";
 import { collection, getDocs, orderBy, query, type Timestamp } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
@@ -25,6 +24,8 @@ export interface UpdateMemberInput {
 
 interface InviteUserResult {
   email: string;
+  setupEmailError?: string;
+  setupEmailSent: boolean;
   uid: string;
 }
 
@@ -68,7 +69,6 @@ export async function inviteOrganizationMember(input: InviteUserInput) {
   const firebase = assertFirebase();
   const callable = httpsCallable<InviteUserInput, InviteUserResult>(firebase.functions, "provisionOrganizationMember");
   const result = await callable(input);
-  await sendPasswordResetEmail(firebase.auth, result.data.email);
   return result.data;
 }
 

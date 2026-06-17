@@ -138,7 +138,7 @@ function recordDisplayName(record: Record<string, unknown>) {
   return String(record.fullName ?? record.tenantName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? record.referenceNumber ?? record.id ?? "Record");
 }
 
-async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "propertyUnits") {
+async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "properties" | "propertyUnits") {
   try {
     return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName);
   } catch {
@@ -262,6 +262,11 @@ function isPhoneField(key: string) {
   return normalized.includes("phone") || normalized.includes("whatsapp");
 }
 
+function isAmountField(key: string) {
+  const normalized = key.toLowerCase();
+  return normalized.includes("amount") || normalized.includes("balance") || normalized.includes("budget") || normalized.includes("price");
+}
+
 function userDisplay(value: unknown, members: Member[]) {
   if (!value) {
     return "Not set";
@@ -286,10 +291,35 @@ function recordValueDisplay(record: Record<string, unknown>, key: string, value:
     return <WhatsAppPhoneLink className="max-w-48 truncate" displayNumber={displayNumber} phoneNumber={phoneNumber} />;
   }
 
+  if (typeof value === "number" && isAmountField(key)) {
+    return <span className="max-w-48 truncate font-medium">{formatCurrency(value)}</span>;
+  }
+
   return <span className="max-w-48 truncate font-medium">{formatRecordValue(value)}</span>;
 }
 
 function recordSummaryEntries(record: Record<string, unknown>, collection: ModuleConfig["collection"]) {
+  if (collection === "deals") {
+    return [
+      "referenceNumber",
+      "dealType",
+      "status",
+      "financeStatus",
+      "agreedAmount",
+      "offerAmount",
+      "paidAmount",
+      "pendingPaymentAmount",
+      "balanceAmount",
+      "lastReceiptNumber",
+      "clientName",
+      "leadName",
+      "propertyName",
+      "unitName",
+    ]
+      .filter((key) => key in record)
+      .map((key) => ({ key, label: titleCase(key), value: record[key] }));
+  }
+
   if (collection !== "activities") {
     return Object.entries(record).slice(0, 8).map(([key, value]) => ({ key, label: key, value }));
   }
@@ -307,6 +337,136 @@ function recordSummaryEntries(record: Record<string, unknown>, collection: Modul
   ]
     .filter((key) => key in record)
     .map((key) => ({ key, label: titleCase(key), value: record[key] }));
+}
+
+function normalizedText(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function textMatches(candidate: unknown, preferred: unknown) {
+  const left = normalizedText(candidate);
+  const right = normalizedText(preferred);
+  return Boolean(left && right && (left.includes(right) || right.includes(left)));
+}
+
+function priceForInterest(record: Record<string, unknown>, interest: string) {
+  return ["rent", "lease"].includes(interest)
+    ? Number(record.rentAmount ?? record.askingPrice ?? 0)
+    : Number(record.askingPrice ?? record.minimumAcceptablePrice ?? record.rentAmount ?? 0);
+}
+
+function isAvailableOffering(record: Record<string, unknown>) {
+  return !["sold", "rented", "leased", "occupied", "unavailable", "withdrawn", "underMaintenance"].includes(String(record.status ?? record.propertyStatus ?? ""));
+}
+
+function matchScore(lead: Record<string, unknown>, offering: Record<string, unknown>) {
+  const interest = String(lead.transactionInterest ?? "");
+  const transactionTypes = Array.isArray(offering.transactionTypes) ? offering.transactionTypes : [];
+  let score = 0;
+
+  if (transactionTypes.some((type) => textMatches(type, interest === "buy" ? "sale" : interest))) {
+    score += 3;
+  }
+
+  if ([offering.city, offering.state, offering.estateOrNeighborhood, offering.propertyName].some((value) => textMatches(value, lead.preferredCity) || textMatches(value, lead.preferredState) || textMatches(value, lead.preferredLocation))) {
+    score += 3;
+  }
+
+  if (textMatches(offering.category ?? offering.unitType, lead.preferredPropertyCategory) || textMatches(offering.category ?? offering.unitType, lead.propertyType)) {
+    score += 2;
+  }
+
+  if (Number(lead.preferredBedrooms ?? 0) && Number(offering.bedrooms ?? 0) >= Number(lead.preferredBedrooms)) {
+    score += 1;
+  }
+
+  const price = priceForInterest(offering, interest);
+  const minBudget = Number(lead.budgetMinimum ?? 0);
+  const maxBudget = Number(lead.budgetMaximum ?? 0);
+  if (price && (!minBudget || price >= minBudget) && (!maxBudget || price <= maxBudget)) {
+    score += 3;
+  }
+
+  return score;
+}
+
+function LeadOfferingPanel({
+  propertyUnits,
+  properties,
+  record,
+}: {
+  propertyUnits: Record<string, unknown>[];
+  properties: Record<string, unknown>[];
+  record: Record<string, unknown>;
+}) {
+  const linkedProperty = record.propertyId ? properties.find((property) => property.id === record.propertyId) : null;
+  const linkedUnit = record.unitId ? propertyUnits.find((unit) => unit.id === record.unitId) : null;
+  const propertyLabel = String(linkedProperty?.name ?? record.propertyName ?? record.propertyReferenceNumber ?? "");
+  const unitLabel = String(linkedUnit?.unitNumber ?? record.unitName ?? "");
+  const unitMatches = propertyUnits
+    .filter(isAvailableOffering)
+    .map((unit) => ({
+      href: `/units/${unit.id}`,
+      id: String(unit.id),
+      label: String(unit.unitNumber ?? unit.referenceNumber ?? "Unit"),
+      price: priceForInterest(unit, String(record.transactionInterest ?? "")),
+      score: matchScore(record, unit),
+      subtitle: [unit.propertyName, unit.unitType, unit.bedrooms ? `${unit.bedrooms} bed` : ""].filter(Boolean).join(" · "),
+      type: "Unit",
+    }));
+  const propertyMatches = properties
+    .filter(isAvailableOffering)
+    .map((property) => ({
+      href: `/properties/${property.id}`,
+      id: String(property.id),
+      label: String(property.name ?? property.referenceNumber ?? "Property"),
+      price: priceForInterest(property, String(record.transactionInterest ?? "")),
+      score: matchScore(record, property),
+      subtitle: [property.city, property.category, property.bedrooms ? `${property.bedrooms} bed` : ""].filter(Boolean).join(" · "),
+      type: "Property",
+    }));
+  const matches = [...unitMatches, ...propertyMatches]
+    .filter((match) => match.score > 0 && match.id !== record.unitId && match.id !== record.propertyId)
+    .sort((left, right) => right.score - left.score || right.price - left.price)
+    .slice(0, 5);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader><CardTitle>Linked Offering</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          {propertyLabel || unitLabel ? (
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Property</span>
+                {record.propertyId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/properties/${record.propertyId}`}>{propertyLabel || "View property"}</Link> : <span className="font-medium">{propertyLabel || "Not linked"}</span>}
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Unit</span>
+                {record.unitId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/units/${record.unitId}`}>{unitLabel || "View unit"}</Link> : <span className="font-medium">{unitLabel || "Not linked"}</span>}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-md border border-dashed p-4 text-muted-foreground">No property or unit has been linked to this lead yet.</div>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Matching Properties</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          {matches.length ? matches.map((match) => (
+            <Link className="rounded-md border p-3 hover:bg-muted" href={match.href} key={`${match.type}-${match.id}`}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate font-semibold">{match.label}</span>
+                <Badge tone="success">{match.score} match</Badge>
+              </div>
+              <p className="mt-1 text-muted-foreground">{match.type} · {match.subtitle || "Inventory"} · {formatCurrency(match.price)}</p>
+            </Link>
+          )) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No strong property matches from current inventory yet.</div>}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function isOpenTask(task: Record<string, unknown>) {
@@ -385,6 +545,281 @@ function rentCycleMonths(value: unknown) {
 const rentalPaymentStatusOptions = ["notInvoiced", "invoiced", "partPaid", "paid", "overdue"] as const;
 const rentalTenancyStatusOptions = ["draft", "active", "expiringSoon", "renewalDue", "renewed", "terminated", "defaulting", "movedOut"] as const;
 const paymentMethods = ["bankTransfer", "cash", "pos", "cheque", "onlinePayment", "other"] as const;
+const developmentStatusOptions = ["concept", "planning", "approval", "procurement", "construction", "inspection", "handover", "completed", "onHold", "cancelled"] as const;
+const developmentRiskOptions = ["low", "medium", "high", "critical"] as const;
+
+function DevelopmentOperationsPanel({
+  activities,
+  id,
+  onChanged,
+  record,
+  tasks,
+}: {
+  activities: Record<string, unknown>[];
+  id: string;
+  onChanged: () => Promise<void>;
+  record: Record<string, unknown>;
+  tasks: Record<string, unknown>[];
+}) {
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const budget = Number(record.budget ?? 0);
+  const amountSpent = Number(record.amountSpent ?? 0);
+  const progressPercent = Number(record.progressPercent ?? 0);
+  const remainingBudget = Math.max(0, budget - amountSpent);
+  const completionDays = daysUntil(record.expectedCompletionDate);
+  const openTasks = tasks.filter(isOpenTask);
+  const [nextStatus, setNextStatus] = useState(String(record.status ?? "concept"));
+  const [nextPhase, setNextPhase] = useState(String(record.currentPhase ?? ""));
+  const [nextProgress, setNextProgress] = useState(String(record.progressPercent ?? ""));
+  const [nextAmountSpent, setNextAmountSpent] = useState(String(record.amountSpent ?? ""));
+  const [nextRiskLevel, setNextRiskLevel] = useState(String(record.riskLevel ?? "medium"));
+  const [siteNote, setSiteNote] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskPriority, setTaskPriority] = useState("medium");
+  const [saving, setSaving] = useState<"progress" | "task" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const context = user ? { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid } : null;
+  const canUpdateDevelopment = hasPermission(member, "development.update");
+  const canCreateActivity = hasPermission(member, "activities.create");
+  const canCreateTask = hasPermission(member, "tasks.create");
+
+  async function handleProgressSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!context) {
+      setError("You must be signed in to update development progress.");
+      return;
+    }
+
+    const parsedProgress = Number(nextProgress || 0);
+    if (parsedProgress < 0 || parsedProgress > 100) {
+      setError("Progress must be between 0 and 100.");
+      return;
+    }
+
+    const parsedSpent = Number(nextAmountSpent || 0);
+    if (parsedSpent < 0) {
+      setError("Amount spent cannot be negative.");
+      return;
+    }
+
+    setSaving("progress");
+    setError(null);
+    setSuccess(null);
+    const payload = {
+      amountSpent: parsedSpent,
+      currentPhase: nextPhase.trim(),
+      progressPercent: parsedProgress,
+      riskLevel: nextRiskLevel,
+      status: nextStatus,
+    };
+    try {
+      await updateOrgRecord("developmentProjects", id, payload, context);
+      if (canCreateActivity && siteNote.trim()) {
+        const activityId = await createOrgRecord("activities", {
+          body: siteNote.trim(),
+          relatedEntityId: id,
+          relatedEntityType: "development",
+          status: "completed",
+          subject: `Development update: ${titleCase(nextStatus)}`,
+          type: "internalNote",
+        }, context, "ACT");
+        await writeAuditLog(context, "activity.create", "activities", activityId, { relatedEntityId: id, subject: `Development update: ${titleCase(nextStatus)}` });
+      }
+      await writeAuditLog(context, "development.progressUpdate", "developmentProjects", id, payload);
+      setSiteNote("");
+      setSuccess("Development progress updated.");
+      await onChanged();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to update development progress.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleTaskSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!context) {
+      setError("You must be signed in to create project tasks.");
+      return;
+    }
+
+    if (!taskTitle.trim()) {
+      setError("Add a project task title.");
+      return;
+    }
+
+    setSaving("task");
+    setError(null);
+    setSuccess(null);
+    try {
+      const taskId = await createOrgRecord("tasks", {
+        assignedTo: String(record.projectManagerId ?? context.userId),
+        description: `Development task for ${String(record.name ?? record.referenceNumber ?? id)}`,
+        dueAt: taskDueAt,
+        priority: taskPriority,
+        relatedEntityId: id,
+        relatedEntityType: "development",
+        status: "notStarted",
+        title: taskTitle.trim(),
+      }, context, "TASK");
+      await writeAuditLog(context, "task.create", "tasks", taskId, { relatedEntityId: id, title: taskTitle.trim() });
+      setTaskTitle("");
+      setTaskDueAt("");
+      setSuccess("Project task created.");
+      await onChanged();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to create project task.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const healthCards = [
+    { icon: CircleCheck, label: "Progress", tone: progressPercent >= 80 ? "text-success" : "text-primary", value: `${progressPercent}%` },
+    { icon: Banknote, label: "Budget used", tone: budget && amountSpent > budget ? "text-destructive" : "text-warning", value: budget ? `${formatCurrency(amountSpent)} / ${formatCurrency(budget)}` : formatCurrency(amountSpent) },
+    { icon: CalendarClock, label: "Completion", tone: completionDays !== null && completionDays < 0 ? "text-destructive" : "text-muted-foreground", value: completionDays === null ? dateDisplay(record.expectedCompletionDate) : completionDays < 0 ? `${Math.abs(completionDays)} day${Math.abs(completionDays) === 1 ? "" : "s"} late` : `${completionDays} day${completionDays === 1 ? "" : "s"} left` },
+    { icon: Flame, label: "Risk", tone: ["high", "critical"].includes(String(record.riskLevel ?? "")) ? "text-destructive" : "text-success", value: titleCase(String(record.riskLevel ?? "medium")) },
+  ];
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle>Development Operations</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Track delivery progress, site updates, project tasks, budget burn, and handover readiness.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={statusTone(String(record.status ?? "concept"))}>{titleCase(String(record.status ?? "concept"))}</Badge>
+            <Badge tone={openTasks.length ? "warning" : "muted"}>{openTasks.length} open task{openTasks.length === 1 ? "" : "s"}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {healthCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <div className="rounded-md border bg-white p-3" key={card.label}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium uppercase text-muted-foreground">{card.label}</p>
+                    <Icon className={cn("h-4 w-4", card.tone)} />
+                  </div>
+                  <p className="mt-1 text-lg font-semibold">{card.value}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-md border bg-white p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Linked property</p>
+              {record.propertyId ? (
+                <Link className="mt-1 block truncate text-lg font-semibold text-primary" href={`/properties/${record.propertyId}`}>{String(record.propertyName ?? record.propertyReferenceNumber ?? "View property")}</Link>
+              ) : (
+                <p className="mt-1 text-lg font-semibold">Not linked</p>
+              )}
+            </div>
+            <div className="rounded-md border bg-white p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Current phase</p>
+              <p className="mt-1 text-lg font-semibold">{String(record.currentPhase ?? "Not set")}</p>
+            </div>
+            <div className="rounded-md border bg-white p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Remaining budget</p>
+              <p className="mt-1 text-lg font-semibold">{formatCurrency(remainingBudget)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {error ? <ErrorState message={error} /> : null}
+      {success ? (
+        <div className="flex items-center gap-2 rounded-md border border-success/20 bg-success/10 p-3 text-sm font-medium text-success">
+          <CheckCircle2 className="h-4 w-4" />
+          {success}
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader><CardTitle>Update Delivery</CardTitle></CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handleProgressSubmit}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Project status">
+                  <Select disabled={!canUpdateDevelopment} value={nextStatus} onChange={(event) => setNextStatus(event.target.value)}>
+                    {developmentStatusOptions.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Risk level">
+                  <Select disabled={!canUpdateDevelopment} value={nextRiskLevel} onChange={(event) => setNextRiskLevel(event.target.value)}>
+                    {developmentRiskOptions.map((risk) => <option key={risk} value={risk}>{titleCase(risk)}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Current phase">
+                  <Input disabled={!canUpdateDevelopment} value={nextPhase} onChange={(event) => setNextPhase(event.target.value)} />
+                </Field>
+                <Field label="Progress %">
+                  <Input disabled={!canUpdateDevelopment} max="100" min="0" type="number" value={nextProgress} onChange={(event) => setNextProgress(event.target.value)} />
+                </Field>
+                <Field label="Amount spent">
+                  <Input disabled={!canUpdateDevelopment} min="0" type="number" value={nextAmountSpent} onChange={(event) => setNextAmountSpent(event.target.value)} />
+                </Field>
+              </div>
+              <Field label="Site update note">
+                <Textarea disabled={!canUpdateDevelopment || !canCreateActivity} placeholder="What changed on site, what is blocked, or what should happen next?" value={siteNote} onChange={(event) => setSiteNote(event.target.value)} />
+              </Field>
+              <Button className="h-11" disabled={!canUpdateDevelopment || saving === "progress"} type="submit">
+                <Send className="h-4 w-4" />
+                {saving === "progress" ? "Updating" : "Update delivery"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Project Task</CardTitle></CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handleTaskSubmit}>
+              <Field label="Task title">
+                <Input disabled={!canCreateTask} placeholder="Request permit, inspect roofing, approve invoice..." value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} />
+              </Field>
+              <Field label="Due date">
+                <Input disabled={!canCreateTask} type="date" value={taskDueAt} onChange={(event) => setTaskDueAt(event.target.value)} />
+              </Field>
+              <Field label="Priority">
+                <Select disabled={!canCreateTask} value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)}>
+                  {["low", "medium", "high", "urgent"].map((priority) => <option key={priority} value={priority}>{titleCase(priority)}</option>)}
+                </Select>
+              </Field>
+              <Button className="h-11" disabled={!canCreateTask || saving === "task"} type="submit" variant="outline">
+                <ListTodo className="h-4 w-4" />
+                {saving === "task" ? "Creating" : "Create task"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle>Recent Site Updates</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          {activities.length ? activities.slice(0, 5).map((activity) => (
+            <Link className="rounded-md border p-3 text-foreground hover:bg-muted" href={`/activities/${activity.id}`} key={String(activity.id)}>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <span className="font-semibold">{String(activity.subject ?? "Activity")}</span>
+                <Badge tone="muted">{titleCase(String(activity.type ?? "activity"))}</Badge>
+              </div>
+              <p className="mt-1 line-clamp-2 text-muted-foreground">{String(activity.body ?? "No details")}</p>
+            </Link>
+          )) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No site updates have been logged yet.</div>}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function RentalOperationsPanel({
   activities,
@@ -789,7 +1224,6 @@ function LeadJourneyPanel({
   const canUpdateLead = hasAnyPermission(member, ["leads.assign", "leads.updateAssigned"]);
   const canCreateActivity = hasPermission(member, "activities.create");
   const canCreateDeal = hasPermission(member, "deals.create");
-  const canCreateFinance = hasPermission(member, "finance.create");
   const canCreateTask = hasPermission(member, "tasks.create");
 
   async function handleStageSubmit(event: FormEvent<HTMLFormElement>) {
@@ -972,12 +1406,6 @@ function LeadJourneyPanel({
               <ButtonLink href={`/deals/new?leadId=${id}`} size="sm" variant="outline">
                 <Handshake className="h-4 w-4" />
                 Open deal
-              </ButtonLink>
-            ) : null}
-            {canCreateFinance && ["negotiation", "offerMade", "paymentPending", "converted"].includes(currentStatus) ? (
-              <ButtonLink href={`/finance?source=lead:${id}`} size="sm" variant="outline">
-                <ReceiptText className="h-4 w-4" />
-                Create receipt
               </ButtonLink>
             ) : null}
           </div>
@@ -1366,6 +1794,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [activities, setActivities] = useState<Record<string, unknown>[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [activityMembers, setActivityMembers] = useState<Member[]>([]);
+  const [properties, setProperties] = useState<Record<string, unknown>[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -1374,11 +1803,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
   const loadDetail = useCallback(async () => {
     const relatedType = relatedTypeForCollection(config.collection);
-    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits, nextMembers] = await Promise.all([
+    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextMembers] = await Promise.all([
       getOrgRecord<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, id),
       safeListOrgRecords(activeOrganizationId, "tasks"),
       safeListOrgRecords(activeOrganizationId, "activities"),
       safeListDocuments(activeOrganizationId),
+      safeListOrgRecords(activeOrganizationId, "properties"),
       safeListOrgRecords(activeOrganizationId, "propertyUnits"),
       config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ]);
@@ -1390,7 +1820,8 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     setRecord(nextRecord);
     setRelatedRecord(nextRelatedRecord);
     setActivityMembers(nextMembers);
-    setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : []);
+    setProperties(config.collection === "leads" ? nextProperties : []);
+    setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : config.collection === "leads" ? nextPropertyUnits : []);
     if (relatedType) {
       setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
       setActivities(nextActivities.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 10));
@@ -1407,10 +1838,11 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       safeListOrgRecords(activeOrganizationId, "tasks"),
       safeListOrgRecords(activeOrganizationId, "activities"),
       safeListDocuments(activeOrganizationId),
+      safeListOrgRecords(activeOrganizationId, "properties"),
       safeListOrgRecords(activeOrganizationId, "propertyUnits"),
       config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ])
-      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits, nextMembers]) => {
+      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextMembers]) => {
         if (!mounted) {
           return;
         }
@@ -1427,7 +1859,8 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
         setRecord(nextRecord);
         setRelatedRecord(nextRelatedRecord);
         setActivityMembers(nextMembers);
-        setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : []);
+        setProperties(config.collection === "leads" ? nextProperties : []);
+        setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : config.collection === "leads" ? nextPropertyUnits : []);
         if (relatedType) {
           setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
           setActivities(nextActivities.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 10));
@@ -1532,6 +1965,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       ) : null}
       {config.collection === "leads" ? (
         <LeadJourneyPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
+      ) : null}
+      {config.collection === "leads" ? (
+        <LeadOfferingPanel properties={properties} propertyUnits={propertyUnits} record={record} />
+      ) : null}
+      {config.collection === "developmentProjects" ? (
+        <DevelopmentOperationsPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
       ) : null}
       {config.collection === "rentalTenancies" ? (
         <RentalOperationsPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />

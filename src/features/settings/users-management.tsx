@@ -83,9 +83,11 @@ export function UsersManagement() {
         ...invite,
         organizationId: activeOrganizationId,
       };
-      await inviteOrganizationMember(payload);
+      const result = await inviteOrganizationMember(payload);
       setInvite({ ...defaultInvite, branchId: branches[0]?.id ?? "head-office" });
-      setSuccess(`Invitation sent to ${payload.email}.`);
+      setSuccess(result.setupEmailSent
+        ? `Invitation email sent to ${payload.email}.`
+        : `User was created, but the invitation email was not sent. ${result.setupEmailError ?? "Check SMTP configuration."}`);
       await loadUsers();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to invite user.");
