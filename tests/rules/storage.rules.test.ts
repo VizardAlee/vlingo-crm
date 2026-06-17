@@ -26,7 +26,7 @@ describe("Beacon Storage rules", () => {
       await setDoc(doc(context.firestore(), "organizations/org-a/members/manager-1"), {
         branchId: "head-office",
         organizationId: "org-a",
-        permissions: ["properties.update"],
+        permissions: ["properties.read"],
         role: "propertyManager",
         status: "active",
       });

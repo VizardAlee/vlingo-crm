@@ -111,7 +111,7 @@ export function hasPermission(member: Member | null, permission: Permission) {
     return false;
   }
 
-  return member.permissions.includes(permission) || rolePermissions[member.role].includes(permission);
+  return member.permissions.includes(permission);
 }
 
 export function hasAnyPermission(member: Member | null, permissions: Permission[]) {

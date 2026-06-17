@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission, rolePermissions } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
@@ -39,6 +40,7 @@ function canAssignRole(currentMember: Member | null, role: RoleName) {
 
 export function UsersManagement() {
   const { activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [invite, setInvite] = useState(defaultInvite);
@@ -60,11 +62,13 @@ export function UsersManagement() {
       setMembers(nextMembers);
       setInvite((value) => ({ ...value, branchId: nextBranches[0]?.id ?? value.branchId }));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to load users.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to load users.";
+      setError(message);
+      toast({ title: "Unable to load users", description: message, variant: "error" });
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId]);
+  }, [activeOrganizationId, toast]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -88,10 +92,14 @@ export function UsersManagement() {
       const result = await inviteOrganizationMember(payload);
       setInvite({ ...defaultInvite, branchId: branches[0]?.id ?? "head-office" });
       setGeneratedInvite({ email: result.email, setupLink: result.setupLink });
-      setSuccess(`User created. Copy the setup link and share it with ${payload.email}.`);
+      const message = `User created. Copy the setup link and share it with ${payload.email}.`;
+      setSuccess(message);
+      toast({ title: "User created", description: message, variant: "success" });
       await loadUsers();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to invite user.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to invite user.";
+      setError(message);
+      toast({ title: "Unable to invite user", description: message, variant: "error" });
     } finally {
       setSaving(null);
     }
@@ -104,9 +112,13 @@ export function UsersManagement() {
 
     try {
       await navigator.clipboard.writeText(generatedInvite.setupLink);
-      setSuccess(`Setup link copied for ${generatedInvite.email}.`);
+      const message = `Setup link copied for ${generatedInvite.email}.`;
+      setSuccess(message);
+      toast({ title: "Setup link copied", description: message, variant: "success" });
     } catch {
-      setError("Unable to copy automatically. Select and copy the setup link manually.");
+      const message = "Unable to copy automatically. Select and copy the setup link manually.";
+      setError(message);
+      toast({ title: "Unable to copy setup link", description: message, variant: "error" });
     }
   }
 
@@ -121,10 +133,14 @@ export function UsersManagement() {
     setSuccess(null);
     try {
       await updateOrganizationMember({ ...next, organizationId: activeOrganizationId, uid: target.id });
-      setSuccess(`${target.displayName} was updated.`);
+      const message = `${target.displayName} was updated.`;
+      setSuccess(message);
+      toast({ title: "Member updated", description: message, variant: "success" });
       await loadUsers();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to update member.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to update member.";
+      setError(message);
+      toast({ title: "Unable to update member", description: message, variant: "error" });
     } finally {
       setSaving(null);
     }
@@ -137,14 +153,20 @@ export function UsersManagement() {
     try {
       if (target.status === "disabled") {
         await reactivateOrganizationMember(activeOrganizationId, target.id);
-        setSuccess(`${target.displayName} was reactivated.`);
+        const message = `${target.displayName} was reactivated.`;
+        setSuccess(message);
+        toast({ title: "Member reactivated", description: message, variant: "success" });
       } else {
         await disableOrganizationMember(activeOrganizationId, target.id);
-        setSuccess(`${target.displayName} was disabled.`);
+        const message = `${target.displayName} was disabled.`;
+        setSuccess(message);
+        toast({ title: "Member disabled", description: message, variant: "success" });
       }
       await loadUsers();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to update member status.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to update member status.";
+      setError(message);
+      toast({ title: "Unable to update member status", description: message, variant: "error" });
     } finally {
       setSaving(null);
     }

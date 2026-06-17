@@ -2,19 +2,22 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Building2, LogIn } from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { AuthProvider, useAuth } from "@/features/auth/auth-provider";
 
 function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { firebaseReady, signIn } = useAuth();
-  const [email, setEmail] = useState("");
+  const toast = useToast();
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -25,9 +28,12 @@ function LoginContent() {
     setError(null);
     try {
       await signIn(email, password);
+      toast({ title: "Signed in", description: "Welcome back.", variant: "success" });
       router.push("/dashboard");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to sign in.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to sign in.";
+      setError(message);
+      toast({ title: "Unable to sign in", description: message, variant: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -84,7 +90,9 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <AuthProvider>
-      <LoginContent />
+      <Suspense fallback={null}>
+        <LoginContent />
+      </Suspense>
     </AuthProvider>
   );
 }

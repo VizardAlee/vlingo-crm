@@ -8,6 +8,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { approvalTone, createReceiptNumber, dealPaymentSummary, dealTargetAmount, paymentStatusForAmount, paymentTotal, rentalBalance } from "@/features/finance/finance-utils";
 import { hasPermission } from "@/lib/permissions";
@@ -176,6 +177,7 @@ function approvalLabel(status: FinanceApprovalStatus | PaymentVerificationStatus
 
 export function FinanceDashboard({ initialSource }: { initialSource?: string }) {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [deals, setDeals] = useState<FinanceDeal[]>([]);
   const [leads, setLeads] = useState<FinanceLead[]>([]);
   const [rentals, setRentals] = useState<FinanceRental[]>([]);
@@ -224,6 +226,18 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
   const canUpdateDeal = hasPermission(member, "deals.update") || hasPermission(member, "finance.update") || hasPermission(member, "finance.approve");
   const canUpdateRental = hasPermission(member, "rentals.update");
   const canCreateActivity = hasPermission(member, "activities.create");
+
+  useEffect(() => {
+    if (success) {
+      toast({ title: "Finance updated", description: success, variant: "success" });
+    }
+  }, [success, toast]);
+
+  useEffect(() => {
+    if (error) {
+      toast({ title: "Finance action failed", description: error, variant: "error" });
+    }
+  }, [error, toast]);
 
   const loadFinance = useCallback(async () => {
     setLoading(true);

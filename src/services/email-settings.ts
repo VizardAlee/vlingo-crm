@@ -55,3 +55,15 @@ export async function sendEmailSmtpTest(organizationId: string, recipient?: stri
   const callable = httpsCallable<{ organizationId: string; recipient?: string }, { ok: boolean }>(assertFunctions(), "sendEmailSmtpTest");
   await callable({ organizationId, recipient });
 }
+
+export async function sendSalesJourneyEmail(input: {
+  body: string;
+  leadId: string;
+  organizationId: string;
+  recipient?: string;
+  subject: string;
+}) {
+  const callable = httpsCallable<typeof input, { activityId: string; ok: boolean }>(assertFunctions(), "sendSalesJourneyEmail");
+  const result = await callable(input);
+  return result.data;
+}

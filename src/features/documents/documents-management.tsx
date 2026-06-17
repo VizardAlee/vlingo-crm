@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, uploadDocument, type DocumentRecord, type RelatedEntityType } from "@/services/documents";
@@ -130,6 +131,7 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
 export function DocumentsManagement() {
   const searchParams = useSearchParams();
   const { activeBranchId, activeOrganizationId, user } = useAuth();
+  const toast = useToast();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("general");
@@ -150,11 +152,13 @@ export function DocumentsManagement() {
     try {
       setDocuments(await listDocuments(activeOrganizationId));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to load documents.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to load documents.";
+      setError(message);
+      toast({ title: "Unable to load documents", description: message, variant: "error" });
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId]);
+  }, [activeOrganizationId, toast]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -204,7 +208,9 @@ export function DocumentsManagement() {
   async function submitUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user || !file) {
-      setError("Choose a file before uploading.");
+      const message = "Choose a file before uploading.";
+      setError(message);
+      toast({ title: "Choose a file", description: message, variant: "error" });
       return;
     }
 
@@ -232,10 +238,14 @@ export function DocumentsManagement() {
       setRelatedError(null);
       setRelatedLoading(false);
       setFile(null);
-      setSuccess("Document uploaded.");
+      const message = "Document uploaded.";
+      setSuccess(message);
+      toast({ title: "Document uploaded", description: message, variant: "success" });
       await loadDocuments();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to upload document.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to upload document.";
+      setError(message);
+      toast({ title: "Unable to upload document", description: message, variant: "error" });
     } finally {
       setSaving(false);
     }

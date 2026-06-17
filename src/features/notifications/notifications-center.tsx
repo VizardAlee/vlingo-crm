@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
@@ -159,6 +160,7 @@ function notificationIcon(kind: NotificationKind) {
 
 export function NotificationsCenter() {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -304,11 +306,13 @@ export function NotificationsCenter() {
       setItems(persisted);
       window.dispatchEvent(new Event(notificationsChangedEvent));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to load notifications.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to load notifications.";
+      setError(message);
+      toast({ title: "Unable to load notifications", description: message, variant: "error" });
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, context, member, user]);
+  }, [activeOrganizationId, context, member, toast, user]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -339,7 +343,9 @@ export function NotificationsCenter() {
       setItems((current) => current.map((item) => item.id === id ? { ...item, readAt: new Date().toISOString(), readBy: context.userId } : item));
       window.dispatchEvent(new Event(notificationsChangedEvent));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to update notification.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to update notification.";
+      setError(message);
+      toast({ title: "Unable to update notification", description: message, variant: "error" });
     } finally {
       setSaving(null);
     }
@@ -362,8 +368,11 @@ export function NotificationsCenter() {
       const readAt = new Date().toISOString();
       setItems((current) => current.map((item) => unreadIds.includes(item.id) ? { ...item, readAt, readBy: context.userId } : item));
       window.dispatchEvent(new Event(notificationsChangedEvent));
+      toast({ title: "Notifications updated", description: "All notifications marked as read.", variant: "success" });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to update notifications.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to update notifications.";
+      setError(message);
+      toast({ title: "Unable to update notifications", description: message, variant: "error" });
     } finally {
       setSaving(null);
     }

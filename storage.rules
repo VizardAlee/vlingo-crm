@@ -19,15 +19,31 @@ service firebase.storage {
       return hasMemberDoc(orgId) && memberDoc(orgId).status == "active";
     }
 
-    function hasPermission(orgId, permission) {
-      return isActiveMember(orgId) && memberDoc(orgId).permissions.hasAny([permission]);
+    function hasAnyPermission(orgId, permissions) {
+      return isActiveMember(orgId) && memberDoc(orgId).permissions.hasAny(permissions);
+    }
+
+    function canUseDocuments(orgId) {
+      return hasAnyPermission(orgId, [
+        "leads.readAssigned",
+        "leads.readAll",
+        "clients.read",
+        "deals.read",
+        "properties.read",
+        "units.read",
+        "rentals.read",
+        "development.read",
+        "marketing.read",
+        "tasks.read",
+        "activities.read",
+        "reports.viewFinancial",
+        "auditLogs.read"
+      ]);
     }
 
     match /organizations/{orgId}/{allPaths=**} {
-      allow read: if isActiveMember(orgId);
-      allow write: if hasPermission(orgId, "properties.update") ||
-        hasPermission(orgId, "clients.update") ||
-        hasPermission(orgId, "users.manage");
+      allow read: if canUseDocuments(orgId);
+      allow write: if canUseDocuments(orgId);
     }
 
     match /{allPaths=**} {

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { GuidedTour } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
@@ -168,6 +169,7 @@ function dealTypeFromLeadInterest(interest: unknown) {
 export function ModuleForm({ config, existing, id, initialValues }: { config: ModuleConfig; existing?: FormValues; id?: string; initialValues?: FormValues }) {
   const router = useRouter();
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -558,7 +560,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
   async function onSubmit(values: FormValues) {
     if (!user) {
-      setError("You must be signed in to save records.");
+      const message = "You must be signed in to save records.";
+      setError(message);
+      toast({ title: "Unable to save record", description: message, variant: "error" });
       return;
     }
 
@@ -566,7 +570,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     setValidationErrors({});
     const parsed = schema.safeParse(values);
     if (!parsed.success) {
-      setValidationErrors(Object.fromEntries(parsed.error.issues.map((issue) => [String(issue.path[0]), issue.message])));
+      const nextValidationErrors = Object.fromEntries(parsed.error.issues.map((issue) => [String(issue.path[0]), issue.message]));
+      setValidationErrors(nextValidationErrors);
+      toast({ title: "Check required fields", description: Object.values(nextValidationErrors)[0] ?? "Some fields need attention.", variant: "error" });
       return;
     }
 
@@ -664,9 +670,16 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         await writeAuditLog(context, "record.create", config.collection, createdId, parsedData);
       }
 
+      toast({
+        title: id ? "Record updated" : "Record created",
+        description: `${config.title.slice(0, -1)} ${id ? "updated" : "created"} successfully.`,
+        variant: "success",
+      });
       router.push(config.route);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to save record.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to save record.";
+      setError(message);
+      toast({ title: "Unable to save record", description: message, variant: "error" });
     }
   }
 
@@ -708,12 +721,16 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
   async function createStakeholder() {
     if (!user) {
-      setError("You must be signed in to create ownership records.");
+      const message = "You must be signed in to create ownership records.";
+      setError(message);
+      toast({ title: "Unable to create ownership record", description: message, variant: "error" });
       return;
     }
 
     if (!stakeholderForm.name.trim()) {
-      setError("Enter a name before creating the ownership record.");
+      const message = "Enter a name before creating the ownership record.";
+      setError(message);
+      toast({ title: "Name required", description: message, variant: "error" });
       return;
     }
 
@@ -742,8 +759,11 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       }
 
       setStakeholderForm({ email: "", name: "", notes: "", phoneNumber: "", type: stakeholderForm.type });
+      toast({ title: "Ownership record created", description: `${stakeholderForm.name.trim()} is now available for selection.`, variant: "success" });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to create ownership record.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to create ownership record.";
+      setError(message);
+      toast({ title: "Unable to create ownership record", description: message, variant: "error" });
     } finally {
       setStakeholderSaving(false);
     }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import {
   getEmailSmtpSettings,
@@ -56,7 +57,7 @@ const emailSettingsTourSteps: GuidedTourStep[] = [
     title: "Security mode",
   },
   {
-    body: "Use the mailbox password or app password. Google Workspace, Gmail, Microsoft 365, and Outlook may require an app password or SMTP auth to be enabled.",
+    body: "Use the mailbox password or app password. For Google Workspace or Gmail, turn on 2-Step Verification, create an app password at myaccount.google.com/apppasswords, and paste that 16-character password here instead of the normal login password.",
     target: emailSettingsTourTarget("password"),
     title: "SMTP password",
   },
@@ -89,8 +90,17 @@ const defaultForm = {
   username: "",
 };
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function normalizeHost(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export function EmailSettingsManagement() {
   const { activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [form, setForm] = useState(defaultForm);
   const [hasPassword, setHasPassword] = useState(false);
   const [testRecipient, setTestRecipient] = useState("");
@@ -118,11 +128,13 @@ export function EmailSettingsManagement() {
       setHasPassword(settings.hasPassword);
       setTestRecipient(settings.senderEmail || member?.email || user?.email || "");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to load email settings.");
+      const message = errorMessage(nextError, "Unable to load email settings.");
+      setError(message);
+      toast({ description: message, title: "Unable to load email settings", variant: "error" });
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, member, user]);
+  }, [activeOrganizationId, member, toast, user]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -138,16 +150,21 @@ export function EmailSettingsManagement() {
     setError(null);
     setSuccess(null);
     try {
+      const host = normalizeHost(form.host);
       const settings = await saveEmailSmtpSettings({
         ...form,
+        host,
         organizationId: activeOrganizationId,
         password: form.password || undefined,
       });
-      setForm((current) => ({ ...current, password: "" }));
+      setForm((current) => ({ ...current, host, password: "" }));
       setHasPassword(settings.hasPassword);
       setSuccess("Email settings saved.");
+      toast({ title: "Email settings saved", variant: "success" });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to save email settings.");
+      const message = errorMessage(nextError, "Unable to save email settings.");
+      setError(message);
+      toast({ description: message, title: "Unable to save email settings", variant: "error" });
     } finally {
       setSaving(null);
     }
@@ -159,9 +176,13 @@ export function EmailSettingsManagement() {
     setSuccess(null);
     try {
       await sendEmailSmtpTest(activeOrganizationId, testRecipient || undefined);
-      setSuccess(`Test email sent to ${testRecipient || form.senderEmail}.`);
+      const message = `Test email sent to ${testRecipient || form.senderEmail}.`;
+      setSuccess(message);
+      toast({ description: message, title: "Test email sent", variant: "success" });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to send test email.");
+      const message = errorMessage(nextError, "Unable to send test email.");
+      setError(message);
+      toast({ description: message, title: "Unable to send test email", variant: "error" });
     } finally {
       setSaving(null);
     }
@@ -228,8 +249,11 @@ export function EmailSettingsManagement() {
               </div>
               <div data-tour={emailSettingsTourTarget("host")}>
                 <Field label="SMTP host">
-                  <Input required placeholder="smtp.yourcompany.com" value={form.host} onChange={(event) => setForm((value) => ({ ...value, host: event.target.value }))} />
-                  <span className="text-xs font-normal text-muted-foreground">The outgoing mail server from your provider, such as smtp.gmail.com or smtp.office365.com.</span>
+                  <Input required placeholder="smtp.yourcompany.com" value={form.host} onBlur={() => setForm((value) => ({ ...value, host: normalizeHost(value.host) }))} onChange={(event) => setForm((value) => ({ ...value, host: event.target.value }))} />
+                  <span className="text-xs font-normal text-muted-foreground">
+                    The outgoing mail server from your provider, such as smtp.gmail.com or smtp.office365.com.
+                    {normalizeHost(form.host) === "stmp.gmail.com" ? <span className="font-semibold text-destructive"> Use smtp.gmail.com, not stmp.gmail.com.</span> : null}
+                  </span>
                 </Field>
               </div>
               <div data-tour={emailSettingsTourTarget("port")}>
@@ -258,7 +282,13 @@ export function EmailSettingsManagement() {
                     value={form.password}
                     onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))}
                   />
-                  <span className="text-xs font-normal text-muted-foreground">Use an app password when the provider requires it. Leave blank after saving unless replacing the password.</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    Use an app password when the provider requires it. For Google Workspace or Gmail, enable 2-Step Verification, create an app password at{" "}
+                    <a className="font-semibold text-primary underline-offset-2 hover:underline" href="https://myaccount.google.com/apppasswords" rel="noreferrer" target="_blank">
+                      myaccount.google.com/apppasswords
+                    </a>
+                    , and use that 16-character password here. Leave blank after saving unless replacing the password.
+                  </span>
                 </Field>
               </div>
               <div data-tour={emailSettingsTourTarget("status")}>

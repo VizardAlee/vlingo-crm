@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
@@ -43,6 +44,7 @@ function branchToForm(branch: BranchRecord): BranchFormState {
 
 export function BranchesManagement() {
   const { activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [branches, setBranches] = useState<BranchRecord[]>([]);
   const [draft, setDraft] = useState<BranchFormState>(defaultBranch);
   const [editing, setEditing] = useState<Record<string, BranchFormState>>({});
@@ -59,11 +61,13 @@ export function BranchesManagement() {
     try {
       setBranches(await listOrganizationBranches(activeOrganizationId));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to load branches.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to load branches.";
+      setError(message);
+      toast({ title: "Unable to load branches", description: message, variant: "error" });
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId]);
+  }, [activeOrganizationId, toast]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -76,7 +80,9 @@ export function BranchesManagement() {
   async function submitCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) {
-      setError("You need to be signed in to create a branch.");
+      const message = "You need to be signed in to create a branch.";
+      setError(message);
+      toast({ title: "Unable to create branch", description: message, variant: "error" });
       return;
     }
 
@@ -90,10 +96,14 @@ export function BranchesManagement() {
         userId: user.uid,
       });
       setDraft(defaultBranch);
-      setSuccess(`${draft.name} was created.`);
+      const message = `${draft.name} was created.`;
+      setSuccess(message);
+      toast({ title: "Branch created", description: message, variant: "success" });
       await loadBranches();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to create branch.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to create branch.";
+      setError(message);
+      toast({ title: "Unable to create branch", description: message, variant: "error" });
     } finally {
       setSaving(null);
     }
@@ -101,7 +111,9 @@ export function BranchesManagement() {
 
   async function submitUpdate(branch: BranchRecord) {
     if (!user) {
-      setError("You need to be signed in to update a branch.");
+      const message = "You need to be signed in to update a branch.";
+      setError(message);
+      toast({ title: "Unable to update branch", description: message, variant: "error" });
       return;
     }
 
@@ -116,10 +128,14 @@ export function BranchesManagement() {
         organizationId: activeOrganizationId,
         userId: user.uid,
       });
-      setSuccess(`${next.name} was updated.`);
+      const message = `${next.name} was updated.`;
+      setSuccess(message);
+      toast({ title: "Branch updated", description: message, variant: "success" });
       await loadBranches();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to update branch.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to update branch.";
+      setError(message);
+      toast({ title: "Unable to update branch", description: message, variant: "error" });
     } finally {
       setSaving(null);
     }

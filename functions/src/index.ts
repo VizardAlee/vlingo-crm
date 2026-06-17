@@ -10,6 +10,7 @@ initializeApp();
 const db = getFirestore();
 const auth = getAuth();
 const callableOptions = { cors: true, invoker: "public" as const };
+const mailSettingsSecretOptions = { ...callableOptions, secrets: ["MAIL_SETTINGS_ENCRYPTION_KEY"] };
 const appBaseUrl = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 const rolePermissions = {
@@ -93,6 +94,14 @@ interface EmailSettingsPayload {
   username: string;
 }
 
+interface SalesJourneyEmailPayload {
+  body: string;
+  leadId: string;
+  organizationId: string;
+  recipient?: string;
+  subject: string;
+}
+
 function requireString(value: unknown, field: string) {
   if (typeof value !== "string" || !value.trim()) {
     throw new HttpsError("invalid-argument", `${field} is required.`);
@@ -137,8 +146,42 @@ function requireSecureMode(value: unknown) {
   return mode as EmailSettingsPayload["secureMode"];
 }
 
+function smtpSendError(error: unknown, host: string) {
+  const record = typeof error === "object" && error ? error as Record<string, unknown> : {};
+  const code = typeof record.code === "string" ? record.code : "";
+  const command = typeof record.command === "string" ? record.command : "";
+  const response = typeof record.response === "string" ? record.response : "";
+  const responseCode = typeof record.responseCode === "number" ? record.responseCode : undefined;
+
+  console.error("sendEmailSmtpTest failed", { code, command, host, responseCode });
+
+  if (["EDNS", "ENOTFOUND"].includes(code)) {
+    return new HttpsError("failed-precondition", `SMTP host "${host}" could not be found. Check the spelling. For Google Workspace, use smtp.gmail.com.`);
+  }
+
+  if (["ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNREFUSED"].includes(code)) {
+    return new HttpsError("failed-precondition", `Unable to connect to ${host}. Check the SMTP host, port, security mode, and whether your provider allows SMTP connections.`);
+  }
+
+  if (code === "EAUTH" || responseCode === 535 || responseCode === 534) {
+    return new HttpsError("failed-precondition", "SMTP authentication failed. Check the username and password. Google Workspace, Gmail, Microsoft 365, and Outlook may require an app password or SMTP auth to be enabled.");
+  }
+
+  if (code === "EENVELOPE" || responseCode === 550 || responseCode === 553) {
+    return new HttpsError("failed-precondition", "The SMTP provider rejected the sender or recipient address. Check the sender email, reply-to email, and test recipient.");
+  }
+
+  return new HttpsError("internal", response || "Unable to send test email. Check the SMTP settings and provider logs.");
+}
+
 function isPrivilegedRole(role: RoleName) {
   return role === "superAdmin" || role === "managingDirector" || rolePermissions[role].some((permission) => ["users.manage", "roles.manage"].includes(permission));
+}
+
+function isPrivilegedMember(data: DocumentData | undefined) {
+  const memberRole = typeof data?.role === "string" && data.role in rolePermissions ? data.role as RoleName : null;
+  const permissions = Array.isArray(data?.permissions) ? data.permissions as string[] : [];
+  return Boolean(memberRole && isPrivilegedRole(memberRole)) || permissions.some((permission) => ["users.manage", "roles.manage"].includes(permission));
 }
 
 async function getActor(uid: string, organizationId: string): Promise<ActorContext> {
@@ -172,6 +215,12 @@ async function getActiveMember(uid: string, organizationId: string): Promise<Act
 function assertCanAssignRole(actor: ActorContext, role: RoleName) {
   if (isPrivilegedRole(role) && !actor.permissions.includes("roles.manage")) {
     throw new HttpsError("permission-denied", "You cannot assign privileged roles.");
+  }
+}
+
+function assertCanManageTargetMember(actor: ActorContext, target: DocumentData | undefined) {
+  if (isPrivilegedMember(target) && !actor.permissions.includes("roles.manage")) {
+    throw new HttpsError("permission-denied", "You cannot manage privileged users.");
   }
 }
 
@@ -237,10 +286,14 @@ function parseEmailSettingsPayload(data: unknown): EmailSettingsPayload {
   if (port < 1 || port > 65535) {
     throw new HttpsError("invalid-argument", "port must be between 1 and 65535.");
   }
+  const host = requireString(record.host, "host").toLowerCase();
+  if (host === "stmp.gmail.com") {
+    throw new HttpsError("invalid-argument", "Use smtp.gmail.com, not stmp.gmail.com.");
+  }
 
   return {
     enabled: record.enabled === true,
-    host: requireString(record.host, "host"),
+    host,
     password: typeof record.password === "string" && record.password ? record.password : undefined,
     port,
     replyTo: typeof record.replyTo === "string" && record.replyTo.trim() ? requireEmail(record.replyTo) : undefined,
@@ -248,6 +301,17 @@ function parseEmailSettingsPayload(data: unknown): EmailSettingsPayload {
     senderEmail: requireEmail(record.senderEmail),
     senderName: requireString(record.senderName, "senderName"),
     username: requireString(record.username, "username"),
+  };
+}
+
+function parseSalesJourneyEmailPayload(data: unknown): SalesJourneyEmailPayload {
+  const record = typeof data === "object" && data ? data as Record<string, unknown> : {};
+  return {
+    body: requireString(record.body, "body"),
+    leadId: requireString(record.leadId, "leadId"),
+    organizationId: requireString(record.organizationId, "organizationId"),
+    recipient: typeof record.recipient === "string" && record.recipient.trim() ? requireEmail(record.recipient) : undefined,
+    subject: requireString(record.subject, "subject"),
   };
 }
 
@@ -293,6 +357,20 @@ function formattedSender(settings: DocumentData) {
   return name ? `"${name}" <${String(settings.senderEmail)}>` : String(settings.senderEmail);
 }
 
+async function getUsableEmailSettings(organizationId: string, uid: string) {
+  const snapshot = await emailSettingsDoc(organizationId, uid).get();
+  const settings = snapshot.data();
+  if (!snapshot.exists || !settings) {
+    throw new HttpsError("failed-precondition", "Save your SMTP settings before sending email.");
+  }
+
+  if (settings.enabled !== true) {
+    throw new HttpsError("failed-precondition", "Your SMTP mailbox is disabled. Enable it in Email Settings before sending email.");
+  }
+
+  return settings;
+}
+
 async function getOrCreateUser(email: string, displayName: string): Promise<UserRecord> {
   try {
     return await auth.getUserByEmail(email);
@@ -315,7 +393,31 @@ function inviteUrl() {
     return undefined;
   }
 
-  return `${appBaseUrl.replace(/\/$/, "")}/login`;
+  return `${appBaseUrl.replace(/\/$/, "")}/invite/setup`;
+}
+
+function appInviteSetupLink(firebaseLink: string, email: string) {
+  const setupUrl = inviteUrl();
+  if (!setupUrl) {
+    return firebaseLink;
+  }
+
+  try {
+    const source = new URL(firebaseLink);
+    const oobCode = source.searchParams.get("oobCode");
+    const mode = source.searchParams.get("mode") ?? "resetPassword";
+    if (!oobCode) {
+      return firebaseLink;
+    }
+
+    const target = new URL(setupUrl);
+    target.searchParams.set("mode", mode);
+    target.searchParams.set("oobCode", oobCode);
+    target.searchParams.set("email", email);
+    return target.toString();
+  } catch {
+    return firebaseLink;
+  }
 }
 
 async function generateInviteLink(email: string) {
@@ -325,7 +427,8 @@ async function generateInviteLink(email: string) {
   }
 
   try {
-    return await auth.generatePasswordResetLink(email, { url: continueUrl });
+    const firebaseLink = await auth.generatePasswordResetLink(email, { url: continueUrl });
+    return appInviteSetupLink(firebaseLink, email);
   } catch (error) {
     const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
     if (code === "auth/unauthorized-continue-uri") {
@@ -386,11 +489,12 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
     assertCanAssignRole(actor, role);
 
     const user = await getOrCreateUser(email, displayName);
-    await auth.updateUser(user.uid, { disabled: false, displayName });
-    await auth.setCustomUserClaims(user.uid, { organizationId, role });
-
     const memberRef = db.doc(`organizations/${organizationId}/members/${user.uid}`);
     const previous = await memberRef.get();
+    assertCanManageTargetMember(actor, previous.data());
+
+    await auth.updateUser(user.uid, { disabled: false, displayName });
+    await auth.setCustomUserClaims(user.uid, { organizationId, role });
     const payload = {
       branchId,
       createdAt: previous.exists ? previous.data()?.createdAt ?? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
@@ -442,7 +546,7 @@ export const getEmailSmtpSettings = onCall(callableOptions, async (request) => {
   return sanitizeEmailSettings(snapshot.data(), member);
 });
 
-export const saveEmailSmtpSettings = onCall(callableOptions, async (request) => {
+export const saveEmailSmtpSettings = onCall(mailSettingsSecretOptions, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication is required.");
   }
@@ -505,7 +609,7 @@ export const saveEmailSmtpSettings = onCall(callableOptions, async (request) => 
   return sanitizeEmailSettings(next.data(), member);
 });
 
-export const sendEmailSmtpTest = onCall(callableOptions, async (request) => {
+export const sendEmailSmtpTest = onCall(mailSettingsSecretOptions, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication is required.");
   }
@@ -522,13 +626,17 @@ export const sendEmailSmtpTest = onCall(callableOptions, async (request) => {
   }
 
   const transport = smtpTransport(settings);
-  await transport.sendMail({
-    from: formattedSender(settings),
-    replyTo: settings.replyTo || settings.senderEmail,
-    subject: "Beacon Operations CRM SMTP test",
-    text: "This is a test email from your Beacon Operations CRM email settings.",
-    to: recipient,
-  });
+  try {
+    await transport.sendMail({
+      from: formattedSender(settings),
+      replyTo: settings.replyTo || settings.senderEmail,
+      subject: "Beacon Operations CRM SMTP test",
+      text: "This is a test email from your Beacon Operations CRM email settings.",
+      to: recipient,
+    });
+  } catch (error) {
+    throw smtpSendError(error, String(settings.host));
+  }
 
   await writeAuditLog({
     action: "emailSettings.test",
@@ -542,6 +650,96 @@ export const sendEmailSmtpTest = onCall(callableOptions, async (request) => {
   });
 
   return { ok: true };
+});
+
+export const sendSalesJourneyEmail = onCall(mailSettingsSecretOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+
+  const payload = parseSalesJourneyEmailPayload(request.data);
+  const member = await getActiveMember(request.auth.uid, payload.organizationId);
+  if (!member.permissions.includes("activities.create")) {
+    throw new HttpsError("permission-denied", "You do not have permission to send sales journey emails.");
+  }
+
+  const leadRef = db.doc(`organizations/${payload.organizationId}/leads/${payload.leadId}`);
+  const leadSnapshot = await leadRef.get();
+  const lead = leadSnapshot.data();
+  if (!leadSnapshot.exists || !lead || lead.isDeleted === true) {
+    throw new HttpsError("not-found", "Lead not found.");
+  }
+
+  if (!member.permissions.includes("leads.readAll") && lead.assignedTo && lead.assignedTo !== request.auth.uid) {
+    throw new HttpsError("permission-denied", "You do not have access to this lead.");
+  }
+
+  const recipient = payload.recipient ?? requireEmail(lead.email);
+  const settings = await getUsableEmailSettings(payload.organizationId, request.auth.uid);
+  const transport = smtpTransport(settings);
+
+  try {
+    await transport.sendMail({
+      from: formattedSender(settings),
+      replyTo: settings.replyTo || settings.senderEmail,
+      subject: payload.subject,
+      text: payload.body,
+      to: recipient,
+    });
+  } catch (error) {
+    throw smtpSendError(error, String(settings.host));
+  }
+
+  const activityRef = await db.collection(`organizations/${payload.organizationId}/activities`).add({
+    body: payload.body,
+    branchId: member.branchId,
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: request.auth.uid,
+    isDeleted: false,
+    organizationId: payload.organizationId,
+    referenceNumber: `ACT-${Date.now()}`,
+    relatedEntityId: payload.leadId,
+    relatedEntityType: "lead",
+    status: "completed",
+    subject: payload.subject,
+    type: "email",
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid,
+  });
+
+  const leadUpdate: Record<string, unknown> = {
+    lastContactAt: FieldValue.serverTimestamp(),
+    organizationId: payload.organizationId,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid,
+  };
+  if (lead.status === "new") {
+    leadUpdate.status = "contacted";
+    leadUpdate.stageHistory = [
+      ...(Array.isArray(lead.stageHistory) ? lead.stageHistory : []),
+      {
+        at: new Date().toISOString(),
+        from: "new",
+        note: `Email sent: ${payload.subject}`,
+        to: "contacted",
+        userId: request.auth.uid,
+      },
+    ];
+  }
+  await leadRef.update(leadUpdate);
+
+  await writeAuditLog({
+    action: "lead.emailSend",
+    actorId: request.auth.uid,
+    actorName: member.displayName,
+    branchId: member.branchId,
+    entityId: payload.leadId,
+    entityType: "lead",
+    newValue: { activityId: activityRef.id, recipient, subject: payload.subject },
+    organizationId: payload.organizationId,
+  });
+
+  return { activityId: activityRef.id, ok: true };
 });
 
 export const updateOrganizationMemberRole = onCall(callableOptions, async (request) => {
@@ -565,6 +763,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
   if (!previous.exists) {
     throw new HttpsError("not-found", "Member not found.");
   }
+  assertCanManageTargetMember(actor, previous.data());
 
   await memberRef.update({
     branchId,
@@ -606,6 +805,7 @@ export const disableOrganizationMember = onCall(callableOptions, async (request)
   if (!previous.exists) {
     throw new HttpsError("not-found", "Member not found.");
   }
+  assertCanManageTargetMember(actor, previous.data());
 
   await auth.updateUser(targetUid, { disabled: true });
   await memberRef.update({ status: "disabled", updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth.uid });
@@ -637,6 +837,7 @@ export const reactivateOrganizationMember = onCall(callableOptions, async (reque
   if (!previous.exists) {
     throw new HttpsError("not-found", "Member not found.");
   }
+  assertCanManageTargetMember(actor, previous.data());
 
   await auth.updateUser(targetUid, { disabled: false });
   await memberRef.update({ status: "active", updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth.uid });

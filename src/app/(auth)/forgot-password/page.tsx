@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { AuthProvider, useAuth } from "@/features/auth/auth-provider";
 
 function ForgotPasswordContent() {
   const { firebaseReady, resetPassword } = useAuth();
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,9 +22,13 @@ function ForgotPasswordContent() {
     setMessage(null);
     try {
       await resetPassword(email);
-      setMessage("Password reset email sent.");
+      const successMessage = "Password reset email sent.";
+      setMessage(successMessage);
+      toast({ title: "Reset link sent", description: successMessage, variant: "success" });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to send reset email.");
+      const message = nextError instanceof Error ? nextError.message : "Unable to send reset email.";
+      setError(message);
+      toast({ title: "Unable to send reset email", description: message, variant: "error" });
     }
   }
 

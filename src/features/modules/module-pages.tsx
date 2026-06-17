@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, XCircle } from "lucide-react";
+import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { WhatsAppPhoneLink } from "@/components/ui/whatsapp-link";
 import { PermissionDenied, LoadingState, ErrorState } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { CrmTable } from "@/components/tables/crm-table";
 import { ModuleForm } from "@/features/modules/module-form";
 import { columnsFor, type ModuleConfig } from "@/features/modules/module-config";
@@ -18,6 +19,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, type DocumentRecord } from "@/services/documents";
+import { sendSalesJourneyEmail } from "@/services/email-settings";
 import { createOrgRecord, getOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
@@ -562,6 +564,7 @@ function DevelopmentOperationsPanel({
   tasks: Record<string, unknown>[];
 }) {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const budget = Number(record.budget ?? 0);
   const amountSpent = Number(record.amountSpent ?? 0);
   const progressPercent = Number(record.progressPercent ?? 0);
@@ -585,6 +588,18 @@ function DevelopmentOperationsPanel({
   const canUpdateDevelopment = hasPermission(member, "development.update");
   const canCreateActivity = hasPermission(member, "activities.create");
   const canCreateTask = hasPermission(member, "tasks.create");
+
+  useEffect(() => {
+    if (success) {
+      toast({ title: "Development updated", description: success, variant: "success" });
+    }
+  }, [success, toast]);
+
+  useEffect(() => {
+    if (error) {
+      toast({ title: "Development action failed", description: error, variant: "error" });
+    }
+  }, [error, toast]);
 
   async function handleProgressSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -835,6 +850,7 @@ function RentalOperationsPanel({
   tasks: Record<string, unknown>[];
 }) {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const rentAmount = Number(record.rentAmount ?? 0);
   const [paymentAmount, setPaymentAmount] = useState(String(rentAmount || ""));
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
@@ -860,6 +876,18 @@ function RentalOperationsPanel({
   const totalPaid = Array.isArray(record.paymentHistory)
     ? record.paymentHistory.reduce((sum, entry) => sum + Number((entry as Record<string, unknown>).amount ?? 0), 0)
     : 0;
+
+  useEffect(() => {
+    if (success) {
+      toast({ title: "Rental updated", description: success, variant: "success" });
+    }
+  }, [success, toast]);
+
+  useEffect(() => {
+    if (error) {
+      toast({ title: "Rental action failed", description: error, variant: "error" });
+    }
+  }, [error, toast]);
 
   async function handlePaymentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1204,16 +1232,20 @@ function LeadJourneyPanel({
   tasks: Record<string, unknown>[];
 }) {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [stageStatus, setStageStatus] = useState(String(record.status ?? "new"));
   const [stageNote, setStageNote] = useState("");
   const [lostReason, setLostReason] = useState(String(record.lostReason ?? ""));
   const [interactionType, setInteractionType] = useState<(typeof interactionTypes)[number]>("phoneCall");
   const [interactionSubject, setInteractionSubject] = useState("");
   const [interactionBody, setInteractionBody] = useState("");
+  const [emailRecipient, setEmailRecipient] = useState(String(record.email ?? ""));
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
   const [followUpTitle, setFollowUpTitle] = useState("");
   const [followUpDueAt, setFollowUpDueAt] = useState("");
   const [followUpPriority, setFollowUpPriority] = useState("medium");
-  const [saving, setSaving] = useState<"stage" | "interaction" | "task" | null>(null);
+  const [saving, setSaving] = useState<"stage" | "interaction" | "email" | "task" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -1225,6 +1257,19 @@ function LeadJourneyPanel({
   const canCreateActivity = hasPermission(member, "activities.create");
   const canCreateDeal = hasPermission(member, "deals.create");
   const canCreateTask = hasPermission(member, "tasks.create");
+  const canSendEmail = canCreateActivity && currentStatus !== "converted" && currentStatus !== "lost";
+
+  useEffect(() => {
+    if (success) {
+      toast({ title: "Sales journey updated", description: success, variant: "success" });
+    }
+  }, [success, toast]);
+
+  useEffect(() => {
+    if (error) {
+      toast({ title: "Sales journey action failed", description: error, variant: "error" });
+    }
+  }, [error, toast]);
 
   async function handleStageSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1351,6 +1396,55 @@ function LeadJourneyPanel({
     }
   }
 
+  async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!context) {
+      setError("You must be signed in to send email.");
+      return;
+    }
+
+    if (!emailRecipient.trim()) {
+      setError("This lead does not have an email address.");
+      return;
+    }
+
+    if (!emailSubject.trim()) {
+      setError("Add an email subject.");
+      return;
+    }
+
+    if (!emailBody.trim()) {
+      setError("Add an email message.");
+      return;
+    }
+
+    setSaving("email");
+    setError(null);
+    setSuccess(null);
+    try {
+      await sendSalesJourneyEmail({
+        body: emailBody.trim(),
+        leadId: id,
+        organizationId: activeOrganizationId,
+        recipient: emailRecipient.trim(),
+        subject: emailSubject.trim(),
+      });
+      if (currentStatus === "new") {
+        setStageStatus("contacted");
+      }
+      const message = `Email sent to ${emailRecipient.trim()}.`;
+      setEmailSubject("");
+      setEmailBody("");
+      setSuccess(message);
+      await onChanged();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to send email.";
+      setError(message);
+    } finally {
+      setSaving(null);
+    }
+  }
+
   async function handleTaskSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!context) {
@@ -1469,7 +1563,7 @@ function LeadJourneyPanel({
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-4">
         <Card>
           <CardHeader><CardTitle>Move Stage</CardTitle></CardHeader>
           <CardContent>
@@ -1516,6 +1610,28 @@ function LeadJourneyPanel({
               <Button className="h-11" disabled={!canCreateActivity || currentStatus === "converted" || saving === "interaction"} type="submit" variant="secondary">
                 <PhoneCall className="h-4 w-4" />
                 {saving === "interaction" ? "Logging" : "Log interaction"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Send Email</CardTitle></CardHeader>
+          <CardContent>
+            <form className="grid gap-4" onSubmit={handleEmailSubmit}>
+              <Field label="Recipient">
+                <Input disabled={!canSendEmail} placeholder="client@example.com" type="email" value={emailRecipient} onChange={(event) => setEmailRecipient(event.target.value)} />
+              </Field>
+              <Field label="Subject">
+                <Input disabled={!canSendEmail || !emailRecipient} placeholder="Property recommendation, inspection details..." value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} />
+              </Field>
+              <Field label="Message">
+                <Textarea disabled={!canSendEmail || !emailRecipient} placeholder="Write the message that should be sent to this lead." value={emailBody} onChange={(event) => setEmailBody(event.target.value)} />
+              </Field>
+              {!record.email ? <p className="text-xs text-muted-foreground">Add an email address to this lead before sending email.</p> : null}
+              <Button className="h-11" disabled={!canSendEmail || !emailRecipient || saving === "email"} type="submit" variant="outline">
+                <Mail className="h-4 w-4" />
+                {saving === "email" ? "Sending" : "Send email"}
               </Button>
             </form>
           </CardContent>
@@ -1689,6 +1805,7 @@ export function ModuleListPage({
   title?: string;
 }) {
   const { activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [records, setRecords] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1717,13 +1834,17 @@ export function ModuleListPage({
           setRecords(items);
         }
       })
-      .catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Unable to load records."))
+      .catch((nextError) => {
+        const message = nextError instanceof Error ? nextError.message : "Unable to load records.";
+        setError(message);
+        toast({ title: `Unable to load ${config.title.toLowerCase()}`, description: message, variant: "error" });
+      })
       .finally(() => setLoading(false));
 
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, config.collection, fixedFilterKey, member, user]);
+  }, [activeOrganizationId, config.collection, config.title, fixedFilterKey, member, toast, user]);
 
   if (!hasAnyPermission(member, [config.listPermission as never, "dashboard.viewExecutive" as never])) {
     return <PermissionDenied />;
@@ -1788,6 +1909,7 @@ export function ModuleCreatePage({ config }: { config: ModuleConfig }) {
 export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: string }) {
   const router = useRouter();
   const { activeOrganizationId, member } = useAuth();
+  const toast = useToast();
   const [record, setRecord] = useState<Record<string, unknown> | null>(null);
   const [relatedRecord, setRelatedRecord] = useState<(Record<string, unknown> & { id: string }) | null>(null);
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
@@ -1800,6 +1922,18 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (actionSuccess) {
+      toast({ title: "Record updated", description: actionSuccess, variant: "success" });
+    }
+  }, [actionSuccess, toast]);
+
+  useEffect(() => {
+    if (actionError) {
+      toast({ title: "Record action failed", description: actionError, variant: "error" });
+    }
+  }, [actionError, toast]);
 
   const loadDetail = useCallback(async () => {
     const relatedType = relatedTypeForCollection(config.collection);

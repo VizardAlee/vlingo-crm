@@ -264,12 +264,12 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
-  it("allows existing sales roles to use deals before permission backfill", async () => {
+  it("blocks role-only deal access without explicit permissions", async () => {
     await seedMember("sales-1", "org-a", [], "salesExecutive");
     const db = testEnv.authenticatedContext("sales-1").firestore();
     const dealRef = doc(db, "organizations/org-a/deals/deal-1");
 
-    await assertSucceeds(setDoc(dealRef, {
+    await assertFails(setDoc(dealRef, {
       branchId: "head-office",
       createdBy: "sales-1",
       dealType: "sale",
@@ -277,13 +277,6 @@ describe("Beacon Firestore rules", () => {
       organizationId: "org-a",
       status: "new",
       title: "Role-backed deal",
-      updatedBy: "sales-1",
-    }));
-
-    await assertSucceeds(getDoc(dealRef));
-    await assertSucceeds(updateDoc(dealRef, {
-      organizationId: "org-a",
-      status: "negotiation",
       updatedBy: "sales-1",
     }));
   });
@@ -391,6 +384,37 @@ describe("Beacon Firestore rules", () => {
       readAt: "2026-06-12T12:00:00.000Z",
       readBy: "sales-1",
       title: "Changed title",
+      updatedBy: "sales-1",
+    }));
+  });
+
+  it("requires document-related permissions for document records", async () => {
+    await seedMember("agent-1", "org-a", [], "agent");
+    await seedMember("sales-1", "org-a", ["leads.readAssigned"], "salesExecutive");
+    const agentDb = testEnv.authenticatedContext("agent-1").firestore();
+    const salesDb = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertFails(setDoc(doc(agentDb, "organizations/org-a/documents/document-1"), {
+      branchId: "head-office",
+      category: "general",
+      createdBy: "agent-1",
+      fileName: "file.pdf",
+      isDeleted: false,
+      organizationId: "org-a",
+      status: "active",
+      title: "Restricted document",
+      updatedBy: "agent-1",
+    }));
+
+    await assertSucceeds(setDoc(doc(salesDb, "organizations/org-a/documents/document-2"), {
+      branchId: "head-office",
+      category: "general",
+      createdBy: "sales-1",
+      fileName: "file.pdf",
+      isDeleted: false,
+      organizationId: "org-a",
+      status: "active",
+      title: "Lead document",
       updatedBy: "sales-1",
     }));
   });

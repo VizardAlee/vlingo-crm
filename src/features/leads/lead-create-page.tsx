@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission } from "@/lib/permissions";
 import { leadSchema } from "@/lib/validation/schemas";
@@ -415,6 +416,7 @@ function downloadTemplate() {
 
 export function LeadCreatePage() {
   const { activeOrganizationId, member, user } = useAuth();
+  const toast = useToast();
   const [mode, setMode] = useState<"manual" | "import">("manual");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -449,6 +451,18 @@ export function LeadCreatePage() {
     [propertyUnits, values.propertyId],
   );
   const validPreviewRows = preview.filter((row) => row.errors.length === 0);
+
+  useEffect(() => {
+    if (success) {
+      toast({ title: "Lead workflow updated", description: success, variant: "success" });
+    }
+  }, [success, toast]);
+
+  useEffect(() => {
+    if (error) {
+      toast({ title: "Lead action failed", description: error, variant: "error" });
+    }
+  }, [error, toast]);
 
   const loadOptions = useCallback(async () => {
     setLoading(true);
