@@ -2,6 +2,7 @@
 
 import { MailCheck, RefreshCw, Save, Send } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
@@ -13,6 +14,68 @@ import {
   sendEmailSmtpTest,
   type EmailSecureMode,
 } from "@/services/email-settings";
+
+function emailSettingsTourTarget(fieldName: string) {
+  return `email-settings-${fieldName}`;
+}
+
+const emailSettingsTourSteps: GuidedTourStep[] = [
+  {
+    body: "This is the name recipients will see beside the email address. Use the staff member's official name or a clear company sender name.",
+    target: emailSettingsTourTarget("senderName"),
+    title: "Sender name",
+  },
+  {
+    body: "Use the official email address clients and leads should recognize. Many providers require this to match the SMTP account.",
+    target: emailSettingsTourTarget("senderEmail"),
+    title: "Sender email",
+  },
+  {
+    body: "Use this only when replies should go somewhere different from the sender mailbox, such as a shared sales inbox.",
+    target: emailSettingsTourTarget("replyTo"),
+    title: "Reply-to email",
+  },
+  {
+    body: "This is usually the full email address for the mailbox. Some providers use a separate SMTP username from the visible sender email.",
+    target: emailSettingsTourTarget("username"),
+    title: "SMTP username",
+  },
+  {
+    body: "Enter the SMTP server from the email provider, for example smtp.gmail.com, smtp.office365.com, or your company mail server.",
+    target: emailSettingsTourTarget("host"),
+    title: "SMTP host",
+  },
+  {
+    body: "Port 587 is common for STARTTLS. Port 465 is common for SSL/TLS. Use the value supplied by the provider or IT admin.",
+    target: emailSettingsTourTarget("port"),
+    title: "SMTP port",
+  },
+  {
+    body: "Choose the encryption mode required by the provider. STARTTLS is the common default, SSL/TLS is often used with port 465.",
+    target: emailSettingsTourTarget("secureMode"),
+    title: "Security mode",
+  },
+  {
+    body: "Use the mailbox password or app password. Google Workspace, Gmail, Microsoft 365, and Outlook may require an app password or SMTP auth to be enabled.",
+    target: emailSettingsTourTarget("password"),
+    title: "SMTP password",
+  },
+  {
+    body: "Keep this enabled when the mailbox is ready for CRM emails. Disable it to save the settings without allowing outbound messages.",
+    target: emailSettingsTourTarget("status"),
+    title: "Mailbox status",
+  },
+  {
+    body: "Save the settings before testing. The password is encrypted and the field clears after saving, so leave it blank later unless you are replacing it.",
+    target: emailSettingsTourTarget("save"),
+    title: "Save settings",
+  },
+  {
+    body: "Send a test message to confirm the SMTP details work before using this mailbox for lead or client communication.",
+    target: emailSettingsTourTarget("testRecipient"),
+    title: "Test delivery",
+  },
+];
 
 const defaultForm = {
   enabled: true,
@@ -115,10 +178,13 @@ export function EmailSettingsManagement() {
           <h1 className="text-xl font-semibold md:text-2xl">Email Settings</h1>
           <p className="mt-1 text-sm text-muted-foreground">Connect your official mailbox for client and lead messages.</p>
         </div>
-        <Button className="mt-4 h-11 w-full md:mt-0 md:w-auto" onClick={loadSettings} type="button" variant="outline">
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="mt-4 flex flex-col gap-2 md:mt-0 md:flex-row">
+          <GuidedTour className="h-11 w-full md:w-auto" storageKey="beacon-tour:email-settings" steps={emailSettingsTourSteps} />
+          <Button className="h-11 w-full md:w-auto" onClick={loadSettings} type="button" variant="outline">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error ? <ErrorState message={error} /> : null}
@@ -136,51 +202,78 @@ export function EmailSettingsManagement() {
         <CardContent>
           <form className="grid gap-4" onSubmit={submitSettings}>
             <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="Sender name">
-                <Input required value={form.senderName} onChange={(event) => setForm((value) => ({ ...value, senderName: event.target.value }))} />
-              </Field>
-              <Field label="Sender email">
-                <Input required type="email" value={form.senderEmail} onChange={(event) => setForm((value) => ({ ...value, senderEmail: event.target.value }))} />
-              </Field>
-              <Field label="Reply-to email">
-                <Input type="email" value={form.replyTo} onChange={(event) => setForm((value) => ({ ...value, replyTo: event.target.value }))} />
-              </Field>
-              <Field label="SMTP username">
-                <Input required autoComplete="username" value={form.username} onChange={(event) => setForm((value) => ({ ...value, username: event.target.value }))} />
-              </Field>
-              <Field label="SMTP host">
-                <Input required placeholder="smtp.yourcompany.com" value={form.host} onChange={(event) => setForm((value) => ({ ...value, host: event.target.value }))} />
-              </Field>
-              <Field label="Port">
-                <Input required min={1} max={65535} type="number" value={form.port} onChange={(event) => setForm((value) => ({ ...value, port: Number(event.target.value) }))} />
-              </Field>
-              <Field label="Security">
-                <Select value={form.secureMode} onChange={(event) => setForm((value) => ({ ...value, secureMode: event.target.value as EmailSecureMode }))}>
-                  <option value="starttls">STARTTLS</option>
-                  <option value="ssl">SSL/TLS</option>
-                  <option value="none">None</option>
-                </Select>
-              </Field>
-              <Field label={hasPassword ? "SMTP password or app password" : "SMTP password or app password"}>
-                <Input
-                  autoComplete="new-password"
-                  placeholder={hasPassword ? "Leave blank to keep saved password" : ""}
-                  required={!hasPassword}
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))}
-                />
-              </Field>
-              <Field label="Status">
-                <Select value={form.enabled ? "enabled" : "disabled"} onChange={(event) => setForm((value) => ({ ...value, enabled: event.target.value === "enabled" }))}>
-                  <option value="enabled">Enabled</option>
-                  <option value="disabled">Disabled</option>
-                </Select>
-              </Field>
+              <div data-tour={emailSettingsTourTarget("senderName")}>
+                <Field label="Sender name">
+                  <Input required value={form.senderName} onChange={(event) => setForm((value) => ({ ...value, senderName: event.target.value }))} />
+                  <span className="text-xs font-normal text-muted-foreground">The display name recipients see beside the email address.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("senderEmail")}>
+                <Field label="Sender email">
+                  <Input required type="email" value={form.senderEmail} onChange={(event) => setForm((value) => ({ ...value, senderEmail: event.target.value }))} />
+                  <span className="text-xs font-normal text-muted-foreground">The official mailbox address used for outbound client and lead messages.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("replyTo")}>
+                <Field label="Reply-to email">
+                  <Input type="email" value={form.replyTo} onChange={(event) => setForm((value) => ({ ...value, replyTo: event.target.value }))} />
+                  <span className="text-xs font-normal text-muted-foreground">Optional shared inbox where replies should go if different from the sender email.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("username")}>
+                <Field label="SMTP username">
+                  <Input required autoComplete="username" value={form.username} onChange={(event) => setForm((value) => ({ ...value, username: event.target.value }))} />
+                  <span className="text-xs font-normal text-muted-foreground">Usually the full email address, unless your provider gives a separate SMTP username.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("host")}>
+                <Field label="SMTP host">
+                  <Input required placeholder="smtp.yourcompany.com" value={form.host} onChange={(event) => setForm((value) => ({ ...value, host: event.target.value }))} />
+                  <span className="text-xs font-normal text-muted-foreground">The outgoing mail server from your provider, such as smtp.gmail.com or smtp.office365.com.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("port")}>
+                <Field label="Port">
+                  <Input required min={1} max={65535} type="number" value={form.port} onChange={(event) => setForm((value) => ({ ...value, port: Number(event.target.value) }))} />
+                  <span className="text-xs font-normal text-muted-foreground">587 is common for STARTTLS. 465 is common for SSL/TLS.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("secureMode")}>
+                <Field label="Security">
+                  <Select value={form.secureMode} onChange={(event) => setForm((value) => ({ ...value, secureMode: event.target.value as EmailSecureMode }))}>
+                    <option value="starttls">STARTTLS</option>
+                    <option value="ssl">SSL/TLS</option>
+                    <option value="none">None</option>
+                  </Select>
+                  <span className="text-xs font-normal text-muted-foreground">Encryption mode required by your email provider or IT admin.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("password")}>
+                <Field label={hasPassword ? "SMTP password or app password" : "SMTP password or app password"}>
+                  <Input
+                    autoComplete="new-password"
+                    placeholder={hasPassword ? "Leave blank to keep saved password" : ""}
+                    required={!hasPassword}
+                    type="password"
+                    value={form.password}
+                    onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))}
+                  />
+                  <span className="text-xs font-normal text-muted-foreground">Use an app password when the provider requires it. Leave blank after saving unless replacing the password.</span>
+                </Field>
+              </div>
+              <div data-tour={emailSettingsTourTarget("status")}>
+                <Field label="Status">
+                  <Select value={form.enabled ? "enabled" : "disabled"} onChange={(event) => setForm((value) => ({ ...value, enabled: event.target.value === "enabled" }))}>
+                    <option value="enabled">Enabled</option>
+                    <option value="disabled">Disabled</option>
+                  </Select>
+                  <span className="text-xs font-normal text-muted-foreground">Disable the mailbox to keep settings saved without allowing outbound CRM emails.</span>
+                </Field>
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 md:flex-row md:justify-end">
-              <Button className="h-11" disabled={saving === "save"} type="submit">
+              <Button className="h-11" data-tour={emailSettingsTourTarget("save")} disabled={saving === "save"} type="submit">
                 <Save className="h-4 w-4" />
                 {saving === "save" ? "Saving" : "Save settings"}
               </Button>
@@ -194,9 +287,12 @@ export function EmailSettingsManagement() {
           <CardTitle>Test Connection</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-[1fr_auto]">
-          <Field label="Send test to">
-            <Input type="email" value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} />
-          </Field>
+          <div data-tour={emailSettingsTourTarget("testRecipient")}>
+            <Field label="Send test to">
+              <Input type="email" value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} />
+              <span className="text-xs font-normal text-muted-foreground">Send a test message here to confirm SMTP delivery before using the mailbox.</span>
+            </Field>
+          </div>
           <div className="flex items-end">
             <Button className="h-10 w-full md:w-auto" disabled={saving === "test"} onClick={sendTest} type="button" variant="outline">
               <Send className="h-4 w-4" />
