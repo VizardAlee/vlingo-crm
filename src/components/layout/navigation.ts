@@ -32,12 +32,117 @@ export interface NavSection {
   items: NavItem[];
 }
 
+export const notificationAccessPermissions: Permission[] = [
+  "tasks.read",
+  "leads.readAssigned",
+  "leads.readAll",
+  "deals.read",
+  "rentals.read",
+  "activities.read",
+  "reports.viewFinancial",
+];
+
+export const documentAccessPermissions: Permission[] = [
+  "leads.readAssigned",
+  "leads.readAll",
+  "clients.read",
+  "deals.read",
+  "properties.read",
+  "units.read",
+  "rentals.read",
+  "development.read",
+  "marketing.read",
+  "tasks.read",
+  "activities.read",
+  "reports.viewFinancial",
+  "auditLogs.read",
+];
+
+export const emailSettingsAccessPermissions: Permission[] = [
+  "leads.readAssigned",
+  "leads.readAll",
+  "clients.read",
+  "deals.read",
+  "properties.read",
+  "units.read",
+  "tasks.read",
+  "activities.read",
+  "users.manage",
+];
+
+export interface RouteAccessRule {
+  exact?: string;
+  pattern?: RegExp;
+  permissions: Permission[];
+}
+
+export const routeAccessRules: RouteAccessRule[] = [
+  { exact: "/dashboard", permissions: ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"] },
+  { exact: "/notifications", permissions: notificationAccessPermissions },
+
+  { exact: "/leads/new", permissions: ["leads.create"] },
+  { pattern: /^\/leads\/[^/]+\/edit$/, permissions: ["leads.updateAssigned", "leads.assign"] },
+  { pattern: /^\/leads(\/[^/]+)?$/, permissions: ["leads.readAssigned", "leads.readAll"] },
+
+  { exact: "/clients/new", permissions: ["clients.create"] },
+  { pattern: /^\/clients\/[^/]+\/edit$/, permissions: ["clients.update"] },
+  { pattern: /^\/clients(\/[^/]+)?$/, permissions: ["clients.read"] },
+
+  { exact: "/deals/new", permissions: ["deals.create"] },
+  { pattern: /^\/deals\/[^/]+\/edit$/, permissions: ["deals.update"] },
+  { pattern: /^\/deals(\/[^/]+)?$/, permissions: ["deals.read"] },
+
+  { exact: "/properties/new", permissions: ["properties.create"] },
+  { pattern: /^\/properties\/[^/]+\/edit$/, permissions: ["properties.update"] },
+  { pattern: /^\/properties\/[^/]+\/units$/, permissions: ["units.read"] },
+  { pattern: /^\/properties(\/[^/]+)?$/, permissions: ["properties.read"] },
+
+  { exact: "/units/new", permissions: ["units.create"] },
+  { pattern: /^\/units\/[^/]+\/edit$/, permissions: ["units.update"] },
+  { pattern: /^\/units(\/[^/]+)?$/, permissions: ["units.read"] },
+
+  { exact: "/rentals/new", permissions: ["rentals.create"] },
+  { pattern: /^\/rentals\/[^/]+\/edit$/, permissions: ["rentals.update"] },
+  { pattern: /^\/rentals(\/[^/]+)?$/, permissions: ["rentals.read"] },
+
+  { exact: "/development/new", permissions: ["development.create"] },
+  { pattern: /^\/development\/[^/]+\/edit$/, permissions: ["development.update"] },
+  { pattern: /^\/development(\/[^/]+)?$/, permissions: ["development.read"] },
+
+  { exact: "/marketing/new", permissions: ["marketing.create"] },
+  { pattern: /^\/marketing\/[^/]+\/edit$/, permissions: ["marketing.update"] },
+  { pattern: /^\/marketing(\/[^/]+)?$/, permissions: ["marketing.read"] },
+
+  { exact: "/tasks/new", permissions: ["tasks.create"] },
+  { pattern: /^\/tasks\/[^/]+\/edit$/, permissions: ["tasks.update"] },
+  { pattern: /^\/tasks(\/[^/]+)?$/, permissions: ["tasks.read"] },
+
+  { exact: "/activities/new", permissions: ["activities.create"] },
+  { pattern: /^\/activities\/[^/]+\/edit$/, permissions: ["activities.create"] },
+  { pattern: /^\/activities(\/[^/]+)?$/, permissions: ["activities.read"] },
+
+  { exact: "/documents", permissions: documentAccessPermissions },
+  { exact: "/reports", permissions: ["reports.viewFinancial", "dashboard.viewExecutive"] },
+  { pattern: /^\/finance(\/.*)?$/, permissions: ["reports.viewFinancial"] },
+
+  { exact: "/settings/organization", permissions: ["users.manage", "roles.manage"] },
+  { exact: "/settings/email", permissions: emailSettingsAccessPermissions },
+  { exact: "/settings/branches", permissions: ["users.manage"] },
+  { exact: "/settings/users", permissions: ["users.manage"] },
+  { exact: "/settings/roles", permissions: ["roles.manage"] },
+  { exact: "/settings/audit-logs", permissions: ["auditLogs.read"] },
+];
+
+export function accessRuleForPath(pathname: string) {
+  return routeAccessRules.find((rule) => rule.exact === pathname || rule.pattern?.test(pathname));
+}
+
 export const navigation: NavSection[] = [
   {
     label: "Workspace",
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", permissions: ["leads.readAssigned", "leads.readAll", "dashboard.viewExecutive"] },
-      { href: "/notifications", icon: Bell, label: "Notifications", permissions: ["tasks.read", "leads.readAssigned", "leads.readAll", "rentals.read", "activities.read"] },
+      { href: "/notifications", icon: Bell, label: "Notifications", permissions: notificationAccessPermissions },
     ],
   },
   {
@@ -60,7 +165,7 @@ export const navigation: NavSection[] = [
     label: "Operations",
     items: [
       { href: "/tasks", icon: ListTodo, label: "Tasks", permissions: ["tasks.read"] },
-      { href: "/documents", icon: FileText, label: "Documents", permissions: ["clients.read", "properties.read"] },
+      { href: "/documents", icon: FileText, label: "Documents", permissions: documentAccessPermissions },
       { href: "/reports", icon: BarChart3, label: "Reports", permissions: ["reports.viewFinancial", "dashboard.viewExecutive"] },
     ],
   },
@@ -77,7 +182,7 @@ export const navigation: NavSection[] = [
     label: "Administration",
     items: [
       { href: "/settings/organization", icon: Settings, label: "Organization", permissions: ["users.manage", "roles.manage"] },
-      { href: "/settings/email", icon: Mail, label: "Email Settings", permissions: ["leads.readAssigned", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "tasks.read", "activities.read", "users.manage"] },
+      { href: "/settings/email", icon: Mail, label: "Email Settings", permissions: emailSettingsAccessPermissions },
       { href: "/settings/branches", icon: Building2, label: "Branches", permissions: ["users.manage"] },
       { href: "/settings/users", icon: Users, label: "Users", permissions: ["users.manage"] },
       { href: "/settings/roles", icon: ShieldCheck, label: "Roles", permissions: ["roles.manage"] },

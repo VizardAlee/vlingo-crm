@@ -7,9 +7,9 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LoadingState, ErrorState } from "@/components/ui/state";
+import { LoadingState, ErrorState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { hasPermission } from "@/lib/permissions";
+import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
 
@@ -17,13 +17,22 @@ export default function DashboardPage() {
   const { activeOrganizationId, member, user } = useAuth();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canViewDashboard = hasAnyPermission(member, ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"]);
 
   useEffect(() => {
+    if (!canViewDashboard) {
+      return;
+    }
+
     const assignedTo = user && !hasPermission(member, "leads.readAll") ? user.uid : undefined;
     getDashboardMetrics(activeOrganizationId, { assignedTo })
       .then(setMetrics)
       .catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Unable to load dashboard."));
-  }, [activeOrganizationId, member, user]);
+  }, [activeOrganizationId, canViewDashboard, member, user]);
+
+  if (!canViewDashboard) {
+    return <PermissionDenied />;
+  }
 
   if (error) {
     return <ErrorState message={error} />;

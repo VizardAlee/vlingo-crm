@@ -7,10 +7,10 @@ import { Bell, ChevronsLeft, LogOut, Menu, MoreHorizontal, Plus, Search, X } fro
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { LoadingState } from "@/components/ui/state";
-import { navigation } from "@/components/layout/navigation";
+import { LoadingState, PermissionDenied } from "@/components/ui/state";
+import { accessRuleForPath, navigation, notificationAccessPermissions } from "@/components/layout/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
-import { hasAnyPermission } from "@/lib/permissions";
+import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { listUserNotifications } from "@/services/notifications";
 
@@ -41,7 +41,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         .filter((section) => section.items.length > 0),
     [member],
   );
-  const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "deals.read", "rentals.read", "activities.read", "reports.viewFinancial"]);
+  const currentAccessRule = useMemo(() => accessRuleForPath(pathname), [pathname]);
+  const canViewCurrentRoute = !currentAccessRule || hasAnyPermission(member, currentAccessRule.permissions);
+  const canCreateLead = hasPermission(member, "leads.create");
+  const canViewNotifications = hasAnyPermission(member, notificationAccessPermissions);
 
   useEffect(() => {
     const currentUserId = user?.uid;
@@ -290,21 +293,25 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Select aria-label="Branch selector" className="hidden w-40 sm:block" value={activeBranchId} onChange={(event) => setActiveBranchId(event.target.value)}>
               <option value="head-office">Head office</option>
             </Select>
-            <ButtonLink className="hidden sm:inline-flex" href="/leads/new" variant="secondary">
-              <Plus className="h-4 w-4" />
-              Quick create
-            </ButtonLink>
+            {canCreateLead ? (
+              <ButtonLink className="hidden sm:inline-flex" href="/leads/new" variant="secondary">
+                <Plus className="h-4 w-4" />
+                Quick create
+              </ButtonLink>
+            ) : null}
             <Button aria-label="Search" className="md:hidden" onClick={() => setMobileSearchOpen((value) => !value)} size="icon" variant="ghost">
               <Search className="h-5 w-5" />
             </Button>
-            <ButtonLink aria-label={displayedUnreadNotificationCount ? `${displayedUnreadNotificationCount} unread notifications` : "Notifications"} className="relative" href="/notifications" size="icon" variant="outline">
-              <Bell className="h-4 w-4" />
-              {displayedUnreadNotificationCount ? (
-                <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-none text-white ring-2 ring-white">
-                  {displayedUnreadNotificationCount > 9 ? "9+" : displayedUnreadNotificationCount}
-                </span>
-              ) : null}
-            </ButtonLink>
+            {canViewNotifications ? (
+              <ButtonLink aria-label={displayedUnreadNotificationCount ? `${displayedUnreadNotificationCount} unread notifications` : "Notifications"} className="relative" href="/notifications" size="icon" variant="outline">
+                <Bell className="h-4 w-4" />
+                {displayedUnreadNotificationCount ? (
+                  <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-none text-white ring-2 ring-white">
+                    {displayedUnreadNotificationCount > 9 ? "9+" : displayedUnreadNotificationCount}
+                  </span>
+                ) : null}
+              </ButtonLink>
+            ) : null}
             <Button aria-label="Sign out" className="hidden md:inline-flex" onClick={signOutUser} size="icon" variant="ghost">
               <LogOut className="h-4 w-4" />
             </Button>
@@ -322,7 +329,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="mb-5 hidden text-sm text-muted-foreground md:block">
             {crumbs.length ? crumbs.map(titleCase).join(" / ") : "Dashboard"}
           </div>
-          {firebaseReady ? children : (
+          {firebaseReady ? (canViewCurrentRoute ? children : <PermissionDenied />) : (
             <div className="rounded-md border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
               Firebase environment variables are missing. Add `.env.local` values to connect authentication and Firestore.
             </div>

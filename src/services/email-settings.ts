@@ -67,3 +67,22 @@ export async function sendSalesJourneyEmail(input: {
   const result = await callable(input);
   return result.data;
 }
+
+export interface BulkEmailResult {
+  failed: Array<{ id: string; name: string; reason: string }>;
+  ok: boolean;
+  sent: Array<{ email: string; id: string; name: string }>;
+  skipped: Array<{ id: string; name: string; reason: string }>;
+}
+
+export async function sendBulkSalesEmail(input: {
+  body: string;
+  organizationId: string;
+  recipientIds: string[];
+  recipientType: "client" | "lead";
+  subject: string;
+}) {
+  const callable = httpsCallable<typeof input, BulkEmailResult>(assertFunctions(), "sendBulkSalesEmail");
+  const result = await callable(input);
+  return result.data;
+}

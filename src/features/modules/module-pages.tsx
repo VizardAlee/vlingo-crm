@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
 import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, XCircle } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,10 +16,11 @@ import { CrmTable } from "@/components/tables/crm-table";
 import { ModuleForm } from "@/features/modules/module-form";
 import { columnsFor, type ModuleConfig } from "@/features/modules/module-config";
 import { useAuth } from "@/features/auth/auth-provider";
+import { documentAccessPermissions } from "@/components/layout/navigation";
 import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, type DocumentRecord } from "@/services/documents";
-import { sendSalesJourneyEmail } from "@/services/email-settings";
+import { sendBulkSalesEmail, sendSalesJourneyEmail } from "@/services/email-settings";
 import { createOrgRecord, getOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
@@ -1791,6 +1792,154 @@ function UnitInventoryOverview({ records }: { records: Record<string, unknown>[]
   );
 }
 
+function BulkEmailPanel({
+  collection,
+  onClose,
+  organizationId,
+  records,
+}: {
+  collection: "clients" | "leads";
+  onClose: () => void;
+  organizationId: string;
+  records: Record<string, unknown>[];
+}) {
+  const toast = useToast();
+  const [body, setBody] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [sending, setSending] = useState(false);
+  const [subject, setSubject] = useState("");
+  const eligibleRecords = useMemo(() => records
+    .filter((record) => typeof record.id === "string" && typeof record.email === "string" && Boolean(record.email.trim()))
+    .slice(0, 50), [records]);
+  const recipientType = collection === "clients" ? "client" : "lead";
+
+  const eligibleIds = useMemo(() => new Set(eligibleRecords.map((record) => String(record.id))), [eligibleRecords]);
+  const activeSelectedIds = useMemo(() => selectedIds.filter((id) => eligibleIds.has(id)), [eligibleIds, selectedIds]);
+  const allSelected = Boolean(eligibleRecords.length) && activeSelectedIds.length === eligibleRecords.length;
+
+  function toggleRecipient(id: string) {
+    setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeSelectedIds.length) {
+      toast({ title: "Select recipients", description: "Choose at least one recipient with an email address.", variant: "error" });
+      return;
+    }
+
+    if (!subject.trim()) {
+      toast({ title: "Add a subject", variant: "error" });
+      return;
+    }
+
+    if (!body.trim()) {
+      toast({ title: "Add a message", variant: "error" });
+      return;
+    }
+
+    setSending(true);
+    try {
+      const result = await sendBulkSalesEmail({
+        body: body.trim(),
+        organizationId,
+        recipientIds: activeSelectedIds,
+        recipientType,
+        subject: subject.trim(),
+      });
+      const detail = [
+        `${result.sent.length} sent`,
+        result.skipped.length ? `${result.skipped.length} skipped` : "",
+        result.failed.length ? `${result.failed.length} failed` : "",
+      ].filter(Boolean).join(", ");
+
+      if (result.sent.length) {
+        toast({ title: "Bulk email complete", description: detail, variant: result.failed.length ? "info" : "success" });
+        setBody("");
+        setSubject("");
+        setSelectedIds([]);
+      } else {
+        const reason = result.failed[0]?.reason ?? result.skipped[0]?.reason ?? "No emails were sent.";
+        toast({ title: "No emails sent", description: reason, variant: "error" });
+      }
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to send bulk email.";
+      toast({ title: "Unable to send bulk email", description: message, variant: "error" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <CardTitle>Bulk Email</CardTitle>
+          <Button className="h-10 w-full md:w-auto" onClick={onClose} type="button" variant="ghost">Close</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <form className="grid gap-4" onSubmit={handleSubmit}>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_18rem]">
+            <div className="grid gap-3">
+              <Field label="Subject">
+                <Input value={subject} onChange={(event) => setSubject(event.target.value)} />
+              </Field>
+              <Field label="Message">
+                <Textarea className="min-h-36" value={body} onChange={(event) => setBody(event.target.value)} />
+              </Field>
+            </div>
+            <div className="grid gap-3 rounded-md border bg-muted/30 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">Recipients</p>
+                <Button
+                  className="h-9"
+                  disabled={!eligibleRecords.length}
+                  onClick={() => setSelectedIds(allSelected ? [] : eligibleRecords.map((record) => String(record.id)))}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {allSelected ? "Clear" : "Select all"}
+                </Button>
+              </div>
+              <div className="max-h-72 overflow-auto rounded-md border bg-white">
+                {eligibleRecords.length ? eligibleRecords.map((record) => {
+                  const id = String(record.id);
+                  const name = recordDisplayName(record);
+                  return (
+                    <label className="flex cursor-pointer items-start gap-3 border-b p-3 text-sm last:border-b-0 hover:bg-muted/50" key={id}>
+                      <Input
+                        checked={activeSelectedIds.includes(id)}
+                        className="mt-0.5 h-4 w-4 shrink-0"
+                        onChange={() => toggleRecipient(id)}
+                        type="checkbox"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{String(record.email)}</span>
+                      </span>
+                    </label>
+                  );
+                }) : (
+                  <div className="p-3 text-sm text-muted-foreground">No email addresses available.</div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">{activeSelectedIds.length} of {eligibleRecords.length} selected</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 md:flex-row md:justify-end">
+            <Button className="h-11 md:h-10" disabled={sending || !activeSelectedIds.length} type="submit">
+              <Send className="h-4 w-4" />
+              {sending ? "Sending" : "Send bulk email"}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ModuleListPage({
   config,
   createHref,
@@ -1809,6 +1958,7 @@ export function ModuleListPage({
   const [records, setRecords] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const fixedFilterKey = JSON.stringify(fixedFilters);
 
   useEffect(() => {
@@ -1846,7 +1996,7 @@ export function ModuleListPage({
     };
   }, [activeOrganizationId, config.collection, config.title, fixedFilterKey, member, toast, user]);
 
-  if (!hasAnyPermission(member, [config.listPermission as never, "dashboard.viewExecutive" as never])) {
+  if (!hasPermission(member, config.listPermission as never)) {
     return <PermissionDenied />;
   }
 
@@ -1863,6 +2013,7 @@ export function ModuleListPage({
         getPhone: (row: Record<string, unknown>) => String(row.phoneNumber ?? row.whatsappNumber ?? ""),
       }
     : undefined;
+  const canBulkEmail = (config.collection === "leads" || config.collection === "clients") && hasPermission(member, "activities.create");
 
   return (
     <section className="grid min-w-0 gap-5">
@@ -1871,14 +2022,25 @@ export function ModuleListPage({
           <h1 className="text-xl font-semibold md:text-2xl">{pageTitle}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{pageDescription}</p>
         </div>
-        {hasPermission(member, config.createPermission as never) ? (
-          <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={createHref ?? `${config.route}/new`}>
-            <Plus className="h-4 w-4" />
-            New {config.title.slice(0, -1)}
-          </ButtonLink>
-        ) : null}
+        <div className="grid gap-2 md:flex">
+          {canBulkEmail ? (
+            <Button className="h-11 w-full md:h-10 md:w-auto" onClick={() => setBulkEmailOpen((value) => !value)} type="button" variant={bulkEmailOpen ? "secondary" : "outline"}>
+              <Mail className="h-4 w-4" />
+              Bulk email
+            </Button>
+          ) : null}
+          {hasPermission(member, config.createPermission as never) ? (
+            <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={createHref ?? `${config.route}/new`}>
+              <Plus className="h-4 w-4" />
+              New {config.title.slice(0, -1)}
+            </ButtonLink>
+          ) : null}
+        </div>
       </div>
       {config.collection === "propertyUnits" && !error && !loading && records.length ? <UnitInventoryOverview records={records} /> : null}
+      {bulkEmailOpen && canBulkEmail && (config.collection === "leads" || config.collection === "clients") ? (
+        <BulkEmailPanel collection={config.collection} onClose={() => setBulkEmailOpen(false)} organizationId={activeOrganizationId} records={records} />
+      ) : null}
       {error ? <ErrorState message={error} /> : loading ? <LoadingState label={`Loading ${config.title.toLowerCase()}`} /> : (
         <CrmTable compactContactView={compactContactView} columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${config.title.slice(0, -1)}`} emptyTitle={config.emptyTitle} exportFilename={`${config.collection}.csv`} />
       )}
@@ -2012,7 +2174,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     };
   }, [activeOrganizationId, config.collection, id]);
 
-  if (!hasAnyPermission(member, [config.listPermission as never, "dashboard.viewExecutive" as never])) {
+  if (!hasPermission(member, config.listPermission as never)) {
     return <PermissionDenied />;
   }
 
@@ -2029,6 +2191,9 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const relatedQuery = relatedType ? `relatedEntityType=${relatedType}&relatedEntityId=${id}` : "";
   const relatedRecordHref = relatedRecord ? routeForRelatedEntity(config.collection === "propertyUnits" ? "property" : record.relatedEntityType, relatedRecord.id) : null;
   const relatedRecordLabel = config.collection === "propertyUnits" ? "Property" : titleCase(String(record.relatedEntityType ?? "Related record"));
+  const canAttachDocuments = hasAnyPermission(member, documentAccessPermissions);
+  const canCreateTask = hasPermission(member, "tasks.create");
+  const canCreateActivity = hasPermission(member, "activities.create");
 
   async function handleConvertLead() {
     setActionLoading(true);
@@ -2071,18 +2236,24 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       ) : null}
       {relatedType ? (
         <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
-          <ButtonLink href={`/tasks/new?${relatedQuery}`} variant="outline">
-            <ListTodo className="h-4 w-4" />
-            Add task
-          </ButtonLink>
-          <ButtonLink href={`/activities/new?${relatedQuery}`} variant="outline">
-            <MessageSquarePlus className="h-4 w-4" />
-            Log activity
-          </ButtonLink>
-          <ButtonLink href={`/documents?${relatedQuery}`} variant="outline">
-            <GitBranch className="h-4 w-4" />
-            Attach document
-          </ButtonLink>
+          {canCreateTask ? (
+            <ButtonLink href={`/tasks/new?${relatedQuery}`} variant="outline">
+              <ListTodo className="h-4 w-4" />
+              Add task
+            </ButtonLink>
+          ) : null}
+          {canCreateActivity ? (
+            <ButtonLink href={`/activities/new?${relatedQuery}`} variant="outline">
+              <MessageSquarePlus className="h-4 w-4" />
+              Log activity
+            </ButtonLink>
+          ) : null}
+          {canAttachDocuments ? (
+            <ButtonLink href={`/documents?${relatedQuery}`} variant="outline">
+              <GitBranch className="h-4 w-4" />
+              Attach document
+            </ButtonLink>
+          ) : null}
           {config.collection === "deals" && hasPermission(member, "finance.create") ? (
             <ButtonLink href={`/finance?source=deal:${id}`} variant="outline">
               <ReceiptText className="h-4 w-4" />

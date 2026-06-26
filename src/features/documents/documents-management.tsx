@@ -3,40 +3,44 @@
 import { CheckCircle2, Download, FileText, RefreshCw, Upload } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { EmptyState, ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
+import { documentAccessPermissions } from "@/components/layout/navigation";
+import { hasAnyPermission } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, uploadDocument, type DocumentRecord, type RelatedEntityType } from "@/services/documents";
 import { listOrgRecords } from "@/services/repository";
 import type { OrgCollection } from "@/services/firestore-paths";
+import type { Permission } from "@/types/crm";
 
 type RelatedOption = { label: string; value: string };
 type RelatedConfig = {
   collection: OrgCollection;
   label: string;
+  permissions: Permission[];
   type: RelatedEntityType;
   filter?: (record: Record<string, unknown>) => boolean;
 };
 
 const relatedConfigs: RelatedConfig[] = [
-  { collection: "deals", label: "Deal", type: "deal" },
-  { collection: "leads", label: "Lead", type: "lead" },
-  { collection: "clients", label: "Client", type: "client" },
-  { collection: "properties", label: "Property", type: "property" },
-  { collection: "propertyUnits", label: "Unit", type: "unit" },
-  { collection: "tasks", label: "Task", type: "task" },
-  { collection: "rentalTenancies", label: "Tenancy", type: "tenancy" },
-  { collection: "developmentProjects", label: "Development project", type: "development" },
-  { collection: "marketingCampaigns", label: "Marketing campaign", type: "marketing" },
-  { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", type: "owner" },
-  { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", type: "developer" },
-  { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", type: "management" },
+  { collection: "deals", label: "Deal", permissions: ["deals.read"], type: "deal" },
+  { collection: "leads", label: "Lead", permissions: ["leads.readAssigned", "leads.readAll"], type: "lead" },
+  { collection: "clients", label: "Client", permissions: ["clients.read"], type: "client" },
+  { collection: "properties", label: "Property", permissions: ["properties.read"], type: "property" },
+  { collection: "propertyUnits", label: "Unit", permissions: ["units.read"], type: "unit" },
+  { collection: "tasks", label: "Task", permissions: ["tasks.read"], type: "task" },
+  { collection: "rentalTenancies", label: "Tenancy", permissions: ["rentals.read"], type: "tenancy" },
+  { collection: "developmentProjects", label: "Development project", permissions: ["development.read"], type: "development" },
+  { collection: "marketingCampaigns", label: "Marketing campaign", permissions: ["marketing.read"], type: "marketing" },
+  { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", permissions: ["properties.read"], type: "owner" },
+  { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", permissions: ["properties.read"], type: "developer" },
+  { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", permissions: ["properties.read"], type: "management" },
 ];
 
 function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
@@ -130,7 +134,7 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
 
 export function DocumentsManagement() {
   const searchParams = useSearchParams();
-  const { activeBranchId, activeOrganizationId, user } = useAuth();
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [title, setTitle] = useState("");
@@ -145,8 +149,15 @@ export function DocumentsManagement() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const allowedRelatedConfigs = useMemo(() => relatedConfigs.filter((config) => hasAnyPermission(member, config.permissions)), [member]);
+  const canUseDocuments = hasAnyPermission(member, documentAccessPermissions);
 
   const loadDocuments = useCallback(async () => {
+    if (!canUseDocuments) {
+      setLoading(false);
+      return;
+    }
+
     setError(null);
     setLoading(true);
     try {
@@ -158,7 +169,7 @@ export function DocumentsManagement() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, toast]);
+  }, [activeOrganizationId, canUseDocuments, toast]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -173,9 +184,10 @@ export function DocumentsManagement() {
       return;
     }
 
-    const config = relatedConfigs.find((item) => item.type === relatedEntityType);
+    const config = allowedRelatedConfigs.find((item) => item.type === relatedEntityType);
     if (!config) {
-      return;
+      const timeout = window.setTimeout(() => setRelatedLoading(false), 0);
+      return () => window.clearTimeout(timeout);
     }
 
     let mounted = true;
@@ -203,7 +215,7 @@ export function DocumentsManagement() {
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, relatedEntityType]);
+  }, [activeOrganizationId, allowedRelatedConfigs, relatedEntityType]);
 
   async function submitUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -249,6 +261,10 @@ export function DocumentsManagement() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (!canUseDocuments) {
+    return <PermissionDenied />;
   }
 
   if (loading) {
@@ -305,7 +321,7 @@ export function DocumentsManagement() {
                 setRelatedLoading(Boolean(nextType));
               }}>
                 <option value="">None</option>
-                {relatedConfigs.map((config) => <option key={config.type} value={config.type}>{config.label}</option>)}
+                {allowedRelatedConfigs.map((config) => <option key={config.type} value={config.type}>{config.label}</option>)}
               </Select>
             </Field>
             <Field label="Related record" error={relatedError ?? undefined}>

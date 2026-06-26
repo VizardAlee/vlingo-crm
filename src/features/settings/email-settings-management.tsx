@@ -6,9 +6,11 @@ import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
-import { ErrorState, LoadingState } from "@/components/ui/state";
+import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
+import { emailSettingsAccessPermissions } from "@/components/layout/navigation";
+import { hasAnyPermission } from "@/lib/permissions";
 import {
   getEmailSmtpSettings,
   saveEmailSmtpSettings,
@@ -108,8 +110,14 @@ export function EmailSettingsManagement() {
   const [saving, setSaving] = useState<"save" | "test" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const canUseEmailSettings = hasAnyPermission(member, emailSettingsAccessPermissions);
 
   const loadSettings = useCallback(async () => {
+    if (!canUseEmailSettings) {
+      setLoading(false);
+      return;
+    }
+
     setError(null);
     setLoading(true);
     try {
@@ -134,7 +142,7 @@ export function EmailSettingsManagement() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, member, toast, user]);
+  }, [activeOrganizationId, canUseEmailSettings, member, toast, user]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -186,6 +194,10 @@ export function EmailSettingsManagement() {
     } finally {
       setSaving(null);
     }
+  }
+
+  if (!canUseEmailSettings) {
+    return <PermissionDenied />;
   }
 
   if (loading) {

@@ -5,8 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ErrorState, LoadingState } from "@/components/ui/state";
+import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
+import { hasAnyPermission } from "@/lib/permissions";
 import { formatCurrency, statusTone, titleCase } from "@/lib/utils";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
 import { listOrgRecords } from "@/services/repository";
@@ -32,15 +33,21 @@ async function safeList(organizationId: string, collectionName: "leads" | "prope
 }
 
 export function ReportsDashboard() {
-  const { activeOrganizationId } = useAuth();
+  const { activeOrganizationId, member } = useAuth();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [leads, setLeads] = useState<Record<string, unknown>[]>([]);
   const [units, setUnits] = useState<Record<string, unknown>[]>([]);
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const canViewReports = hasAnyPermission(member, ["reports.viewFinancial", "dashboard.viewExecutive"]);
 
   const loadReports = useCallback(async () => {
+    if (!canViewReports) {
+      setLoading(false);
+      return;
+    }
+
     setError(null);
     setLoading(true);
     try {
@@ -59,7 +66,7 @@ export function ReportsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId]);
+  }, [activeOrganizationId, canViewReports]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -102,6 +109,10 @@ export function ReportsDashboard() {
     link.download = `beacon-report-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  if (!canViewReports) {
+    return <PermissionDenied />;
   }
 
   if (loading) {

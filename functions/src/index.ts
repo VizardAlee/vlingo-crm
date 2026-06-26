@@ -13,6 +13,18 @@ const callableOptions = { cors: true, invoker: "public" as const };
 const mailSettingsSecretOptions = { ...callableOptions, secrets: ["MAIL_SETTINGS_ENCRYPTION_KEY"] };
 const appBaseUrl = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
 
+const emailSettingsAccessPermissions = [
+  "leads.readAssigned",
+  "leads.readAll",
+  "clients.read",
+  "deals.read",
+  "properties.read",
+  "units.read",
+  "tasks.read",
+  "activities.read",
+  "users.manage",
+];
+
 const rolePermissions = {
   superAdmin: [
     "dashboard.viewExecutive",
@@ -78,6 +90,7 @@ interface ActorContext {
   branchId: string;
   displayName: string;
   email: string;
+  id: string;
   permissions: string[];
   role: string;
 }
@@ -99,6 +112,14 @@ interface SalesJourneyEmailPayload {
   leadId: string;
   organizationId: string;
   recipient?: string;
+  subject: string;
+}
+
+interface BulkEmailPayload {
+  body: string;
+  organizationId: string;
+  recipientIds: string[];
+  recipientType: "client" | "lead";
   subject: string;
 }
 
@@ -153,7 +174,7 @@ function smtpSendError(error: unknown, host: string) {
   const response = typeof record.response === "string" ? record.response : "";
   const responseCode = typeof record.responseCode === "number" ? record.responseCode : undefined;
 
-  console.error("sendEmailSmtpTest failed", { code, command, host, responseCode });
+  console.error("SMTP send failed", { code, command, host, responseCode });
 
   if (["EDNS", "ENOTFOUND"].includes(code)) {
     return new HttpsError("failed-precondition", `SMTP host "${host}" could not be found. Check the spelling. For Google Workspace, use smtp.gmail.com.`);
@@ -207,6 +228,7 @@ async function getActiveMember(uid: string, organizationId: string): Promise<Act
     branchId: typeof data?.branchId === "string" ? data.branchId : "",
     displayName: typeof data?.displayName === "string" ? data.displayName : uid,
     email: typeof data?.email === "string" ? data.email : "",
+    id: uid,
     permissions,
     role: typeof data?.role === "string" ? data.role : "unknown",
   };
@@ -221,6 +243,12 @@ function assertCanAssignRole(actor: ActorContext, role: RoleName) {
 function assertCanManageTargetMember(actor: ActorContext, target: DocumentData | undefined) {
   if (isPrivilegedMember(target) && !actor.permissions.includes("roles.manage")) {
     throw new HttpsError("permission-denied", "You cannot manage privileged users.");
+  }
+}
+
+function assertCanUseEmailSettings(member: ActorContext) {
+  if (!member.permissions.some((permission) => emailSettingsAccessPermissions.includes(permission))) {
+    throw new HttpsError("permission-denied", "You do not have permission to manage email settings.");
   }
 }
 
@@ -315,6 +343,34 @@ function parseSalesJourneyEmailPayload(data: unknown): SalesJourneyEmailPayload 
   };
 }
 
+function parseBulkEmailPayload(data: unknown): BulkEmailPayload {
+  const record = typeof data === "object" && data ? data as Record<string, unknown> : {};
+  const recipientType = record.recipientType === "client" ? "client" : record.recipientType === "lead" ? "lead" : null;
+  const recipientIds = Array.isArray(record.recipientIds)
+    ? Array.from(new Set(record.recipientIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).map((id) => id.trim())))
+    : [];
+
+  if (!recipientType) {
+    throw new HttpsError("invalid-argument", "recipientType must be lead or client.");
+  }
+
+  if (!recipientIds.length) {
+    throw new HttpsError("invalid-argument", "Select at least one recipient.");
+  }
+
+  if (recipientIds.length > 50) {
+    throw new HttpsError("invalid-argument", "Send bulk email to 50 recipients or fewer at a time.");
+  }
+
+  return {
+    body: requireString(record.body, "body"),
+    organizationId: requireString(record.organizationId, "organizationId"),
+    recipientIds,
+    recipientType,
+    subject: requireString(record.subject, "subject"),
+  };
+}
+
 function sanitizeEmailSettings(data: DocumentData | undefined, member: ActorContext) {
   return {
     enabled: data?.enabled === true,
@@ -369,6 +425,23 @@ async function getUsableEmailSettings(organizationId: string, uid: string) {
   }
 
   return settings;
+}
+
+function ensureCanReadBulkRecipient(member: ActorContext, recipientType: BulkEmailPayload["recipientType"], record: DocumentData) {
+  if (recipientType === "client") {
+    if (!member.permissions.includes("clients.read")) {
+      throw new HttpsError("permission-denied", "You do not have permission to email clients.");
+    }
+    return;
+  }
+
+  if (!member.permissions.includes("leads.readAll") && record.assignedTo !== member.id) {
+    throw new HttpsError("permission-denied", "You can only bulk email assigned leads.");
+  }
+
+  if (!member.permissions.includes("leads.readAll") && !member.permissions.includes("leads.readAssigned")) {
+    throw new HttpsError("permission-denied", "You do not have permission to email leads.");
+  }
 }
 
 async function getOrCreateUser(email: string, displayName: string): Promise<UserRecord> {
@@ -542,6 +615,7 @@ export const getEmailSmtpSettings = onCall(callableOptions, async (request) => {
 
   const organizationId = requireString(request.data?.organizationId, "organizationId");
   const member = await getActiveMember(request.auth.uid, organizationId);
+  assertCanUseEmailSettings(member);
   const snapshot = await emailSettingsDoc(organizationId, request.auth.uid).get();
   return sanitizeEmailSettings(snapshot.data(), member);
 });
@@ -553,6 +627,7 @@ export const saveEmailSmtpSettings = onCall(mailSettingsSecretOptions, async (re
 
   const organizationId = requireString(request.data?.organizationId, "organizationId");
   const member = await getActiveMember(request.auth.uid, organizationId);
+  assertCanUseEmailSettings(member);
   const payload = parseEmailSettingsPayload(request.data);
   const ref = emailSettingsDoc(organizationId, request.auth.uid);
   const previous = await ref.get();
@@ -616,6 +691,7 @@ export const sendEmailSmtpTest = onCall(mailSettingsSecretOptions, async (reques
 
   const organizationId = requireString(request.data?.organizationId, "organizationId");
   const member = await getActiveMember(request.auth.uid, organizationId);
+  assertCanUseEmailSettings(member);
   const recipient = typeof request.data?.recipient === "string" && request.data.recipient.trim()
     ? requireEmail(request.data.recipient)
     : member.email;
@@ -740,6 +816,149 @@ export const sendSalesJourneyEmail = onCall(mailSettingsSecretOptions, async (re
   });
 
   return { activityId: activityRef.id, ok: true };
+});
+
+export const sendBulkSalesEmail = onCall(mailSettingsSecretOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+
+  const actorId = request.auth.uid;
+  const payload = parseBulkEmailPayload(request.data);
+  const member = await getActiveMember(actorId, payload.organizationId);
+  if (!member.permissions.includes("activities.create")) {
+    throw new HttpsError("permission-denied", "You do not have permission to send sales emails.");
+  }
+
+  if (payload.recipientType === "client" && !member.permissions.includes("clients.read")) {
+    throw new HttpsError("permission-denied", "You do not have permission to email clients.");
+  }
+
+  if (payload.recipientType === "lead" && !member.permissions.includes("leads.readAll") && !member.permissions.includes("leads.readAssigned")) {
+    throw new HttpsError("permission-denied", "You do not have permission to email leads.");
+  }
+
+  const settings = await getUsableEmailSettings(payload.organizationId, actorId);
+  const transport = smtpTransport(settings);
+  const collectionName = payload.recipientType === "lead" ? "leads" : "clients";
+  const refs = payload.recipientIds.map((id) => db.doc(`organizations/${payload.organizationId}/${collectionName}/${id}`));
+  const snapshots = await db.getAll(...refs);
+  const sent: Array<{ email: string; id: string; name: string }> = [];
+  const failed: Array<{ id: string; name: string; reason: string }> = [];
+  const skipped: Array<{ id: string; name: string; reason: string }> = [];
+
+  for (const snapshot of snapshots) {
+    const record = snapshot.data();
+    const name = String(record?.fullName ?? record?.companyName ?? record?.name ?? record?.referenceNumber ?? snapshot.id);
+    if (!snapshot.exists || !record || record.isDeleted === true) {
+      skipped.push({ id: snapshot.id, name, reason: "Record not found." });
+      continue;
+    }
+
+    ensureCanReadBulkRecipient(member, payload.recipientType, record);
+
+    if (typeof record.email !== "string" || !record.email.trim()) {
+      skipped.push({ id: snapshot.id, name, reason: "No email address." });
+      continue;
+    }
+
+    let email = "";
+    try {
+      email = requireEmail(record.email);
+    } catch {
+      skipped.push({ id: snapshot.id, name, reason: "Invalid email address." });
+      continue;
+    }
+
+    try {
+      await transport.sendMail({
+        from: formattedSender(settings),
+        replyTo: settings.replyTo || settings.senderEmail,
+        subject: payload.subject,
+        text: payload.body,
+        to: email,
+      });
+      sent.push({ email, id: snapshot.id, name });
+    } catch (error) {
+      const nextError = smtpSendError(error, String(settings.host));
+      failed.push({ id: snapshot.id, name, reason: nextError.message });
+    }
+  }
+
+  if (sent.length) {
+    const batch = db.batch();
+    sent.forEach((recipient, index) => {
+      const activityRef = db.collection(`organizations/${payload.organizationId}/activities`).doc();
+      batch.set(activityRef, {
+        body: payload.body,
+        branchId: member.branchId,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actorId,
+        isDeleted: false,
+        organizationId: payload.organizationId,
+        referenceNumber: `ACT-${Date.now()}-${index + 1}`,
+        relatedEntityId: recipient.id,
+        relatedEntityType: payload.recipientType,
+        status: "completed",
+        subject: payload.subject,
+        type: "email",
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actorId,
+      });
+
+      const recipientRef = db.doc(`organizations/${payload.organizationId}/${collectionName}/${recipient.id}`);
+      const updatePayload: Record<string, unknown> = {
+        lastContactAt: FieldValue.serverTimestamp(),
+        organizationId: payload.organizationId,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actorId,
+      };
+      if (payload.recipientType === "lead") {
+        const snapshot = snapshots.find((item) => item.id === recipient.id);
+        const record = snapshot?.data();
+        if (record?.status === "new") {
+          updatePayload.status = "contacted";
+          updatePayload.stageHistory = [
+            ...(Array.isArray(record.stageHistory) ? record.stageHistory : []),
+            {
+              at: new Date().toISOString(),
+              from: "new",
+              note: `Bulk email sent: ${payload.subject}`,
+              to: "contacted",
+              userId: actorId,
+            },
+          ];
+        }
+      }
+      batch.update(recipientRef, updatePayload);
+    });
+
+    await batch.commit();
+  }
+
+  await writeAuditLog({
+    action: `${payload.recipientType}.bulkEmailSend`,
+    actorId,
+    actorName: member.displayName,
+    branchId: member.branchId,
+    entityId: payload.recipientType,
+    entityType: payload.recipientType,
+    newValue: {
+      failedCount: failed.length,
+      recipientIds: sent.map((recipient) => recipient.id),
+      sentCount: sent.length,
+      skippedCount: skipped.length,
+      subject: payload.subject,
+    },
+    organizationId: payload.organizationId,
+  });
+
+  return {
+    failed,
+    ok: failed.length === 0,
+    sent,
+    skipped,
+  };
 });
 
 export const updateOrganizationMemberRole = onCall(callableOptions, async (request) => {
