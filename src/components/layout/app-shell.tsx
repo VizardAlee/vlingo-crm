@@ -10,9 +10,11 @@ import { Input, Select } from "@/components/ui/input";
 import { LoadingState, PermissionDenied } from "@/components/ui/state";
 import { accessRuleForPath, navigation, notificationAccessPermissions } from "@/components/layout/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
-import { hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { listUserNotifications } from "@/services/notifications";
+import { listBranches } from "@/services/users";
+import type { Branch } from "@/types/crm";
 
 const notificationsChangedEvent = "beacon:notifications-changed";
 
@@ -24,6 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
     if (!loading && firebaseReady && !user) {
@@ -45,6 +48,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const canViewCurrentRoute = !currentAccessRule || hasAnyPermission(member, currentAccessRule.permissions);
   const canCreateLead = hasPermission(member, "leads.create");
   const canViewNotifications = hasAnyPermission(member, notificationAccessPermissions);
+  const visibleBranches = useMemo(() => (
+    canAccessAllBranches(member) ? branches : branches.filter((branch) => branch.id === member?.branchId)
+  ), [branches, member]);
+  const activeBranchName = visibleBranches.find((branch) => branch.id === activeBranchId)?.name ?? "Head office";
 
   useEffect(() => {
     const currentUserId = user?.uid;
@@ -85,6 +92,34 @@ export function AppShell({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [activeOrganizationId, canViewNotifications, pathname, user]);
+
+  useEffect(() => {
+    if (!member) {
+      return;
+    }
+
+    let mounted = true;
+    listBranches(activeOrganizationId)
+      .then((items) => {
+        if (!mounted) {
+          return;
+        }
+        const nextBranches = canAccessAllBranches(member) ? items : items.filter((branch) => branch.id === member.branchId);
+        setBranches(nextBranches);
+        if (nextBranches.length && !nextBranches.some((branch) => branch.id === activeBranchId)) {
+          setActiveBranchId(nextBranches[0].id);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setBranches([]);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeBranchId, activeOrganizationId, member, setActiveBranchId]);
 
   if (loading) {
     return <LoadingState />;
@@ -283,7 +318,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Image src="/branding/beacon-logo.jpeg" alt="Beacon Corporate Realty Limited logo" width={34} height={34} className="h-9 w-9 rounded-md object-contain" priority />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{currentSection?.label ?? "Beacon CRM"}</p>
-                <p className="truncate text-xs text-muted-foreground">Head office</p>
+                <p className="truncate text-xs text-muted-foreground">{activeBranchName}</p>
               </div>
             </div>
             <div className="hidden min-w-0 flex-1 items-center gap-3 md:flex">
@@ -291,7 +326,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Input aria-label="Global search" placeholder="Search leads, clients, properties, tasks" />
             </div>
             <Select aria-label="Branch selector" className="hidden w-40 sm:block" value={activeBranchId} onChange={(event) => setActiveBranchId(event.target.value)}>
-              <option value="head-office">Head office</option>
+              {visibleBranches.length ? visibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>) : (
+                <option value={activeBranchId}>{activeBranchName}</option>
+              )}
             </Select>
             {canCreateLead ? (
               <ButtonLink className="hidden sm:inline-flex" href="/leads/new" variant="secondary">

@@ -20,6 +20,7 @@ const emailSettingsAccessPermissions = [
   "deals.read",
   "properties.read",
   "units.read",
+  "offerings.read",
   "tasks.read",
   "activities.read",
   "users.manage",
@@ -55,6 +56,9 @@ const rolePermissions = {
     "marketing.create",
     "marketing.read",
     "marketing.update",
+    "offerings.create",
+    "offerings.read",
+    "offerings.update",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -68,31 +72,34 @@ const rolePermissions = {
     "roles.manage",
     "auditLogs.read",
   ],
-  managingDirector: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "properties.read", "deals.read", "units.read", "rentals.read", "development.read", "marketing.read", "tasks.read", "activities.read", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
-  operationsManager: ["dashboard.viewExecutive", "leads.create", "leads.readAll", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "rentals.create", "rentals.read", "rentals.update", "development.create", "development.read", "development.update", "marketing.create", "marketing.read", "marketing.update", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read", "users.manage"],
-  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  propertyManager: ["properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "deals.read", "rentals.create", "rentals.read", "rentals.update", "development.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
-  accountant: ["clients.read", "properties.read", "deals.read", "rentals.read", "rentals.update", "activities.create", "activities.read", "finance.create", "finance.update", "reports.viewFinancial"],
-  legalOfficer: ["clients.read", "properties.read", "deals.read", "rentals.read", "auditLogs.read"],
-  projectManager: ["properties.read", "properties.update", "development.create", "development.read", "development.update", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
-  marketingOfficer: ["leads.create", "leads.readAll", "properties.read", "marketing.create", "marketing.read", "marketing.update", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  customerServiceOfficer: ["leads.create", "leads.readAssigned", "clients.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  frontDeskOfficer: ["leads.create", "leads.readAssigned", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  managingDirector: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "properties.read", "deals.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "tasks.read", "activities.read", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
+  operationsManager: ["dashboard.viewExecutive", "leads.create", "leads.readAll", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "rentals.create", "rentals.read", "rentals.update", "development.create", "development.read", "development.update", "marketing.create", "marketing.read", "marketing.update", "offerings.create", "offerings.read", "offerings.update", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read", "users.manage"],
+  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  propertyManager: ["properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "offerings.read", "deals.read", "rentals.create", "rentals.read", "rentals.update", "development.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
+  accountant: ["clients.read", "properties.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "activities.create", "activities.read", "finance.create", "finance.update", "reports.viewFinancial"],
+  legalOfficer: ["clients.read", "properties.read", "deals.read", "rentals.read", "offerings.read", "auditLogs.read"],
+  projectManager: ["properties.read", "properties.update", "development.create", "development.read", "development.update", "offerings.read", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
+  marketingOfficer: ["leads.create", "leads.readAll", "properties.read", "marketing.create", "marketing.read", "marketing.update", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  customerServiceOfficer: ["leads.create", "leads.readAssigned", "clients.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  frontDeskOfficer: ["leads.create", "leads.readAssigned", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   agent: ["leads.readAssigned", "activities.create", "activities.read"],
-  auditor: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "rentals.read", "development.read", "marketing.read", "tasks.read", "activities.read", "auditLogs.read"],
+  auditor: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "tasks.read", "activities.read", "auditLogs.read"],
 } as const;
 
 type RoleName = keyof typeof rolePermissions;
+type BranchAccess = "own" | "all";
 
 interface ActorContext {
   branchId: string;
+  branchAccess: BranchAccess;
   displayName: string;
   email: string;
   id: string;
   permissions: string[];
   role: string;
+  roles: RoleName[];
 }
 
 interface EmailSettingsPayload {
@@ -138,6 +145,24 @@ function requireRole(value: unknown) {
   }
 
   return role as RoleName;
+}
+
+function requireRoles(value: unknown, fallback: unknown) {
+  const source = Array.isArray(value) && value.length ? value : [fallback];
+  const roles = Array.from(new Set(source.map((item) => requireRole(item))));
+  if (!roles.length) {
+    throw new HttpsError("invalid-argument", "Select at least one role.");
+  }
+
+  return roles;
+}
+
+function requireBranchAccess(value: unknown) {
+  return value === "all" ? "all" : "own";
+}
+
+function permissionsForRoles(roles: RoleName[]) {
+  return Array.from(new Set(roles.flatMap((role) => rolePermissions[role])));
 }
 
 function requireEmail(value: unknown) {
@@ -201,14 +226,19 @@ function isPrivilegedRole(role: RoleName) {
 
 function isPrivilegedMember(data: DocumentData | undefined) {
   const memberRole = typeof data?.role === "string" && data.role in rolePermissions ? data.role as RoleName : null;
+  const memberRoles = Array.isArray(data?.roles)
+    ? data.roles.filter((role): role is RoleName => typeof role === "string" && role in rolePermissions)
+    : [];
   const permissions = Array.isArray(data?.permissions) ? data.permissions as string[] : [];
-  return Boolean(memberRole && isPrivilegedRole(memberRole)) || permissions.some((permission) => ["users.manage", "roles.manage"].includes(permission));
+  return Boolean(memberRole && isPrivilegedRole(memberRole)) ||
+    memberRoles.some((role) => isPrivilegedRole(role)) ||
+    permissions.some((permission) => ["users.manage", "roles.manage"].includes(permission));
 }
 
 async function getActor(uid: string, organizationId: string): Promise<ActorContext> {
   const actor = await getActiveMember(uid, organizationId);
 
-  if (!actor.permissions.includes("users.manage")) {
+  if (!hasActorPermission(actor, "users.manage")) {
     throw new HttpsError("permission-denied", "You do not have permission to manage organization members.");
   }
 
@@ -218,37 +248,81 @@ async function getActor(uid: string, organizationId: string): Promise<ActorConte
 async function getActiveMember(uid: string, organizationId: string): Promise<ActorContext> {
   const member = await db.doc(`organizations/${organizationId}/members/${uid}`).get();
   const data = member.data();
-  const permissions = data?.permissions as string[] | undefined;
+  const permissions = Array.isArray(data?.permissions) ? data.permissions as string[] : [];
+  const primaryRole = typeof data?.role === "string" && data.role in rolePermissions ? data.role as RoleName : null;
+  const storedRoles = Array.isArray(data?.roles)
+    ? data.roles.filter((role): role is RoleName => typeof role === "string" && role in rolePermissions)
+    : [];
+  const roles = Array.from(new Set([...storedRoles, primaryRole].filter((role): role is RoleName => Boolean(role))));
 
-  if (!member.exists || data?.status !== "active" || !permissions) {
+  if (!member.exists || data?.status !== "active") {
     throw new HttpsError("permission-denied", "You do not have access to this organization.");
   }
 
   return {
     branchId: typeof data?.branchId === "string" ? data.branchId : "",
+    branchAccess: data?.branchAccess === "all" ? "all" : "own",
     displayName: typeof data?.displayName === "string" ? data.displayName : uid,
     email: typeof data?.email === "string" ? data.email : "",
     id: uid,
     permissions,
-    role: typeof data?.role === "string" ? data.role : "unknown",
+    role: primaryRole ?? "unknown",
+    roles,
   };
 }
 
 function assertCanAssignRole(actor: ActorContext, role: RoleName) {
-  if (isPrivilegedRole(role) && !actor.permissions.includes("roles.manage")) {
+  if (isPrivilegedRole(role) && !hasActorPermission(actor, "roles.manage")) {
     throw new HttpsError("permission-denied", "You cannot assign privileged roles.");
   }
 }
 
+function assertCanAssignRoles(actor: ActorContext, roles: RoleName[]) {
+  roles.forEach((role) => assertCanAssignRole(actor, role));
+}
+
+function assertCanGrantBranchAccess(actor: ActorContext, branchAccess: BranchAccess) {
+  if (branchAccess === "all" && !hasActorPermission(actor, "roles.manage")) {
+    throw new HttpsError("permission-denied", "Only super admins can grant all-branch access.");
+  }
+}
+
 function assertCanManageTargetMember(actor: ActorContext, target: DocumentData | undefined) {
-  if (isPrivilegedMember(target) && !actor.permissions.includes("roles.manage")) {
+  if (isPrivilegedMember(target) && !hasActorPermission(actor, "roles.manage")) {
     throw new HttpsError("permission-denied", "You cannot manage privileged users.");
   }
 }
 
 function assertCanUseEmailSettings(member: ActorContext) {
-  if (!member.permissions.some((permission) => emailSettingsAccessPermissions.includes(permission))) {
+  if (!hasAnyActorPermission(member, emailSettingsAccessPermissions)) {
     throw new HttpsError("permission-denied", "You do not have permission to manage email settings.");
+  }
+}
+
+function hasActorRole(member: ActorContext, role: RoleName) {
+  return member.roles.includes(role);
+}
+
+function hasActorPermission(member: ActorContext, permission: string) {
+  return hasActorRole(member, "superAdmin") || member.permissions.includes(permission);
+}
+
+function hasAnyActorPermission(member: ActorContext, permissions: readonly string[]) {
+  return hasActorRole(member, "superAdmin") || permissions.some((permission) => member.permissions.includes(permission));
+}
+
+function canActorAccessBranch(member: ActorContext, branchId: unknown) {
+  return hasActorRole(member, "superAdmin") || member.branchAccess === "all" || branchId === member.branchId;
+}
+
+function isAssignedOnlySalesActor(member: ActorContext) {
+  return hasActorRole(member, "salesExecutive") &&
+    !member.roles.some((role) => ["superAdmin", "managingDirector", "operationsManager", "salesManager"].includes(role));
+}
+
+function assertCanAccessRecordBranch(member: ActorContext, record: DocumentData) {
+  if (!canActorAccessBranch(member, record.branchId)) {
+    throw new HttpsError("permission-denied", "You do not have access to records from this branch.");
   }
 }
 
@@ -428,18 +502,23 @@ async function getUsableEmailSettings(organizationId: string, uid: string) {
 }
 
 function ensureCanReadBulkRecipient(member: ActorContext, recipientType: BulkEmailPayload["recipientType"], record: DocumentData) {
+  assertCanAccessRecordBranch(member, record);
+
   if (recipientType === "client") {
-    if (!member.permissions.includes("clients.read")) {
+    if (!hasActorPermission(member, "clients.read")) {
       throw new HttpsError("permission-denied", "You do not have permission to email clients.");
+    }
+    if (isAssignedOnlySalesActor(member) && record.assignedRelationshipManager !== member.id && record.assignedTo !== member.id) {
+      throw new HttpsError("permission-denied", "You can only bulk email assigned clients.");
     }
     return;
   }
 
-  if (!member.permissions.includes("leads.readAll") && record.assignedTo !== member.id) {
+  if (!hasActorPermission(member, "leads.readAll") && record.assignedTo !== member.id) {
     throw new HttpsError("permission-denied", "You can only bulk email assigned leads.");
   }
 
-  if (!member.permissions.includes("leads.readAll") && !member.permissions.includes("leads.readAssigned")) {
+  if (!hasActorPermission(member, "leads.readAll") && !hasActorPermission(member, "leads.readAssigned")) {
     throw new HttpsError("permission-denied", "You do not have permission to email leads.");
   }
 }
@@ -554,12 +633,15 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
   try {
     const organizationId = requireString(request.data?.organizationId, "organizationId");
     const branchId = requireString(request.data?.branchId, "branchId");
+    const branchAccess = requireBranchAccess(request.data?.branchAccess);
     const displayName = requireString(request.data?.displayName, "displayName");
     const email = requireEmail(request.data?.email);
-    const role = requireRole(request.data?.role);
+    const roles = requireRoles(request.data?.roles, request.data?.role);
+    const role = roles[0];
     const phoneNumber = typeof request.data?.phoneNumber === "string" ? request.data.phoneNumber.trim() : "";
     const actor = await getActor(request.auth.uid, organizationId);
-    assertCanAssignRole(actor, role);
+    assertCanAssignRoles(actor, roles);
+    assertCanGrantBranchAccess(actor, branchAccess);
 
     const user = await getOrCreateUser(email, displayName);
     const memberRef = db.doc(`organizations/${organizationId}/members/${user.uid}`);
@@ -567,17 +649,19 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
     assertCanManageTargetMember(actor, previous.data());
 
     await auth.updateUser(user.uid, { disabled: false, displayName });
-    await auth.setCustomUserClaims(user.uid, { organizationId, role });
+    await auth.setCustomUserClaims(user.uid, { organizationId, role, roles });
     const payload = {
       branchId,
+      branchAccess,
       createdAt: previous.exists ? previous.data()?.createdAt ?? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
       createdBy: previous.exists ? previous.data()?.createdBy ?? request.auth.uid : request.auth.uid,
       displayName,
       email,
       organizationId,
-      permissions: [...rolePermissions[role]],
+      permissions: permissionsForRoles(roles),
       phoneNumber,
       role,
+      roles,
       status: "active",
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: request.auth.uid,
@@ -593,7 +677,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
       branchId,
       entityId: user.uid,
       entityType: "member",
-      newValue: { branchId, displayName, email, role, setupLinkGenerated: true, status: "active" },
+      newValue: { branchAccess, branchId, displayName, email, role, roles, setupLinkGenerated: true, status: "active" },
       organizationId,
       previousValue: previous.exists ? previous.data() : null,
     });
@@ -735,7 +819,7 @@ export const sendSalesJourneyEmail = onCall(mailSettingsSecretOptions, async (re
 
   const payload = parseSalesJourneyEmailPayload(request.data);
   const member = await getActiveMember(request.auth.uid, payload.organizationId);
-  if (!member.permissions.includes("activities.create")) {
+  if (!hasActorPermission(member, "activities.create")) {
     throw new HttpsError("permission-denied", "You do not have permission to send sales journey emails.");
   }
 
@@ -746,7 +830,9 @@ export const sendSalesJourneyEmail = onCall(mailSettingsSecretOptions, async (re
     throw new HttpsError("not-found", "Lead not found.");
   }
 
-  if (!member.permissions.includes("leads.readAll") && lead.assignedTo && lead.assignedTo !== request.auth.uid) {
+  assertCanAccessRecordBranch(member, lead);
+
+  if (!hasActorPermission(member, "leads.readAll") && lead.assignedTo && lead.assignedTo !== request.auth.uid) {
     throw new HttpsError("permission-denied", "You do not have access to this lead.");
   }
 
@@ -826,15 +912,15 @@ export const sendBulkSalesEmail = onCall(mailSettingsSecretOptions, async (reque
   const actorId = request.auth.uid;
   const payload = parseBulkEmailPayload(request.data);
   const member = await getActiveMember(actorId, payload.organizationId);
-  if (!member.permissions.includes("activities.create")) {
+  if (!hasActorPermission(member, "activities.create")) {
     throw new HttpsError("permission-denied", "You do not have permission to send sales emails.");
   }
 
-  if (payload.recipientType === "client" && !member.permissions.includes("clients.read")) {
+  if (payload.recipientType === "client" && !hasActorPermission(member, "clients.read")) {
     throw new HttpsError("permission-denied", "You do not have permission to email clients.");
   }
 
-  if (payload.recipientType === "lead" && !member.permissions.includes("leads.readAll") && !member.permissions.includes("leads.readAssigned")) {
+  if (payload.recipientType === "lead" && !hasActorPermission(member, "leads.readAll") && !hasActorPermission(member, "leads.readAssigned")) {
     throw new HttpsError("permission-denied", "You do not have permission to email leads.");
   }
 
@@ -968,10 +1054,13 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
 
   const organizationId = requireString(request.data?.organizationId, "organizationId");
   const branchId = requireString(request.data?.branchId, "branchId");
+  const branchAccess = requireBranchAccess(request.data?.branchAccess);
   const targetUid = requireString(request.data?.uid, "uid");
-  const role = requireRole(request.data?.role);
+  const roles = requireRoles(request.data?.roles, request.data?.role);
+  const role = roles[0];
   const actor = await getActor(request.auth.uid, organizationId);
-  assertCanAssignRole(actor, role);
+  assertCanAssignRoles(actor, roles);
+  assertCanGrantBranchAccess(actor, branchAccess);
 
   if (targetUid === request.auth.uid) {
     throw new HttpsError("failed-precondition", "You cannot change your own role or branch.");
@@ -986,12 +1075,14 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
 
   await memberRef.update({
     branchId,
-    permissions: [...rolePermissions[role]],
+    branchAccess,
+    permissions: permissionsForRoles(roles),
     role,
+    roles,
     updatedAt: FieldValue.serverTimestamp(),
     updatedBy: request.auth.uid,
   });
-  await auth.setCustomUserClaims(targetUid, { organizationId, role });
+  await auth.setCustomUserClaims(targetUid, { organizationId, role, roles });
   await writeAuditLog({
     action: "member.roleBranchUpdate",
     actorId: request.auth.uid,
@@ -999,7 +1090,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
     branchId,
     entityId: targetUid,
     entityType: "member",
-    newValue: { branchId, role },
+    newValue: { branchAccess, branchId, role, roles },
     organizationId,
     previousValue: previous.data(),
   });

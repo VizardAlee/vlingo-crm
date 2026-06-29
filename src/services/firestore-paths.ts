@@ -13,6 +13,7 @@ export type OrgCollection =
   | "marketingCampaigns"
   | "members"
   | "notifications"
+  | "offerings"
   | "properties"
   | "propertyStakeholders"
   | "propertyUnits"

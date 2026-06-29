@@ -9,7 +9,7 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
-import { hasPermission, rolePermissions } from "@/lib/permissions";
+import { canAccessAllBranches, hasPermission, memberRoles, rolePermissions } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
 import {
   disableOrganizationMember,
@@ -20,16 +20,17 @@ import {
   updateOrganizationMember,
   type InviteUserInput,
 } from "@/services/users";
-import type { Branch, Member, RoleName } from "@/types/crm";
+import type { Branch, BranchAccess, Member, RoleName } from "@/types/crm";
 
 const roles = Object.keys(rolePermissions) as RoleName[];
 
 const defaultInvite = {
   branchId: "head-office",
+  branchAccess: "own" as BranchAccess,
   displayName: "",
   email: "",
   phoneNumber: "",
-  role: "salesExecutive" as RoleName,
+  roles: ["salesExecutive"] as RoleName[],
 };
 
 function canAssignRole(currentMember: Member | null, role: RoleName) {
@@ -38,13 +39,57 @@ function canAssignRole(currentMember: Member | null, role: RoleName) {
   return !roleIsPrivileged || hasPermission(currentMember, "roles.manage");
 }
 
+function displayRoles(member: Member) {
+  return memberRoles(member).map((role) => titleCase(role)).join(", ");
+}
+
+function normalizeRoleSelection(rolesValue: RoleName[], fallback: RoleName) {
+  return rolesValue.length ? rolesValue : [fallback];
+}
+
+function toggleRole(rolesValue: RoleName[], role: RoleName) {
+  return rolesValue.includes(role) ? rolesValue.filter((item) => item !== role) : [...rolesValue, role];
+}
+
+function RoleSelector({
+  disabled,
+  onChange,
+  rolesValue,
+  options,
+}: {
+  disabled?: boolean;
+  onChange: (nextRoles: RoleName[]) => void;
+  options: RoleName[];
+  rolesValue: RoleName[];
+}) {
+  return (
+    <div className="grid max-h-40 gap-2 overflow-auto rounded-md border bg-white p-2">
+      {options.map((role) => {
+        const checked = rolesValue.includes(role);
+        return (
+          <label className="flex cursor-pointer items-center gap-2 text-sm" key={role}>
+            <Input
+              checked={checked}
+              className="h-4 w-4"
+              disabled={disabled || (checked && rolesValue.length === 1)}
+              onChange={() => onChange(toggleRole(rolesValue, role))}
+              type="checkbox"
+            />
+            <span>{titleCase(role)}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export function UsersManagement() {
   const { activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [invite, setInvite] = useState(defaultInvite);
-  const [editing, setEditing] = useState<Record<string, { branchId: string; role: RoleName }>>({});
+  const [editing, setEditing] = useState<Record<string, { branchId: string; branchAccess: BranchAccess; roles: RoleName[] }>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +97,7 @@ export function UsersManagement() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const assignableRoles = useMemo(() => roles.filter((role) => canAssignRole(member, role)), [member]);
+  const canGrantAllBranches = hasPermission(member, "roles.manage") || canAccessAllBranches(member);
 
   const loadUsers = useCallback(async () => {
     setError(null);
@@ -87,6 +133,7 @@ export function UsersManagement() {
     try {
       const payload: InviteUserInput = {
         ...invite,
+        role: invite.roles[0],
         organizationId: activeOrganizationId,
       };
       const result = await inviteOrganizationMember(payload);
@@ -132,7 +179,7 @@ export function UsersManagement() {
     setError(null);
     setSuccess(null);
     try {
-      await updateOrganizationMember({ ...next, organizationId: activeOrganizationId, uid: target.id });
+      await updateOrganizationMember({ ...next, role: next.roles[0], organizationId: activeOrganizationId, uid: target.id });
       const message = `${target.displayName} was updated.`;
       setSuccess(message);
       toast({ title: "Member updated", description: message, variant: "success" });
@@ -242,11 +289,25 @@ export function UsersManagement() {
                 {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </Select>
             </Field>
-            <Field label="Role">
-              <Select required value={invite.role} onChange={(event) => setInvite((value) => ({ ...value, role: event.target.value as RoleName }))}>
-                {assignableRoles.map((role) => <option key={role} value={role}>{titleCase(role)}</option>)}
+            <Field label="Branch access">
+              <Select
+                disabled={!canGrantAllBranches}
+                value={invite.branchAccess}
+                onChange={(event) => setInvite((value) => ({ ...value, branchAccess: event.target.value as BranchAccess }))}
+              >
+                <option value="own">Own branch only</option>
+                <option value="all">All branches</option>
               </Select>
             </Field>
+            <div className="lg:col-span-5">
+              <Field label="Roles">
+                <RoleSelector
+                  onChange={(nextRoles) => setInvite((value) => ({ ...value, roles: normalizeRoleSelection(nextRoles, "salesExecutive") }))}
+                  options={assignableRoles}
+                  rolesValue={invite.roles}
+                />
+              </Field>
+            </div>
             <div className="lg:col-span-5 lg:flex lg:justify-end">
               <Button className="h-11 w-full lg:w-auto" disabled={saving === "invite"} type="submit">
                 <MailPlus className="h-4 w-4" />
@@ -259,7 +320,7 @@ export function UsersManagement() {
 
       <div className="grid gap-3 lg:hidden">
         {members.map((item) => {
-          const edit = editing[item.id] ?? { branchId: item.branchId, role: item.role };
+          const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item) };
           const isSelf = item.id === user?.uid;
           return (
             <Card key={item.id}>
@@ -274,15 +335,19 @@ export function UsersManagement() {
                   </div>
                   <Badge tone={statusTone(item.status)}>{titleCase(item.status)}</Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <Field label="Role">
-                    <Select disabled={isSelf} value={edit.role} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, role: event.target.value as RoleName } }))}>
-                      {assignableRoles.map((role) => <option key={role} value={role}>{titleCase(role)}</option>)}
-                    </Select>
+                <div className="grid gap-3 text-sm">
+                  <Field label="Roles">
+                    <RoleSelector disabled={isSelf} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeRoleSelection(nextRoles, item.role) } }))} options={assignableRoles} rolesValue={edit.roles} />
                   </Field>
                   <Field label="Branch">
                     <Select value={edit.branchId} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchId: event.target.value } }))}>
                       {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Branch access">
+                    <Select disabled={!canGrantAllBranches || isSelf} value={edit.branchAccess} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchAccess: event.target.value as BranchAccess } }))}>
+                      <option value="own">Own branch only</option>
+                      <option value="all">All branches</option>
                     </Select>
                   </Field>
                 </div>
@@ -311,8 +376,9 @@ export function UsersManagement() {
             <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Roles</th>
                 <th className="px-4 py-3">Branch</th>
+                <th className="px-4 py-3">Access</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Updated</th>
                 <th className="px-4 py-3">Actions</th>
@@ -320,7 +386,7 @@ export function UsersManagement() {
             </thead>
             <tbody>
               {members.map((item) => {
-                const edit = editing[item.id] ?? { branchId: item.branchId, role: item.role };
+                const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item) };
                 const isSelf = item.id === user?.uid;
                 return (
                   <tr className="border-t" key={item.id}>
@@ -329,13 +395,20 @@ export function UsersManagement() {
                       <div className="text-xs text-muted-foreground">{item.email}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <Select className="w-48" disabled={isSelf} value={edit.role} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, role: event.target.value as RoleName } }))}>
-                        {assignableRoles.map((role) => <option key={role} value={role}>{titleCase(role)}</option>)}
-                      </Select>
+                      <div className="grid w-64 gap-2">
+                        <RoleSelector disabled={isSelf} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeRoleSelection(nextRoles, item.role) } }))} options={assignableRoles} rolesValue={edit.roles} />
+                        <p className="text-xs text-muted-foreground">{displayRoles(item)}</p>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <Select className="w-44" value={edit.branchId} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchId: event.target.value } }))}>
                         {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                      </Select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Select className="w-40" disabled={!canGrantAllBranches || isSelf} value={edit.branchAccess} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchAccess: event.target.value as BranchAccess } }))}>
+                        <option value="own">Own branch only</option>
+                        <option value="all">All branches</option>
                       </Select>
                     </td>
                     <td className="px-4 py-3"><Badge tone={statusTone(item.status)}>{titleCase(item.status)}</Badge></td>

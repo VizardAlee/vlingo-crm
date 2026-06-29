@@ -1,6 +1,7 @@
 "use client";
 
 import { readSheet } from "read-excel-file/browser";
+import { where, type QueryConstraint } from "firebase/firestore";
 import { CheckCircle2, Download, FileSpreadsheet, Save, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
-import { hasPermission } from "@/lib/permissions";
+import { canAccessAllBranches, hasPermission, memberRoles } from "@/lib/permissions";
 import { leadSchema } from "@/lib/validation/schemas";
 import { createOrgRecord, listOrgRecords, writeAuditLog } from "@/services/repository";
 import { listBranches, listMembers } from "@/services/users";
@@ -433,7 +434,15 @@ export function LeadCreatePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const assignableMembers = useMemo(() => members.filter((item) => item.status === "active"), [members]);
+  const branchOptions = useMemo(() => (
+    canAccessAllBranches(member) ? branches : branches.filter((branch) => branch.id === member?.branchId)
+  ), [branches, member]);
+  const optionBranchConstraints = useMemo<QueryConstraint[]>(() => (
+    canAccessAllBranches(member) ? [] : [where("branchId", "==", member?.branchId || "")]
+  ), [member]);
+  const assignableMembers = useMemo(() => members.filter((item) => (
+    item.status === "active" && (canAccessAllBranches(member) || item.branchId === branchId)
+  )), [branchId, member, members]);
   const propertyOptions = useMemo(
     () => properties.map((property) => {
       const detail = [property.city, property.referenceNumber].filter(Boolean).join(" · ");
@@ -471,21 +480,26 @@ export function LeadCreatePage() {
       const [nextBranches, nextMembers, nextProperties, nextPropertyUnits] = await Promise.all([
         listBranches(activeOrganizationId),
         listMembers(activeOrganizationId),
-        listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
-        listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
+        listOrgRecords<Property>(activeOrganizationId, "properties", optionBranchConstraints).catch(() => []),
+        listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", optionBranchConstraints).catch(() => []),
       ]);
+      const visibleBranches = canAccessAllBranches(member) ? nextBranches : nextBranches.filter((branch) => branch.id === member?.branchId);
+      const nextBranchId = visibleBranches[0]?.id || member?.branchId || "";
       setBranches(nextBranches);
       setMembers(nextMembers);
-      setProperties(nextProperties);
-      setPropertyUnits(nextPropertyUnits);
-      setBranchId((current) => current || nextBranches[0]?.id || "");
-      setValues((current) => ({ ...current, assignedTo: current.assignedTo || user?.uid || nextMembers[0]?.id || "" }));
+      setProperties(canAccessAllBranches(member) ? nextProperties : nextProperties.filter((property) => property.branchId === nextBranchId));
+      setPropertyUnits(canAccessAllBranches(member) ? nextPropertyUnits : nextPropertyUnits.filter((unit) => unit.branchId === nextBranchId));
+      setBranchId((current) => current && visibleBranches.some((branch) => branch.id === current) ? current : nextBranchId);
+      setValues((current) => {
+        const branchMembers = nextMembers.filter((item) => item.status === "active" && (canAccessAllBranches(member) || item.branchId === nextBranchId));
+        return { ...current, assignedTo: current.assignedTo || user?.uid || branchMembers[0]?.id || "" };
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to load lead form options.");
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, user?.uid]);
+  }, [activeOrganizationId, member, optionBranchConstraints, user?.uid]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -654,12 +668,12 @@ export function LeadCreatePage() {
         <CardContent className="grid gap-4 md:grid-cols-2">
           <Field label="Branch">
             <Select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
-              {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
             </Select>
           </Field>
           <Field label="Default assignee">
             <Select value={values.assignedTo} onChange={(event) => updateField("assignedTo", event.target.value)}>
-              {assignableMembers.map((item) => <option key={item.id} value={item.id}>{item.displayName} - {item.role}</option>)}
+              {assignableMembers.map((item) => <option key={item.id} value={item.id}>{item.displayName} - {memberRoles(item).join(", ")}</option>)}
             </Select>
           </Field>
         </CardContent>

@@ -1,13 +1,14 @@
 "use client";
 
 import { BarChart3, Download, RefreshCw } from "lucide-react";
+import { where, type QueryConstraint } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { hasAnyPermission } from "@/lib/permissions";
+import { canAccessAllBranches, hasAnyPermission } from "@/lib/permissions";
 import { formatCurrency, statusTone, titleCase } from "@/lib/utils";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
 import { listOrgRecords } from "@/services/repository";
@@ -24,16 +25,16 @@ function toRows(counts: Record<string, number>) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
 
-async function safeList(organizationId: string, collectionName: "leads" | "propertyUnits" | "tasks") {
+async function safeList(organizationId: string, collectionName: "leads" | "propertyUnits" | "tasks", constraints: QueryConstraint[] = []) {
   try {
-    return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName);
+    return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName, constraints);
   } catch {
     return [];
   }
 }
 
 export function ReportsDashboard() {
-  const { activeOrganizationId, member } = useAuth();
+  const { activeBranchId, activeOrganizationId, member } = useAuth();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [leads, setLeads] = useState<Record<string, unknown>[]>([]);
   const [units, setUnits] = useState<Record<string, unknown>[]>([]);
@@ -51,11 +52,13 @@ export function ReportsDashboard() {
     setError(null);
     setLoading(true);
     try {
+      const branchConstraints = canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")];
+      const branchId = branchConstraints.length ? activeBranchId || member?.branchId : undefined;
       const [nextMetrics, nextLeads, nextUnits, nextTasks] = await Promise.all([
-        getDashboardMetrics(activeOrganizationId),
-        safeList(activeOrganizationId, "leads"),
-        safeList(activeOrganizationId, "propertyUnits"),
-        safeList(activeOrganizationId, "tasks"),
+        getDashboardMetrics(activeOrganizationId, { branchId }),
+        safeList(activeOrganizationId, "leads", branchConstraints),
+        safeList(activeOrganizationId, "propertyUnits", branchConstraints),
+        safeList(activeOrganizationId, "tasks", branchConstraints),
       ]);
       setMetrics(nextMetrics);
       setLeads(nextLeads);
@@ -66,7 +69,7 @@ export function ReportsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, canViewReports]);
+  }, [activeBranchId, activeOrganizationId, canViewReports, member]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

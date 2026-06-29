@@ -1,12 +1,12 @@
 "use client";
 
-import { collection, getDocs, orderBy, query, serverTimestamp, where, addDoc, type Timestamp } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, serverTimestamp, where, addDoc, type QueryConstraint, type Timestamp } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase/client";
 import { createReference } from "@/lib/utils";
 import { orgCollectionPath } from "@/services/firestore-paths";
 
-export type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "owner" | "developer" | "management";
+export type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "offering" | "owner" | "developer" | "management";
 
 export interface DocumentRecord {
   id: string;
@@ -63,9 +63,15 @@ function safeFileName(value: string) {
   return value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-export async function listDocuments(organizationId: string) {
+export async function listDocuments(organizationId: string, constraints: QueryConstraint[] = []) {
   const { db: firestore } = assertFirebase();
-  const snapshot = await getDocs(query(collection(firestore, orgCollectionPath(organizationId, "documents")), where("isDeleted", "==", false), orderBy("updatedAt", "desc")));
+  let snapshot;
+  try {
+    snapshot = await getDocs(query(collection(firestore, orgCollectionPath(organizationId, "documents")), where("isDeleted", "==", false), ...constraints, orderBy("updatedAt", "desc")));
+  } catch (error) {
+    console.error(`[Firestore query failed] ${organizationId}/documents`, error);
+    throw error;
+  }
 
   return snapshot.docs.map((item) => {
     const data = item.data();

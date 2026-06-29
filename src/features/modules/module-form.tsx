@@ -2,7 +2,7 @@
 
 import { Save } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { where } from "firebase/firestore";
+import { where, type QueryConstraint } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { type ZodType } from "zod";
@@ -15,8 +15,8 @@ import { GuidedTour } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
-import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
-import { hasPermission } from "@/lib/permissions";
+import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
+import { canAccessAllBranches, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import type { Client, Lead, Member, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
@@ -28,6 +28,7 @@ const schemaByCollection: Record<string, ZodType> = {
   developmentProjects: developmentProjectSchema,
   leads: leadSchema,
   marketingCampaigns: marketingCampaignSchema,
+  offerings: offeringSchema,
   properties: propertySchema,
   propertyUnits: unitSchema,
   rentalTenancies: rentalTenancySchema,
@@ -225,6 +226,19 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const selectedPropertyId = useWatch({ control, name: "propertyId" });
   const selectedLeadId = useWatch({ control, name: "leadId" });
   const selectedUnitId = useWatch({ control, name: "unitId" });
+  const branchConstraints = useMemo<QueryConstraint[]>(() => (
+    canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")]
+  ), [activeBranchId, member]);
+  const clientConstraints = useMemo<QueryConstraint[]>(() => (
+    user && isAssignedOnlySalesUser(member)
+      ? [...branchConstraints, where("assignedRelationshipManager", "==", user.uid)]
+      : branchConstraints
+  ), [branchConstraints, member, user]);
+  const leadConstraints = useMemo<QueryConstraint[]>(() => (
+    user && (isAssignedOnlySalesUser(member) || !hasPermission(member, "leads.readAll"))
+      ? [...branchConstraints, where("assignedTo", "==", user.uid)]
+      : branchConstraints
+  ), [branchConstraints, member, user]);
 
   const ownerOptions = useMemo(() => stakeholders.filter((item) => item.type === "owner").map(toStakeholderOption), [stakeholders]);
   const developerOptions = useMemo(() => stakeholders.filter((item) => item.type === "developer").map(toStakeholderOption), [stakeholders]);
@@ -281,7 +295,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           Promise.resolve<Member[]>([]),
-          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           Promise.resolve<PropertyUnit[]>([]),
         ]);
       }
@@ -303,7 +317,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
-          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           Promise.resolve<PropertyUnit[]>([]),
         ]);
       }
@@ -314,31 +328,30 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
-          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
+          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           Promise.resolve<PropertyUnit[]>([]),
         ]);
       }
 
       if (config.collection === "rentalTenancies") {
         return Promise.all([
-          listOrgRecords<Client>(activeOrganizationId, "clients").catch(() => []),
+          listOrgRecords<Client>(activeOrganizationId, "clients", clientConstraints).catch(() => []),
           Promise.resolve<Lead[]>([]),
-          listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders").catch(() => []),
+          listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders", branchConstraints).catch(() => []),
           Promise.resolve<Member[]>([]),
-          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
-          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
+          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
+          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
         ]);
       }
 
       if (config.collection === "deals") {
-        const leadConstraints = user && !hasPermission(member, "leads.readAll") ? [where("assignedTo", "==", user.uid)] : [];
         return Promise.all([
-          listOrgRecords<Client>(activeOrganizationId, "clients").catch(() => []),
+          listOrgRecords<Client>(activeOrganizationId, "clients", clientConstraints).catch(() => []),
           listOrgRecords<Lead>(activeOrganizationId, "leads", leadConstraints).catch(() => []),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
-          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
-          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
+          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
+          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
         ]);
       }
 
@@ -348,15 +361,15 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
-          listOrgRecords<Property>(activeOrganizationId, "properties").catch(() => []),
-          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits").catch(() => []),
+          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
+          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
         ]);
       }
 
       return Promise.all([
         Promise.resolve<Client[]>([]),
         Promise.resolve<Lead[]>([]),
-        listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders").catch(() => []),
+        listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders", branchConstraints).catch(() => []),
         listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
         Promise.resolve<Property[]>([]),
         Promise.resolve<PropertyUnit[]>([]),
@@ -380,7 +393,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, config.collection, member, user]);
+  }, [activeOrganizationId, branchConstraints, clientConstraints, config.collection, leadConstraints, member]);
 
   useEffect(() => {
     if ((config.collection !== "rentalTenancies" && config.collection !== "deals" && config.collection !== "leads") || !selectedUnitId) {
@@ -747,7 +760,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         type: stakeholderForm.type,
       }, context, "PTY");
       await writeAuditLog(context, "propertyStakeholder.create", "propertyStakeholders", stakeholderId, stakeholderForm);
-      const nextStakeholders = await listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders");
+      const nextStakeholders = await listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders", branchConstraints);
       setStakeholders(nextStakeholders);
 
       if (stakeholderForm.type === "owner") {

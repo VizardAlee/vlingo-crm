@@ -4,7 +4,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail,
 import { doc, getDoc } from "firebase/firestore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { auth, db, initializeBeaconAppCheck } from "@/lib/firebase/client";
-import type { Member } from "@/types/crm";
+import type { Member, RoleName } from "@/types/crm";
 
 const defaultOrganizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID ?? "beacon-corporate-realty";
 const defaultBranchId = process.env.NEXT_PUBLIC_DEFAULT_BRANCH_ID ?? "head-office";
@@ -24,6 +24,17 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+function normalizeMember(id: string, data: Record<string, unknown>): Member {
+  const role = data.role as RoleName;
+  const roles = Array.isArray(data.roles) ? data.roles as RoleName[] : [];
+  return {
+    id,
+    ...data,
+    branchAccess: data.branchAccess === "all" ? "all" : "own",
+    roles: Array.from(new Set([...roles, role].filter(Boolean))),
+  } as Member;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [member, setMember] = useState<Member | null>(null);
@@ -41,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextUser);
       if (nextUser && db) {
         const snapshot = await getDoc(doc(db, `organizations/${defaultOrganizationId}/members/${nextUser.uid}`));
-        const nextMember = snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as Member) : null;
+        const nextMember = snapshot.exists() ? normalizeMember(snapshot.id, snapshot.data()) : null;
         setMember(nextMember);
         setActiveBranchId(nextMember?.branchId ?? defaultBranchId);
       } else {

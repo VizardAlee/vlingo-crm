@@ -46,6 +46,10 @@ const activeDealStatuses = ["qualified", "propertyRecommended", "inspectionSched
 const activeRealDealStatuses = [...activeDealStatuses, "new"];
 const openPipelineStatuses = [...activeDealStatuses, "new", "contacted"];
 
+function logQueryError(context: string, error: unknown) {
+  console.error(`[Firestore query failed] ${context}`, error);
+}
+
 async function count(path: string, filters: QueryConstraint[] = []) {
   if (!db) {
     return 0;
@@ -54,7 +58,8 @@ async function count(path: string, filters: QueryConstraint[] = []) {
   try {
     const snapshot = await getCountFromServer(query(collection(db, path), where("isDeleted", "==", false), ...filters));
     return snapshot.data().count;
-  } catch {
+  } catch (error) {
+    logQueryError(`count:${path}`, error);
     return 0;
   }
 }
@@ -67,12 +72,13 @@ async function listRecords(path: string, filters: QueryConstraint[] = [], max = 
   try {
     const snapshot = await getDocs(query(collection(db, path), where("isDeleted", "==", false), ...filters, limit(max)));
     return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as Record<string, unknown> & { id: string });
-  } catch {
+  } catch (error) {
+    logQueryError(`list:${path}`, error);
     return [];
   }
 }
 
-async function listRecentActivities(organizationId: string) {
+async function listRecentActivities(organizationId: string, filters: QueryConstraint[] = []) {
   if (!db) {
     return [];
   }
@@ -81,6 +87,7 @@ async function listRecentActivities(organizationId: string) {
     const snapshot = await getDocs(query(
       collection(db, orgCollectionPath(organizationId, "activities")),
       where("isDeleted", "==", false),
+      ...filters,
       orderBy("updatedAt", "desc"),
       limit(5),
     ));
@@ -96,7 +103,8 @@ async function listRecentActivities(organizationId: string) {
         type: String(data.type ?? "activity"),
       };
     });
-  } catch {
+  } catch (error) {
+    logQueryError(`recent-activities:${organizationId}`, error);
     return [];
   }
 }
@@ -166,8 +174,9 @@ function upcomingInspectionCount(rows: Record<string, unknown>[]) {
   }).length;
 }
 
-export async function getDashboardMetrics(organizationId: string, options: { assignedTo?: string } = {}): Promise<DashboardMetrics> {
-  const leadFilters = options.assignedTo ? [where("assignedTo", "==", options.assignedTo)] : [];
+export async function getDashboardMetrics(organizationId: string, options: { assignedTo?: string; branchId?: string } = {}): Promise<DashboardMetrics> {
+  const branchFilters = options.branchId ? [where("branchId", "==", options.branchId)] : [];
+  const leadFilters = options.assignedTo ? [...branchFilters, where("assignedTo", "==", options.assignedTo)] : branchFilters;
   const leadsPath = orgCollectionPath(organizationId, "leads");
   const dealsPath = orgCollectionPath(organizationId, "deals");
   const tasksPath = orgCollectionPath(organizationId, "tasks");
@@ -175,14 +184,14 @@ export async function getDashboardMetrics(organizationId: string, options: { ass
     await Promise.all([
       count(leadsPath, leadFilters),
       count(leadsPath, [...leadFilters, where("status", "==", "qualified")]),
-      count(orgCollectionPath(organizationId, "clients"), [where("status", "==", "active")]),
-      count(orgCollectionPath(organizationId, "properties"), [where("propertyStatus", "in", ["available", "reserved", "underNegotiation"])]),
-      count(orgCollectionPath(organizationId, "propertyUnits"), [where("status", "==", "available")]),
-      count(orgCollectionPath(organizationId, "propertyUnits"), [where("status", "==", "reserved")]),
-      count(tasksPath, [where("status", "==", "overdue")]),
+      count(orgCollectionPath(organizationId, "clients"), [...branchFilters, where("status", "==", "active")]),
+      count(orgCollectionPath(organizationId, "properties"), [...branchFilters, where("propertyStatus", "in", ["available", "reserved", "underNegotiation"])]),
+      count(orgCollectionPath(organizationId, "propertyUnits"), [...branchFilters, where("status", "==", "available")]),
+      count(orgCollectionPath(organizationId, "propertyUnits"), [...branchFilters, where("status", "==", "reserved")]),
+      count(tasksPath, [...branchFilters, where("status", "==", "overdue")]),
       listRecords(leadsPath, leadFilters, 250),
-      listRecords(dealsPath, [], 250),
-      listRecentActivities(organizationId),
+      listRecords(dealsPath, branchFilters, 250),
+      listRecentActivities(organizationId, branchFilters),
     ]);
   const statusCounts = countRows(leads, "status");
   const hasDeals = deals.length > 0;

@@ -3,6 +3,7 @@
 import { CheckCircle2, Download, FileText, RefreshCw, Upload } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { where, type QueryConstraint } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { EmptyState, ErrorState, LoadingState, PermissionDenied } from "@/compon
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { documentAccessPermissions } from "@/components/layout/navigation";
-import { hasAnyPermission } from "@/lib/permissions";
+import { canAccessAllBranches, hasAnyPermission } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, uploadDocument, type DocumentRecord, type RelatedEntityType } from "@/services/documents";
 import { listOrgRecords } from "@/services/repository";
@@ -38,6 +39,7 @@ const relatedConfigs: RelatedConfig[] = [
   { collection: "rentalTenancies", label: "Tenancy", permissions: ["rentals.read"], type: "tenancy" },
   { collection: "developmentProjects", label: "Development project", permissions: ["development.read"], type: "development" },
   { collection: "marketingCampaigns", label: "Marketing campaign", permissions: ["marketing.read"], type: "marketing" },
+  { collection: "offerings", label: "Offering", permissions: ["offerings.read"], type: "offering" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", permissions: ["properties.read"], type: "owner" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", permissions: ["properties.read"], type: "developer" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", permissions: ["properties.read"], type: "management" },
@@ -82,6 +84,11 @@ function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
   if (type === "marketing") {
     const detail = [record.channel, record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.name ?? "Marketing campaign")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
+  }
+
+  if (type === "offering") {
+    const detail = [record.vertical, record.category, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.name ?? "Offering")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
   }
 
   const detail = [record.phoneNumber, record.email, record.referenceNumber].filter(Boolean).join(" · ");
@@ -129,6 +136,10 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
     return `/marketing/${id}`;
   }
 
+  if (type === "offering") {
+    return `/offerings/${id}`;
+  }
+
   return null;
 }
 
@@ -150,6 +161,9 @@ export function DocumentsManagement() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const allowedRelatedConfigs = useMemo(() => relatedConfigs.filter((config) => hasAnyPermission(member, config.permissions)), [member]);
+  const branchConstraints = useMemo<QueryConstraint[]>(() => (
+    canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")]
+  ), [activeBranchId, member]);
   const canUseDocuments = hasAnyPermission(member, documentAccessPermissions);
 
   const loadDocuments = useCallback(async () => {
@@ -161,7 +175,7 @@ export function DocumentsManagement() {
     setError(null);
     setLoading(true);
     try {
-      setDocuments(await listDocuments(activeOrganizationId));
+      setDocuments(await listDocuments(activeOrganizationId, branchConstraints));
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to load documents.";
       setError(message);
@@ -169,7 +183,7 @@ export function DocumentsManagement() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, canUseDocuments, toast]);
+  }, [activeOrganizationId, branchConstraints, canUseDocuments, toast]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -191,7 +205,7 @@ export function DocumentsManagement() {
     }
 
     let mounted = true;
-    listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection)
+    listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, branchConstraints)
       .then((records) => {
         if (!mounted) {
           return;
@@ -215,7 +229,7 @@ export function DocumentsManagement() {
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, allowedRelatedConfigs, relatedEntityType]);
+  }, [activeOrganizationId, allowedRelatedConfigs, branchConstraints, relatedEntityType]);
 
   async function submitUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

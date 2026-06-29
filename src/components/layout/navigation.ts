@@ -13,6 +13,7 @@ import {
   ListTodo,
   Mail,
   Megaphone,
+  Package,
   Receipt,
   Settings,
   ShieldCheck,
@@ -52,6 +53,7 @@ export const documentAccessPermissions: Permission[] = [
   "rentals.read",
   "development.read",
   "marketing.read",
+  "offerings.read",
   "tasks.read",
   "activities.read",
   "reports.viewFinancial",
@@ -65,6 +67,7 @@ export const emailSettingsAccessPermissions: Permission[] = [
   "deals.read",
   "properties.read",
   "units.read",
+  "offerings.read",
   "tasks.read",
   "activities.read",
   "users.manage",
@@ -100,6 +103,10 @@ export const routeAccessRules: RouteAccessRule[] = [
   { exact: "/units/new", permissions: ["units.create"] },
   { pattern: /^\/units\/[^/]+\/edit$/, permissions: ["units.update"] },
   { pattern: /^\/units(\/[^/]+)?$/, permissions: ["units.read"] },
+
+  { exact: "/offerings/new", permissions: ["offerings.create"] },
+  { pattern: /^\/offerings\/[^/]+\/edit$/, permissions: ["offerings.update"] },
+  { pattern: /^\/offerings(\/[^/]+)?$/, permissions: ["offerings.read"] },
 
   { exact: "/rentals/new", permissions: ["rentals.create"] },
   { pattern: /^\/rentals\/[^/]+\/edit$/, permissions: ["rentals.update"] },
@@ -159,6 +166,7 @@ export const navigation: NavSection[] = [
     items: [
       { href: "/properties", icon: Building2, label: "Properties", permissions: ["properties.read"] },
       { href: "/units", icon: Home, label: "Units", permissions: ["units.read"] },
+      { href: "/offerings", icon: Package, label: "Offerings", permissions: ["offerings.read"] },
     ],
   },
   {

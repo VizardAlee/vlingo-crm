@@ -218,6 +218,25 @@ export const propertySchema = z.object({
   inspectionNotes: z.string().optional(),
 });
 
+export const offeringSchema = z.object({
+  name: z.string().min(2, "Offering name is required."),
+  vertical: z.enum(["realEstate", "solar", "buildingMaterials", "generalServices", "custom"]),
+  type: z.enum(["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"]),
+  category: z.string().min(2, "Category is required."),
+  description: z.string().optional(),
+  sku: z.string().optional(),
+  unitOfMeasure: z.string().optional(),
+  sellingPrice: optionalNumber,
+  costPrice: optionalNumber,
+  stockQuantity: optionalNumber,
+  reorderLevel: optionalNumber,
+  supplierName: z.string().optional(),
+  serviceDurationDays: optionalNumber,
+  tags: tagString.default([]),
+  notes: z.string().optional(),
+  status: z.enum(["active", "draft", "inactive", "archived"]),
+});
+
 export const unitSchema = z.object({
   propertyId: z.string().min(2, "Property is required."),
   propertyName: z.string().optional(),
@@ -348,7 +367,7 @@ export const taskSchema = z.object({
   assignedTo: z.string().optional(),
   assignedToEmail: z.string().optional(),
   assignedToName: z.string().optional(),
-  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing"]),
+  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing", "offering"]),
   relatedEntityId: z.string().optional(),
 });
 
@@ -357,6 +376,6 @@ export const activitySchema = z.object({
   subject: z.string().min(2, "Subject is required."),
   body: z.string().optional(),
   status: z.string().optional(),
-  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"]),
+  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing", "offering"]),
   relatedEntityId: z.string().optional(),
 });

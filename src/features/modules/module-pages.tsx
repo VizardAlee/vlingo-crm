@@ -17,7 +17,7 @@ import { ModuleForm } from "@/features/modules/module-form";
 import { columnsFor, type ModuleConfig } from "@/features/modules/module-config";
 import { useAuth } from "@/features/auth/auth-provider";
 import { documentAccessPermissions } from "@/components/layout/navigation";
-import { hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { canAccessAllBranches, hasAnyPermission, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, type DocumentRecord } from "@/services/documents";
 import { sendBulkSalesEmail, sendSalesJourneyEmail } from "@/services/email-settings";
@@ -26,7 +26,7 @@ import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
 import type { Member } from "@/types/crm";
 
-type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
+type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "offering";
 
 function relatedTypeForCollection(collection: ModuleConfig["collection"]): RelatedEntityType | null {
   if (collection === "leads") {
@@ -63,6 +63,10 @@ function relatedTypeForCollection(collection: ModuleConfig["collection"]): Relat
 
   if (collection === "marketingCampaigns") {
     return "marketing";
+  }
+
+  if (collection === "offerings") {
+    return "offering";
   }
 
   return null;
@@ -105,6 +109,10 @@ function collectionForRelatedEntity(type: unknown): ModuleConfig["collection"] |
     return "marketingCampaigns";
   }
 
+  if (type === "offering") {
+    return "offerings";
+  }
+
   return null;
 }
 
@@ -130,6 +138,10 @@ function routeForRelatedEntity(type: unknown, id: string) {
     return `/marketing/${id}`;
   }
 
+  if (collectionName === "offerings") {
+    return `/offerings/${id}`;
+  }
+
   if (collectionName === "deals") {
     return `/deals/${id}`;
   }
@@ -141,17 +153,17 @@ function recordDisplayName(record: Record<string, unknown>) {
   return String(record.fullName ?? record.tenantName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? record.referenceNumber ?? record.id ?? "Record");
 }
 
-async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "properties" | "propertyUnits") {
+async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "properties" | "propertyUnits", constraints: QueryConstraint[] = []) {
   try {
-    return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName);
+    return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName, constraints);
   } catch {
     return [];
   }
 }
 
-async function safeListDocuments(organizationId: string) {
+async function safeListDocuments(organizationId: string, constraints: QueryConstraint[] = []) {
   try {
-    return await listDocuments(organizationId);
+    return await listDocuments(organizationId, constraints);
   } catch {
     return [];
   }
@@ -1953,7 +1965,7 @@ export function ModuleListPage({
   fixedFilters?: FixedFilter[];
   title?: string;
 }) {
-  const { activeOrganizationId, member, user } = useAuth();
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [records, setRecords] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1966,8 +1978,16 @@ export function ModuleListPage({
     const constraints: QueryConstraint[] = [];
     const activeFixedFilters = JSON.parse(fixedFilterKey) as FixedFilter[];
 
-    if (config.collection === "leads" && user && !hasPermission(member, "leads.readAll")) {
+    if (!canAccessAllBranches(member)) {
+      constraints.push(where("branchId", "==", activeBranchId || member?.branchId || ""));
+    }
+
+    if (config.collection === "leads" && user && (isAssignedOnlySalesUser(member) || !hasPermission(member, "leads.readAll"))) {
       constraints.push(where("assignedTo", "==", user.uid));
+    }
+
+    if (config.collection === "clients" && user && isAssignedOnlySalesUser(member)) {
+      constraints.push(where("assignedRelationshipManager", "==", user.uid));
     }
 
     if (config.collection === "tasks" && user && !hasAnyPermission(member, ["dashboard.viewExecutive", "users.manage"])) {
@@ -1994,7 +2014,7 @@ export function ModuleListPage({
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, config.collection, config.title, fixedFilterKey, member, toast, user]);
+  }, [activeBranchId, activeOrganizationId, config.collection, config.title, fixedFilterKey, member, toast, user]);
 
   if (!hasPermission(member, config.listPermission as never)) {
     return <PermissionDenied />;
@@ -2070,7 +2090,7 @@ export function ModuleCreatePage({ config }: { config: ModuleConfig }) {
 
 export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: string }) {
   const router = useRouter();
-  const { activeOrganizationId, member } = useAuth();
+  const { activeBranchId, activeOrganizationId, member } = useAuth();
   const toast = useToast();
   const [record, setRecord] = useState<Record<string, unknown> | null>(null);
   const [relatedRecord, setRelatedRecord] = useState<(Record<string, unknown> & { id: string }) | null>(null);
@@ -2084,6 +2104,9 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const branchConstraints = useMemo<QueryConstraint[]>(() => (
+    canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")]
+  ), [activeBranchId, member]);
 
   useEffect(() => {
     if (actionSuccess) {
@@ -2101,11 +2124,11 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     const relatedType = relatedTypeForCollection(config.collection);
     const [nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextMembers] = await Promise.all([
       getOrgRecord<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, id),
-      safeListOrgRecords(activeOrganizationId, "tasks"),
-      safeListOrgRecords(activeOrganizationId, "activities"),
-      safeListDocuments(activeOrganizationId),
-      safeListOrgRecords(activeOrganizationId, "properties"),
-      safeListOrgRecords(activeOrganizationId, "propertyUnits"),
+      safeListOrgRecords(activeOrganizationId, "tasks", branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "activities", branchConstraints),
+      safeListDocuments(activeOrganizationId, branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
       config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ]);
     const nextRelatedRecord = config.collection === "activities"
@@ -2123,7 +2146,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       setActivities(nextActivities.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 10));
       setDocuments(nextDocuments.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 5));
     }
-  }, [activeOrganizationId, config.collection, id]);
+  }, [activeOrganizationId, branchConstraints, config.collection, id]);
 
   useEffect(() => {
     let mounted = true;
@@ -2131,11 +2154,11 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
     Promise.all([
       getOrgRecord<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, id),
-      safeListOrgRecords(activeOrganizationId, "tasks"),
-      safeListOrgRecords(activeOrganizationId, "activities"),
-      safeListDocuments(activeOrganizationId),
-      safeListOrgRecords(activeOrganizationId, "properties"),
-      safeListOrgRecords(activeOrganizationId, "propertyUnits"),
+      safeListOrgRecords(activeOrganizationId, "tasks", branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "activities", branchConstraints),
+      safeListDocuments(activeOrganizationId, branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
       config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ])
       .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextMembers]) => {
@@ -2172,7 +2195,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     return () => {
       mounted = false;
     };
-  }, [activeOrganizationId, config.collection, id]);
+  }, [activeOrganizationId, branchConstraints, config.collection, id]);
 
   if (!hasPermission(member, config.listPermission as never)) {
     return <PermissionDenied />;

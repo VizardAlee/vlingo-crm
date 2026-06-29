@@ -4,21 +4,25 @@ import { collection, getDocs, orderBy, query, type Timestamp } from "firebase/fi
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
 import { orgCollectionPath } from "@/services/firestore-paths";
-import type { Branch, Member, RoleName } from "@/types/crm";
+import type { Branch, BranchAccess, Member, RoleName } from "@/types/crm";
 
 export interface InviteUserInput {
   branchId: string;
+  branchAccess?: BranchAccess;
   displayName: string;
   email: string;
   organizationId: string;
   phoneNumber?: string;
-  role: RoleName;
+  role?: RoleName;
+  roles: RoleName[];
 }
 
 export interface UpdateMemberInput {
   branchId: string;
+  branchAccess?: BranchAccess;
   organizationId: string;
-  role: RoleName;
+  role?: RoleName;
+  roles: RoleName[];
   uid: string;
 }
 
@@ -49,9 +53,13 @@ export async function listMembers(organizationId: string) {
   const snapshot = await getDocs(query(collection(firestore, orgCollectionPath(organizationId, "members")), orderBy("displayName", "asc")));
   return snapshot.docs.map((item) => {
     const data = item.data();
+    const role = data.role as RoleName;
+    const roles = Array.isArray(data.roles) ? data.roles as RoleName[] : [];
     return {
       id: item.id,
       ...data,
+      branchAccess: data.branchAccess === "all" ? "all" : "own",
+      roles: Array.from(new Set([...roles, role].filter(Boolean))),
       createdAt: normalizeDate(data.createdAt),
       updatedAt: normalizeDate(data.updatedAt),
     } as Member;

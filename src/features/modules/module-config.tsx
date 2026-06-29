@@ -3,9 +3,9 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { WhatsAppPhoneLink } from "@/components/ui/whatsapp-link";
 import { formatCurrency, statusTone, titleCase } from "@/lib/utils";
-import type { Activity, Client, Deal, DevelopmentProject, Lead, MarketingCampaign, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
+import type { Activity, Client, Deal, DevelopmentProject, Lead, MarketingCampaign, Offering, Property, PropertyUnit, RentalTenancy, Task } from "@/types/crm";
 
-export type ModuleKey = "leads" | "clients" | "deals" | "properties" | "propertyUnits" | "rentalTenancies" | "developmentProjects" | "marketingCampaigns" | "tasks" | "activities";
+export type ModuleKey = "leads" | "clients" | "deals" | "properties" | "propertyUnits" | "offerings" | "rentalTenancies" | "developmentProjects" | "marketingCampaigns" | "tasks" | "activities";
 
 export interface FormField {
   colSpan?: "full";
@@ -60,6 +60,10 @@ const priorities = ["low", "medium", "high", "urgent"];
 const marketingCampaignStatuses = ["draft", "planned", "active", "paused", "completed", "cancelled"];
 const marketingCampaignTypes = ["Property launch", "Open house", "Lead generation", "Retargeting", "Brand awareness", "Referral drive", "Agent campaign", "Event", "Other"];
 const marketingChannels = ["Facebook", "Instagram", "Google Ads", "WhatsApp", "Email", "SMS", "Property portal", "Referral", "Event", "Outdoor", "Other"];
+const businessVerticals = ["realEstate", "solar", "buildingMaterials", "generalServices", "custom"];
+const offeringTypes = ["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
+const offeringStatuses = ["active", "draft", "inactive", "archived"];
+const unitOfMeasureOptions = ["unit", "piece", "pack", "bag", "ton", "kg", "sqm", "meter", "kW", "kVA", "panel", "battery", "inverter", "service", "project", "other"];
 
 export const moduleConfigs: Record<string, ModuleConfig> = {
   leads: {
@@ -272,6 +276,36 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { colSpan: "full", name: "notes", label: "Unit notes", section: "Notes", type: "textarea" },
     ],
   },
+  offerings: {
+    collection: "offerings",
+    createPermission: "offerings.create",
+    editPermission: "offerings.update",
+    emptyTitle: "No offerings have been added yet.",
+    listPermission: "offerings.read",
+    prefix: "OFR",
+    route: "/offerings",
+    title: "Offerings",
+    fields: [
+      { name: "name", label: "Offering name", placeholder: "Example: 5kVA Solar Installation Package", required: true, section: "Offering basics", type: "text" },
+      { name: "vertical", label: "Business vertical", options: businessVerticals, required: true, section: "Offering basics", type: "select" },
+      { name: "type", label: "Offering type", options: offeringTypes, required: true, section: "Offering basics", type: "select" },
+      { name: "category", label: "Category", placeholder: "Solar package, cement, land, consulting...", required: true, section: "Offering basics", type: "text" },
+      { name: "status", label: "Status", options: offeringStatuses, required: true, section: "Offering basics", type: "select" },
+      { colSpan: "full", name: "description", label: "Description", section: "Offering basics", type: "textarea" },
+
+      { name: "sku", label: "SKU / item code", section: "Commercials and stock", type: "text" },
+      { name: "unitOfMeasure", label: "Unit of measure", options: unitOfMeasureOptions, section: "Commercials and stock", type: "select" },
+      { name: "sellingPrice", label: "Selling price", section: "Commercials and stock", type: "number" },
+      { name: "costPrice", label: "Cost price", section: "Commercials and stock", type: "number" },
+      { name: "stockQuantity", label: "Stock quantity", section: "Commercials and stock", type: "number" },
+      { name: "reorderLevel", label: "Reorder level", section: "Commercials and stock", type: "number" },
+      { name: "supplierName", label: "Supplier / partner", section: "Commercials and stock", type: "text" },
+      { name: "serviceDurationDays", label: "Service duration days", section: "Commercials and stock", type: "number" },
+
+      { colSpan: "full", helpText: "Separate tags with commas.", name: "tags", label: "Tags", section: "Notes", type: "text" },
+      { colSpan: "full", name: "notes", label: "Internal notes", section: "Notes", type: "textarea" },
+    ],
+  },
   tasks: {
     collection: "tasks",
     createPermission: "tasks.create",
@@ -288,7 +322,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "status", label: "Status", options: ["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"], required: true, type: "select" },
       { name: "dueAt", label: "Due date", type: "date" },
       { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", type: "select" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing", "offering"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },
@@ -418,7 +452,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "subject", label: "Subject", required: true, type: "text" },
       { name: "body", label: "Details", type: "textarea" },
       { name: "status", label: "Status", type: "text" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing", "offering"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },
@@ -537,6 +571,26 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
     ];
   }
 
+  if (moduleKey === "offerings") {
+    return [
+      {
+        header: "Offering",
+        cell: ({ row }) => (
+          <Link className="grid gap-0.5 font-semibold text-primary" href={`/offerings/${row.original.id}`}>
+            <span>{String(row.original.name ?? "Offering")}</span>
+            <span className="text-xs font-medium text-muted-foreground">{String(row.original.referenceNumber ?? "Draft")}</span>
+          </Link>
+        ),
+      },
+      { header: "Vertical", cell: ({ row }) => titleCase(String(row.original.vertical ?? "")) },
+      { header: "Type", cell: ({ row }) => titleCase(String(row.original.type ?? "")) },
+      { header: "Category", cell: ({ row }) => String(row.original.category ?? "Not set") },
+      { header: "Price", cell: ({ row }) => formatCurrency(Number(row.original.sellingPrice ?? 0)) },
+      { header: "Stock", cell: ({ row }) => row.original.stockQuantity === undefined || row.original.stockQuantity === "" ? "Not tracked" : String(row.original.stockQuantity) },
+      statusColumn,
+    ];
+  }
+
   if (moduleKey === "tasks") {
     return [
       { header: "Task", cell: ({ row }) => <Link className="font-semibold text-primary" href={`/tasks/${row.original.id}`}>{String(row.original.title ?? "Task")}</Link> },
@@ -624,4 +678,4 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
   ];
 }
 
-export type ModuleEntity = Activity | Client | Deal | DevelopmentProject | Lead | MarketingCampaign | Property | PropertyUnit | RentalTenancy | Task;
+export type ModuleEntity = Activity | Client | Deal | DevelopmentProject | Lead | MarketingCampaign | Offering | Property | PropertyUnit | RentalTenancy | Task;

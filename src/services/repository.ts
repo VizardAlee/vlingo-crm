@@ -39,21 +39,31 @@ function serialize(value: DocumentData) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
+function logQueryError(context: string, error: unknown) {
+  console.error(`[Firestore query failed] ${context}`, error);
+}
+
 export async function listOrgRecords<T extends { id: string }>(
   organizationId: string,
   collectionName: OrgCollection,
   constraints: QueryConstraint[] = [],
 ) {
   const firestore = assertDb();
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, orgCollectionPath(organizationId, collectionName)),
-      where("isDeleted", "==", false),
-      orderBy("updatedAt", "desc"),
-      limit(100),
-      ...constraints,
-    ),
-  );
+  let snapshot;
+  try {
+    snapshot = await getDocs(
+      query(
+        collection(firestore, orgCollectionPath(organizationId, collectionName)),
+        where("isDeleted", "==", false),
+        orderBy("updatedAt", "desc"),
+        limit(100),
+        ...constraints,
+      ),
+    );
+  } catch (error) {
+    logQueryError(`${organizationId}/${collectionName}`, error);
+    throw error;
+  }
 
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as T);
 }

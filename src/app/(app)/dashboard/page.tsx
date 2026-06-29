@@ -9,12 +9,12 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingState, ErrorState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
 
 export default function DashboardPage() {
-  const { activeOrganizationId, member, user } = useAuth();
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canViewDashboard = hasAnyPermission(member, ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"]);
@@ -25,10 +25,11 @@ export default function DashboardPage() {
     }
 
     const assignedTo = user && !hasPermission(member, "leads.readAll") ? user.uid : undefined;
-    getDashboardMetrics(activeOrganizationId, { assignedTo })
+    const branchId = canAccessAllBranches(member) ? undefined : activeBranchId || member?.branchId;
+    getDashboardMetrics(activeOrganizationId, { assignedTo, branchId })
       .then(setMetrics)
       .catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Unable to load dashboard."));
-  }, [activeOrganizationId, canViewDashboard, member, user]);
+  }, [activeBranchId, activeOrganizationId, canViewDashboard, member, user]);
 
   if (!canViewDashboard) {
     return <PermissionDenied />;
@@ -50,12 +51,13 @@ export default function DashboardPage() {
   ];
   const hasPipelineData = metrics.leadPipeline.some((item) => item.value > 0);
   const hasSourceData = metrics.leadSources.some((item) => item.value > 0);
+  const firstName = String(member?.displayName ?? user?.displayName ?? user?.email ?? "there").trim().split(/\s+/)[0] || "there";
 
   return (
     <section className="grid min-w-0 gap-5 md:gap-6">
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
-          <h1 className="text-xl font-semibold md:text-2xl">Dashboard</h1>
+          <h1 className="text-xl font-semibold md:text-2xl">Welcome, {firstName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Operational snapshot for {new Date().toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })}.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">

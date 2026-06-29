@@ -16,16 +16,68 @@ service cloud.firestore {
         get(memberPath(orgId)).data.status == "active";
     }
 
+    function memberData(orgId) {
+      return get(memberPath(orgId)).data;
+    }
+
     function permissions(orgId) {
-      return get(memberPath(orgId)).data.permissions;
+      return memberData(orgId).keys().hasAny(["permissions"]) &&
+        memberData(orgId).permissions is list
+        ? memberData(orgId).permissions
+        : [];
+    }
+
+    function hasRole(orgId, allowed) {
+      return isActiveMember(orgId) &&
+        (allowed.hasAny([memberData(orgId).role]) ||
+        (memberData(orgId).keys().hasAny(["roles"]) &&
+        memberData(orgId).roles is list &&
+        memberData(orgId).roles.hasAny(allowed)));
     }
 
     function hasPermission(orgId, permission) {
-      return isActiveMember(orgId) && permissions(orgId).hasAny([permission]);
+      return isActiveMember(orgId) &&
+        (hasRole(orgId, ["superAdmin"]) || permissions(orgId).hasAny([permission]));
     }
 
     function hasAnyPermission(orgId, allowed) {
-      return isActiveMember(orgId) && permissions(orgId).hasAny(allowed);
+      return isActiveMember(orgId) &&
+        (hasRole(orgId, ["superAdmin"]) || permissions(orgId).hasAny(allowed));
+    }
+
+    function canAccessAnyBranch(orgId) {
+      return hasRole(orgId, ["superAdmin"]) || memberData(orgId).branchAccess == "all";
+    }
+
+    function canAccessBranch(orgId, branchId) {
+      return isActiveMember(orgId) &&
+        (canAccessAnyBranch(orgId) ||
+        (branchId is string && memberData(orgId).branchId == branchId));
+    }
+
+    function canReadRecordBranch(orgId) {
+      return canAccessBranch(orgId, resource.data.branchId);
+    }
+
+    function canWriteRequestBranch(orgId) {
+      return canAccessBranch(orgId, request.resource.data.branchId);
+    }
+
+    function assignedOnlySalesUser(orgId) {
+      return hasRole(orgId, ["salesExecutive"]) &&
+        !hasRole(orgId, ["superAdmin", "managingDirector", "operationsManager", "salesManager"]);
+    }
+
+    function assignedOnlyClientAccess(orgId) {
+      return !assignedOnlySalesUser(orgId) ||
+        resource.data.assignedRelationshipManager == request.auth.uid ||
+        resource.data.assignedTo == request.auth.uid;
+    }
+
+    function assignedOnlyDealAccess(orgId) {
+      return !assignedOnlySalesUser(orgId) ||
+        resource.data.dealOwnerId == request.auth.uid ||
+        resource.data.assignedTo == request.auth.uid;
     }
 
     function canReadDeals(orgId) {
@@ -42,6 +94,7 @@ service cloud.firestore {
 
     function canUpdateDealFinanceSummary(orgId) {
       return organizationUnchanged(orgId) &&
+        canReadRecordBranch(orgId) &&
         hasAnyPermission(orgId, ["finance.update", "finance.approve"]) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "organizationId",
@@ -72,6 +125,7 @@ service cloud.firestore {
         "rentals.read",
         "development.read",
         "marketing.read",
+        "offerings.read",
         "tasks.read",
         "activities.read",
         "reports.viewFinancial",
@@ -91,6 +145,7 @@ service cloud.firestore {
     function hasMetadata(orgId) {
       return organizationMatches(orgId) &&
         request.resource.data.branchId is string &&
+        canWriteRequestBranch(orgId) &&
         request.resource.data.createdBy is string &&
         request.resource.data.updatedBy is string &&
         request.resource.data.isDeleted is bool;
@@ -114,6 +169,7 @@ service cloud.firestore {
 
     function canUpdateFinanceRecord(orgId) {
       return organizationUnchanged(orgId) &&
+        canReadRecordBranch(orgId) &&
         (hasPermission(orgId, "finance.approve") ||
         (hasPermission(orgId, "finance.update") && !changesFinanceApprovalState()));
     }
@@ -152,70 +208,80 @@ service cloud.firestore {
       }
 
       match /leads/{leadId} {
-        allow read: if hasPermission(orgId, "reports.viewFinancial") ||
+        allow read: if canReadRecordBranch(orgId) && (hasPermission(orgId, "reports.viewFinancial") ||
           hasPermission(orgId, "leads.readAll") ||
-          (hasPermission(orgId, "leads.readAssigned") && resource.data.assignedTo == request.auth.uid);
+          (hasPermission(orgId, "leads.readAssigned") && resource.data.assignedTo == request.auth.uid));
         allow create: if hasPermission(orgId, "leads.create") && hasMetadata(orgId);
         allow update: if organizationUnchanged(orgId) &&
+          canReadRecordBranch(orgId) &&
           (hasPermission(orgId, "leads.assign") ||
           (hasPermission(orgId, "leads.updateAssigned") && resource.data.assignedTo == request.auth.uid));
         allow delete: if false;
       }
 
       match /clients/{clientId} {
-        allow read: if canUseDeals(orgId) || hasAnyPermission(orgId, ["clients.read", "rentals.create", "rentals.read", "rentals.update"]);
+        allow read: if canReadRecordBranch(orgId) &&
+          assignedOnlyClientAccess(orgId) &&
+          (canUseDeals(orgId) || hasAnyPermission(orgId, ["clients.read", "rentals.create", "rentals.read", "rentals.update"]));
         allow create: if hasPermission(orgId, "clients.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "clients.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "clients.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
       match /deals/{dealId} {
-        allow read: if canReadDeals(orgId);
+        allow read: if canReadRecordBranch(orgId) && assignedOnlyDealAccess(orgId) && canReadDeals(orgId);
         allow create: if canCreateDeals(orgId) && hasMetadata(orgId);
-        allow update: if (canUpdateDeals(orgId) && organizationUnchanged(orgId)) ||
+        allow update: if (canUpdateDeals(orgId) && organizationUnchanged(orgId) && canReadRecordBranch(orgId)) ||
           canUpdateDealFinanceSummary(orgId);
         allow delete: if false;
       }
 
       match /properties/{propertyId} {
-        allow read: if canUseDeals(orgId) || hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]);
+        allow read: if canReadRecordBranch(orgId) && (canUseDeals(orgId) || hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]));
         allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
       match /propertyStakeholders/{stakeholderId} {
-        allow read: if hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]);
+        allow read: if canReadRecordBranch(orgId) && hasAnyPermission(orgId, ["properties.read", "rentals.create", "rentals.read", "rentals.update"]);
         allow create: if hasPermission(orgId, "properties.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "properties.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
       match /propertyUnits/{unitId} {
-        allow read: if canUseDeals(orgId) || hasAnyPermission(orgId, ["units.read", "rentals.create", "rentals.read", "rentals.update"]);
+        allow read: if canReadRecordBranch(orgId) && (canUseDeals(orgId) || hasAnyPermission(orgId, ["units.read", "rentals.create", "rentals.read", "rentals.update"]));
         allow create: if hasPermission(orgId, "units.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "units.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "units.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow delete: if false;
+      }
+
+      match /offerings/{offeringId} {
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "offerings.read");
+        allow create: if hasPermission(orgId, "offerings.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "offerings.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
       match /rentalTenancies/{tenancyId} {
-        allow read: if hasPermission(orgId, "rentals.read");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "rentals.read");
         allow create: if hasPermission(orgId, "rentals.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "rentals.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "rentals.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
       match /developmentProjects/{projectId} {
-        allow read: if hasPermission(orgId, "development.read");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "development.read");
         allow create: if hasPermission(orgId, "development.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "development.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "development.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
       match /marketingCampaigns/{campaignId} {
-        allow read: if hasPermission(orgId, "marketing.read");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "marketing.read");
         allow create: if hasPermission(orgId, "marketing.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "marketing.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "marketing.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
@@ -233,48 +299,49 @@ service cloud.firestore {
       }
 
       match /tasks/{taskId} {
-        allow read: if hasPermission(orgId, "tasks.read") &&
+        allow read: if canReadRecordBranch(orgId) &&
+          hasPermission(orgId, "tasks.read") &&
           (resource.data.assignedTo == request.auth.uid || hasAnyPermission(orgId, ["dashboard.viewExecutive", "users.manage"]));
         allow create: if hasPermission(orgId, "tasks.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "tasks.update") && organizationUnchanged(orgId);
+        allow update: if hasPermission(orgId, "tasks.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
       }
 
       match /activities/{activityId} {
-        allow read: if hasPermission(orgId, "activities.read");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "activities.read");
         allow create: if hasPermission(orgId, "activities.create") && hasMetadata(orgId);
         allow update, delete: if false;
       }
 
       match /documents/{documentId} {
-        allow read: if canUseDocuments(orgId);
+        allow read: if canReadRecordBranch(orgId) && canUseDocuments(orgId);
         allow create: if canUseDocuments(orgId) && hasMetadata(orgId);
-        allow update, delete: if hasPermission(orgId, "users.manage");
+        allow update, delete: if hasPermission(orgId, "users.manage") && canReadRecordBranch(orgId);
       }
 
       match /financePayments/{paymentId} {
-        allow read: if hasPermission(orgId, "reports.viewFinancial");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "reports.viewFinancial");
         allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);
         allow update: if canUpdateFinanceRecord(orgId);
         allow delete: if false;
       }
 
       match /financeExpenses/{expenseId} {
-        allow read: if hasPermission(orgId, "reports.viewFinancial");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "reports.viewFinancial");
         allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);
         allow update: if canUpdateFinanceRecord(orgId);
         allow delete: if false;
       }
 
       match /financeCommissions/{commissionId} {
-        allow read: if hasPermission(orgId, "reports.viewFinancial");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "reports.viewFinancial");
         allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);
         allow update: if canUpdateFinanceRecord(orgId);
         allow delete: if false;
       }
 
       match /auditLogs/{auditLogId} {
-        allow read: if hasPermission(orgId, "auditLogs.read");
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "auditLogs.read");
         allow create, update, delete: if false;
       }
 

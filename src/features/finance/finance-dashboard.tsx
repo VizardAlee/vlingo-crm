@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { where, type QueryConstraint } from "firebase/firestore";
 import { Banknote, CheckCircle2, ClipboardCheck, FileText, Printer, Receipt, Scale, ShieldCheck, WalletCards } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,7 @@ import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/stat
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { approvalTone, createReceiptNumber, dealPaymentSummary, dealTargetAmount, paymentStatusForAmount, paymentTotal, rentalBalance } from "@/features/finance/finance-utils";
-import { hasPermission } from "@/lib/permissions";
+import { canAccessAllBranches, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import type { Deal, FinanceApprovalStatus, FinanceCommission, FinanceExpense, FinancePayment, FinancePaymentSourceType, Lead, PaymentVerificationStatus, Property, PropertyUnit, RentalPaymentMethod, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
@@ -35,7 +36,7 @@ type RevenueSource = {
 
 const paymentMethods: RentalPaymentMethod[] = ["bankTransfer", "cash", "pos", "cheque", "onlinePayment", "other"];
 const expenseCategories = ["Repairs", "Utilities", "Marketing", "Legal", "Agency", "Inspection", "Office", "Transport", "Other"];
-const relatedEntityTypes = ["office", "deal", "property", "unit", "tenancy", "development", "marketing", "other"];
+const relatedEntityTypes = ["office", "deal", "property", "unit", "tenancy", "development", "marketing", "offering", "other"];
 
 function parseDate(value: unknown) {
   if (!value) {
@@ -89,9 +90,9 @@ function isOverdue(rental: FinanceRental) {
   return String(rental.paymentStatus ?? "") === "overdue" || (dueDays !== null && dueDays < 0 && rentalBalance(rental) > 0);
 }
 
-async function safeList<T extends { id: string }>(organizationId: string, collectionName: Parameters<typeof listOrgRecords<T>>[1]) {
+async function safeList<T extends { id: string }>(organizationId: string, collectionName: Parameters<typeof listOrgRecords<T>>[1], constraints: QueryConstraint[] = []) {
   try {
-    return await listOrgRecords<T>(organizationId, collectionName);
+    return await listOrgRecords<T>(organizationId, collectionName, constraints);
   } catch {
     return [];
   }
@@ -243,15 +244,16 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     setLoading(true);
     setError(null);
     try {
+      const branchConstraints = canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")];
       const [nextDeals, nextLeads, nextRentals, nextProperties, nextUnits, nextPayments, nextExpenses, nextCommissions] = await Promise.all([
-        safeList<FinanceDeal>(activeOrganizationId, "deals"),
-        safeList<FinanceLead>(activeOrganizationId, "leads"),
-        safeList<FinanceRental>(activeOrganizationId, "rentalTenancies"),
-        safeList<FinanceProperty>(activeOrganizationId, "properties"),
-        safeList<FinanceUnit>(activeOrganizationId, "propertyUnits"),
-        safeList<FinancePayment>(activeOrganizationId, "financePayments"),
-        safeList<FinanceExpense>(activeOrganizationId, "financeExpenses"),
-        safeList<FinanceCommission>(activeOrganizationId, "financeCommissions"),
+        safeList<FinanceDeal>(activeOrganizationId, "deals", branchConstraints),
+        safeList<FinanceLead>(activeOrganizationId, "leads", branchConstraints),
+        safeList<FinanceRental>(activeOrganizationId, "rentalTenancies", branchConstraints),
+        safeList<FinanceProperty>(activeOrganizationId, "properties", branchConstraints),
+        safeList<FinanceUnit>(activeOrganizationId, "propertyUnits", branchConstraints),
+        safeList<FinancePayment>(activeOrganizationId, "financePayments", branchConstraints),
+        safeList<FinanceExpense>(activeOrganizationId, "financeExpenses", branchConstraints),
+        safeList<FinanceCommission>(activeOrganizationId, "financeCommissions", branchConstraints),
       ]);
       setDeals(nextDeals);
       setLeads(nextLeads);
@@ -277,7 +279,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, initialSource]);
+  }, [activeBranchId, activeOrganizationId, initialSource, member]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

@@ -27,6 +27,9 @@ export type Permission =
   | "marketing.create"
   | "marketing.read"
   | "marketing.update"
+  | "offerings.create"
+  | "offerings.read"
+  | "offerings.update"
   | "tasks.create"
   | "tasks.read"
   | "tasks.update"
@@ -58,6 +61,7 @@ export type RoleName =
   | "auditor";
 
 export type MembershipStatus = "active" | "invited" | "disabled";
+export type BranchAccess = "own" | "all";
 
 export interface EntityMetadata {
   organizationId: string;
@@ -96,10 +100,12 @@ export interface Member {
   id: string;
   organizationId: string;
   branchId: string;
+  branchAccess?: BranchAccess;
   displayName: string;
   email: string;
   phoneNumber?: string;
   role: RoleName;
+  roles?: RoleName[];
   permissions: Permission[];
   status: MembershipStatus;
   createdAt?: Date;
@@ -280,6 +286,41 @@ export type PropertyStatus =
   | "underMaintenance"
   | "unavailable"
   | "withdrawn";
+
+export type BusinessVertical = "realEstate" | "solar" | "buildingMaterials" | "generalServices" | "custom";
+export type OfferingType =
+  | "property"
+  | "unit"
+  | "material"
+  | "solarEquipment"
+  | "solarService"
+  | "installationProject"
+  | "consultancy"
+  | "maintenance"
+  | "service"
+  | "other";
+export type OfferingStatus = "active" | "draft" | "inactive" | "archived";
+
+export interface Offering extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  name: string;
+  vertical: BusinessVertical;
+  type: OfferingType;
+  category: string;
+  description?: string;
+  sku?: string;
+  unitOfMeasure?: string;
+  sellingPrice?: number;
+  costPrice?: number;
+  stockQuantity?: number;
+  reorderLevel?: number;
+  supplierName?: string;
+  serviceDurationDays?: number;
+  tags: string[];
+  notes?: string;
+  status: OfferingStatus;
+}
 
 export interface Property extends EntityMetadata {
   id: string;
@@ -484,7 +525,7 @@ export interface FinanceExpense extends EntityMetadata {
   method?: RentalPaymentMethod;
   paymentReference?: string;
   description?: string;
-  relatedEntityType?: "deal" | "property" | "unit" | "tenancy" | "development" | "marketing" | "office" | "other";
+  relatedEntityType?: "deal" | "property" | "unit" | "tenancy" | "development" | "marketing" | "offering" | "office" | "other";
   relatedEntityId?: string;
   approvalStatus: FinanceApprovalStatus;
   approvedAt?: string;
@@ -637,7 +678,7 @@ export interface Task extends EntityMetadata {
   assignedTo?: string;
   assignedToEmail?: string;
   assignedToName?: string;
-  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "tenancy" | "development" | "marketing";
+  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "tenancy" | "development" | "marketing" | "offering";
   relatedEntityId?: string;
   status: TaskStatus;
 }
@@ -661,7 +702,7 @@ export interface Activity extends EntityMetadata {
   subject: string;
   body?: string;
   status: string;
-  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing";
+  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "offering";
   relatedEntityId?: string;
 }
 
