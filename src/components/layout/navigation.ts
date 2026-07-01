@@ -178,7 +178,7 @@ export const navigation: NavSection[] = [
     ],
   },
   {
-    label: "Future Modules",
+    label: "Business",
     items: [
       { href: "/finance", icon: Receipt, label: "Finance", permissions: ["reports.viewFinancial"] },
       { href: "/rentals", icon: Landmark, label: "Rentals", permissions: ["rentals.read"] },

@@ -56,4 +56,37 @@ describe("Beacon Storage rules", () => {
     const storage = testEnv.authenticatedContext("manager-1").storage();
     await assertSucceeds(uploadString(ref(storage, "organizations/org-a/properties/file.txt"), "safe"));
   });
+
+  it("allows organization managers to upload branding images", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/members/admin-1"), {
+        branchId: "head-office",
+        organizationId: "org-a",
+        permissions: ["users.manage"],
+        role: "operationsManager",
+        status: "active",
+      });
+    });
+
+    const storage = testEnv.authenticatedContext("admin-1").storage();
+    await assertSucceeds(uploadString(ref(storage, "organizations/org-a/branding/logo.png"), "safe", "raw", { contentType: "image/png" }));
+  });
+
+  it("blocks branding uploads for non-managers or non-images", async () => {
+    const storage = testEnv.authenticatedContext("manager-1").storage();
+    await assertFails(uploadString(ref(storage, "organizations/org-a/branding/logo.png"), "safe", "raw", { contentType: "image/png" }));
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/members/admin-1"), {
+        branchId: "head-office",
+        organizationId: "org-a",
+        permissions: ["users.manage"],
+        role: "operationsManager",
+        status: "active",
+      });
+    });
+
+    const adminStorage = testEnv.authenticatedContext("admin-1").storage();
+    await assertFails(uploadString(ref(adminStorage, "organizations/org-a/branding/logo.txt"), "unsafe", "raw", { contentType: "text/plain" }));
+  });
 });

@@ -4,6 +4,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail,
 import { doc, getDoc } from "firebase/firestore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { auth, db, initializeBeaconAppCheck } from "@/lib/firebase/client";
+import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
 import type { Member, RoleName } from "@/types/crm";
 
 const defaultOrganizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID ?? "beacon-corporate-realty";
@@ -15,6 +16,7 @@ interface AuthState {
   firebaseReady: boolean;
   loading: boolean;
   member: Member | null;
+  memberLoadError: string | null;
   resetPassword: (email: string) => Promise<void>;
   setActiveBranchId: (branchId: string) => void;
   signIn: (email: string, password: string) => Promise<void>;
@@ -38,6 +40,7 @@ function normalizeMember(id: string, data: Record<string, unknown>): Member {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [member, setMember] = useState<Member | null>(null);
+  const [memberLoadError, setMemberLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(auth));
   const [activeBranchId, setActiveBranchId] = useState(defaultBranchId);
 
@@ -50,13 +53,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
+      setMemberLoadError(null);
       if (nextUser && db) {
-        const snapshot = await getDoc(doc(db, `organizations/${defaultOrganizationId}/members/${nextUser.uid}`));
-        const nextMember = snapshot.exists() ? normalizeMember(snapshot.id, snapshot.data()) : null;
-        setMember(nextMember);
-        setActiveBranchId(nextMember?.branchId ?? defaultBranchId);
+        try {
+          const memberPath = `organizations/${defaultOrganizationId}/members/${nextUser.uid}`;
+          const snapshot = await getDoc(doc(db, memberPath));
+          const nextMember = snapshot.exists() ? normalizeMember(snapshot.id, snapshot.data()) : null;
+          setMember(nextMember);
+          setMemberLoadError(nextMember ? null : `No member document found at organizations/${defaultOrganizationId}/members/${nextUser.uid}.`);
+          setActiveBranchId(nextMember?.branchId ?? defaultBranchId);
+        } catch (error) {
+          const nextError = enrichFirestoreError(error, {
+            action: "read",
+            collectionName: "members",
+            organizationId: defaultOrganizationId,
+            path: `organizations/${defaultOrganizationId}/members/${nextUser.uid}`,
+            requiredPermission: "active member document readable by the signed-in user",
+          });
+          const message = nextError instanceof Error ? nextError.message : "Unable to load your member profile.";
+          console.error(nextError);
+          setMember(null);
+          setMemberLoadError(message);
+        }
       } else {
         setMember(null);
+        setMemberLoadError(null);
       }
 
       setLoading(false);
@@ -92,13 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       firebaseReady: Boolean(auth && db),
       loading,
       member,
+      memberLoadError,
       resetPassword,
       setActiveBranchId,
       signIn,
       signOutUser,
       user,
     }),
-    [activeBranchId, loading, member, resetPassword, signIn, signOutUser, user],
+    [activeBranchId, loading, member, memberLoadError, resetPassword, signIn, signOutUser, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

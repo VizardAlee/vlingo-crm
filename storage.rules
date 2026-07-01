@@ -20,7 +20,13 @@ service firebase.storage {
     }
 
     function hasAnyPermission(orgId, permissions) {
-      return isActiveMember(orgId) && memberDoc(orgId).permissions.hasAny(permissions);
+      return isActiveMember(orgId) &&
+        (memberDoc(orgId).role == "superAdmin" ||
+        memberDoc(orgId).permissions.hasAny(permissions));
+    }
+
+    function canManageBranding(orgId) {
+      return hasAnyPermission(orgId, ["users.manage", "roles.manage"]);
     }
 
     function canUseDocuments(orgId) {
@@ -34,6 +40,7 @@ service firebase.storage {
         "rentals.read",
         "development.read",
         "marketing.read",
+        "offerings.read",
         "tasks.read",
         "activities.read",
         "reports.viewFinancial",
@@ -41,9 +48,16 @@ service firebase.storage {
       ]);
     }
 
-    match /organizations/{orgId}/{allPaths=**} {
+    match /organizations/{orgId}/branding/{fileName} {
+      allow read: if isActiveMember(orgId);
+      allow write: if canManageBranding(orgId) &&
+        request.resource.size < 2 * 1024 * 1024 &&
+        request.resource.contentType.matches("image/.*");
+    }
+
+    match /organizations/{orgId}/{folder}/{allPaths=**} {
       allow read: if canUseDocuments(orgId);
-      allow write: if canUseDocuments(orgId);
+      allow write: if folder != "branding" && canUseDocuments(orgId);
     }
 
     match /{allPaths=**} {

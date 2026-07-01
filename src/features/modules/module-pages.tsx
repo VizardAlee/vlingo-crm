@@ -153,7 +153,7 @@ function recordDisplayName(record: Record<string, unknown>) {
   return String(record.fullName ?? record.tenantName ?? record.name ?? record.title ?? record.subject ?? record.unitNumber ?? record.referenceNumber ?? record.id ?? "Record");
 }
 
-async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "properties" | "propertyUnits", constraints: QueryConstraint[] = []) {
+async function safeListOrgRecords(organizationId: string, collectionName: "tasks" | "activities" | "offerings" | "properties" | "propertyUnits", constraints: QueryConstraint[] = []) {
   try {
     return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName, constraints);
   } catch {
@@ -320,14 +320,34 @@ function recordSummaryEntries(record: Record<string, unknown>, collection: Modul
       "dealType",
       "status",
       "financeStatus",
+      "proposalStatus",
+      "fulfillmentStatus",
       "agreedAmount",
       "offerAmount",
+      "quoteSubtotal",
       "paidAmount",
       "pendingPaymentAmount",
       "balanceAmount",
       "lastReceiptNumber",
       "clientName",
       "leadName",
+      "offeringName",
+      "propertyName",
+      "unitName",
+    ]
+      .filter((key) => key in record)
+      .map((key) => ({ key, label: titleCase(key), value: record[key] }));
+  }
+
+  if (collection === "leads") {
+    return [
+      "referenceNumber",
+      "fullName",
+      "phoneNumber",
+      "email",
+      "status",
+      "transactionInterest",
+      "offeringName",
       "propertyName",
       "unitName",
     ]
@@ -405,19 +425,50 @@ function matchScore(lead: Record<string, unknown>, offering: Record<string, unkn
   return score;
 }
 
+function offeringCatalogPrice(record: Record<string, unknown>) {
+  return Number(record.sellingPrice ?? record.askingPrice ?? record.rentAmount ?? 0);
+}
+
+function catalogMatchScore(lead: Record<string, unknown>, offering: Record<string, unknown>) {
+  let score = 0;
+  const tags = Array.isArray(offering.tags) ? offering.tags : [];
+  const searchValues = [offering.name, offering.category, offering.type, offering.vertical, ...tags];
+
+  if (searchValues.some((value) => textMatches(value, lead.propertyType) || textMatches(value, lead.preferredPropertyCategory) || textMatches(value, lead.intendedUse))) {
+    score += 4;
+  }
+
+  if (String(offering.vertical) === "realEstate" && ["buy", "rent", "lease", "invest"].includes(String(lead.transactionInterest ?? ""))) {
+    score += 1;
+  }
+
+  const price = offeringCatalogPrice(offering);
+  const minBudget = Number(lead.budgetMinimum ?? 0);
+  const maxBudget = Number(lead.budgetMaximum ?? 0);
+  if (price && (!minBudget || price >= minBudget) && (!maxBudget || price <= maxBudget)) {
+    score += 3;
+  }
+
+  return score;
+}
+
 function LeadOfferingPanel({
+  offerings,
   propertyUnits,
   properties,
   record,
 }: {
+  offerings: Record<string, unknown>[];
   propertyUnits: Record<string, unknown>[];
   properties: Record<string, unknown>[];
   record: Record<string, unknown>;
 }) {
   const linkedProperty = record.propertyId ? properties.find((property) => property.id === record.propertyId) : null;
   const linkedUnit = record.unitId ? propertyUnits.find((unit) => unit.id === record.unitId) : null;
+  const linkedOffering = record.offeringId ? offerings.find((offering) => offering.id === record.offeringId) : null;
   const propertyLabel = String(linkedProperty?.name ?? record.propertyName ?? record.propertyReferenceNumber ?? "");
   const unitLabel = String(linkedUnit?.unitNumber ?? record.unitName ?? "");
+  const offeringLabel = String(linkedOffering?.name ?? record.offeringName ?? record.offeringReferenceNumber ?? "");
   const unitMatches = propertyUnits
     .filter(isAvailableOffering)
     .map((unit) => ({
@@ -440,8 +491,19 @@ function LeadOfferingPanel({
       subtitle: [property.city, property.category, property.bedrooms ? `${property.bedrooms} bed` : ""].filter(Boolean).join(" · "),
       type: "Property",
     }));
-  const matches = [...unitMatches, ...propertyMatches]
-    .filter((match) => match.score > 0 && match.id !== record.unitId && match.id !== record.propertyId)
+  const offeringMatches = offerings
+    .filter((offering) => String(offering.status ?? "active") === "active")
+    .map((offering) => ({
+      href: `/offerings/${offering.id}`,
+      id: String(offering.id),
+      label: String(offering.name ?? offering.referenceNumber ?? "Offering"),
+      price: offeringCatalogPrice(offering),
+      score: catalogMatchScore(record, offering),
+      subtitle: [titleCase(String(offering.vertical ?? "")), titleCase(String(offering.type ?? "")), offering.category].filter(Boolean).join(" · "),
+      type: "Offering",
+    }));
+  const matches = [...unitMatches, ...propertyMatches, ...offeringMatches]
+    .filter((match) => match.score > 0 && match.id !== record.unitId && match.id !== record.propertyId && match.id !== record.offeringId)
     .sort((left, right) => right.score - left.score || right.price - left.price)
     .slice(0, 5);
 
@@ -450,8 +512,12 @@ function LeadOfferingPanel({
       <Card>
         <CardHeader><CardTitle>Linked Offering</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          {propertyLabel || unitLabel ? (
+          {propertyLabel || unitLabel || offeringLabel ? (
             <>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Catalog offering</span>
+                {record.offeringId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/offerings/${record.offeringId}`}>{offeringLabel || "View offering"}</Link> : <span className="font-medium">{offeringLabel || "Not linked"}</span>}
+              </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-muted-foreground">Property</span>
                 {record.propertyId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/properties/${record.propertyId}`}>{propertyLabel || "View property"}</Link> : <span className="font-medium">{propertyLabel || "Not linked"}</span>}
@@ -462,12 +528,12 @@ function LeadOfferingPanel({
               </div>
             </>
           ) : (
-            <div className="rounded-md border border-dashed p-4 text-muted-foreground">No property or unit has been linked to this lead yet.</div>
+            <div className="rounded-md border border-dashed p-4 text-muted-foreground">No catalog offering, property, or unit has been linked to this lead yet.</div>
           )}
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Matching Properties</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Matching Offerings</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm">
           {matches.length ? matches.map((match) => (
             <Link className="rounded-md border p-3 hover:bg-muted" href={match.href} key={`${match.type}-${match.id}`}>
@@ -1990,6 +2056,10 @@ export function ModuleListPage({
       constraints.push(where("assignedRelationshipManager", "==", user.uid));
     }
 
+    if (config.collection === "deals" && user && isAssignedOnlySalesUser(member)) {
+      constraints.push(where("dealOwnerId", "==", user.uid));
+    }
+
     if (config.collection === "tasks" && user && !hasAnyPermission(member, ["dashboard.viewExecutive", "users.manage"])) {
       constraints.push(where("assignedTo", "==", user.uid));
     }
@@ -2098,6 +2168,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [activities, setActivities] = useState<Record<string, unknown>[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [activityMembers, setActivityMembers] = useState<Member[]>([]);
+  const [offerings, setOfferings] = useState<Record<string, unknown>[]>([]);
   const [properties, setProperties] = useState<Record<string, unknown>[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2122,13 +2193,14 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
   const loadDetail = useCallback(async () => {
     const relatedType = relatedTypeForCollection(config.collection);
-    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextMembers] = await Promise.all([
+    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextOfferings, nextMembers] = await Promise.all([
       getOrgRecord<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, id),
       safeListOrgRecords(activeOrganizationId, "tasks", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "activities", branchConstraints),
       safeListDocuments(activeOrganizationId, branchConstraints),
       safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "offerings", branchConstraints),
       config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ]);
     const nextRelatedRecord = config.collection === "activities"
@@ -2139,6 +2211,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     setRecord(nextRecord);
     setRelatedRecord(nextRelatedRecord);
     setActivityMembers(nextMembers);
+    setOfferings(config.collection === "leads" ? nextOfferings : []);
     setProperties(config.collection === "leads" ? nextProperties : []);
     setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : config.collection === "leads" ? nextPropertyUnits : []);
     if (relatedType) {
@@ -2159,9 +2232,10 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       safeListDocuments(activeOrganizationId, branchConstraints),
       safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
+      safeListOrgRecords(activeOrganizationId, "offerings", branchConstraints),
       config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ])
-      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextMembers]) => {
+      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextOfferings, nextMembers]) => {
         if (!mounted) {
           return;
         }
@@ -2178,6 +2252,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
         setRecord(nextRecord);
         setRelatedRecord(nextRelatedRecord);
         setActivityMembers(nextMembers);
+        setOfferings(config.collection === "leads" ? nextOfferings : []);
         setProperties(config.collection === "leads" ? nextProperties : []);
         setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : config.collection === "leads" ? nextPropertyUnits : []);
         if (relatedType) {
@@ -2295,7 +2370,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
         <LeadJourneyPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
       ) : null}
       {config.collection === "leads" ? (
-        <LeadOfferingPanel properties={properties} propertyUnits={propertyUnits} record={record} />
+        <LeadOfferingPanel offerings={offerings} properties={properties} propertyUnits={propertyUnits} record={record} />
       ) : null}
       {config.collection === "developmentProjects" ? (
         <DevelopmentOperationsPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />

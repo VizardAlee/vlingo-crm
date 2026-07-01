@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { approvalTone } from "@/features/finance/finance-utils";
+import { approvalTone, revenueCategoryFromPayment, revenueCategoryLabel } from "@/features/finance/finance-utils";
 import { hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { getOrgRecord } from "@/services/repository";
@@ -88,8 +88,8 @@ export function FinanceReceiptPage({ paymentId }: { paymentId: string }) {
             <div>
               <p className="text-xs font-semibold uppercase text-muted-foreground">Received from</p>
               <p className="mt-2 text-lg font-semibold">{payment.payerName ?? payment.tenantName ?? "Payer"}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{payment.propertyName || "Property not set"}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{titleCase(payment.sourceType ?? "rental")} · {payment.sourceReference || payment.tenancyReference || payment.tenancyId || payment.sourceId}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{payment.propertyName || revenueCategoryLabel(revenueCategoryFromPayment(payment))}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{revenueCategoryLabel(revenueCategoryFromPayment(payment))} · {payment.sourceReference || payment.tenancyReference || payment.tenancyId || payment.sourceId}</p>
             </div>
             <div className="sm:text-right">
               <p className="text-xs font-semibold uppercase text-muted-foreground">Amount</p>
@@ -109,7 +109,7 @@ export function FinanceReceiptPage({ paymentId }: { paymentId: string }) {
             </div>
             <div>
               <p className="font-medium">Revenue source</p>
-              <p className="mt-1 text-muted-foreground">{titleCase(payment.sourceType ?? "rental")}</p>
+              <p className="mt-1 text-muted-foreground">{revenueCategoryLabel(revenueCategoryFromPayment(payment))}</p>
             </div>
             <div>
               <p className="font-medium">Verification</p>
@@ -129,7 +129,7 @@ export function FinanceReceiptPage({ paymentId }: { paymentId: string }) {
           ) : null}
 
           <div className="border-t pt-6 text-xs text-muted-foreground">
-            This receipt was generated from Beacon Ops CRM finance records and is valid with the verification status shown above.
+            This receipt was generated from Vlingo Systems CRM finance records and is valid with the verification status shown above.
           </div>
         </CardContent>
       </Card>

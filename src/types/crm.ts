@@ -145,12 +145,18 @@ export interface Lead extends EntityMetadata {
   budgetMinimum?: number;
   budgetMaximum?: number;
   preferredBudgetCurrency?: string;
+  interestCategory?: BusinessVertical;
   transactionInterest: "buy" | "rent" | "lease" | "invest";
   propertyId?: string;
   propertyName?: string;
   propertyReferenceNumber?: string;
   unitId?: string;
   unitName?: string;
+  offeringId?: string;
+  offeringName?: string;
+  offeringReferenceNumber?: string;
+  offeringType?: OfferingType;
+  offeringVertical?: BusinessVertical;
   intendedUse?: string;
   paymentPreference?: string;
   preferredInspectionDate?: Date | null;
@@ -222,12 +228,15 @@ export type DealStatus =
 export type DealType = "sale" | "rent" | "lease" | "reservation" | "investment" | "other";
 export type DealFinanceStatus = "notInvoiced" | "paymentPending" | "partPaid" | "paid" | "overdue";
 export type DealLegalStatus = "notStarted" | "drafting" | "inReview" | "signed" | "completed" | "blocked";
+export type DealProposalStatus = "notStarted" | "drafting" | "sent" | "accepted" | "rejected" | "expired";
+export type DealFulfillmentStatus = "notStarted" | "awaitingPayment" | "procurement" | "scheduled" | "inProgress" | "delivered" | "completed" | "onHold" | "cancelled";
 
 export interface Deal extends EntityMetadata {
   id: string;
   referenceNumber: string;
   title: string;
   dealType: DealType;
+  dealCategory?: BusinessVertical;
   leadId?: string;
   leadName?: string;
   clientId?: string;
@@ -239,6 +248,19 @@ export interface Deal extends EntityMetadata {
   propertyReferenceNumber?: string;
   unitId?: string;
   unitName?: string;
+  offeringId?: string;
+  offeringName?: string;
+  offeringReferenceNumber?: string;
+  offeringType?: OfferingType;
+  offeringVertical?: BusinessVertical;
+  offeringQuantity?: number;
+  offeringUnitPrice?: number;
+  quoteSubtotal?: number;
+  proposalStatus?: DealProposalStatus;
+  fulfillmentStatus?: DealFulfillmentStatus;
+  fulfillmentDueDate?: Date | string | null;
+  scopeOfWork?: string;
+  deliveryNotes?: string;
   dealOwnerId?: string;
   dealOwnerName?: string;
   dealOwnerEmail?: string;
@@ -489,6 +511,7 @@ export interface RentalTenancy extends EntityMetadata {
 export type PaymentVerificationStatus = "pending" | "verified" | "rejected";
 export type FinanceApprovalStatus = "pendingApproval" | "approved" | "rejected" | "paid" | "void";
 export type FinancePaymentSourceType = "deal" | "lead" | "rental" | "property" | "unit" | "other";
+export type FinanceRevenueCategory = BusinessVertical | "propertySale" | "rental" | "unitSale" | "other";
 
 export interface FinancePayment extends EntityMetadata {
   id: string;
@@ -502,6 +525,7 @@ export interface FinancePayment extends EntityMetadata {
   tenantName?: string;
   payerName: string;
   propertyName?: string;
+  revenueCategory?: FinanceRevenueCategory;
   amount: number;
   at: string;
   method: RentalPaymentMethod;

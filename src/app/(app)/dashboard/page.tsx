@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { CalendarClock, ClipboardList, Handshake, Users } from "lucide-react";
+import { BarChart3, ClipboardList, Handshake, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
@@ -47,11 +47,14 @@ export default function DashboardPage() {
     { icon: Users, label: "Total leads", value: metrics.totalLeads.toLocaleString() },
     { icon: ClipboardList, label: "Qualified leads", value: metrics.qualifiedLeads.toLocaleString() },
     { icon: Handshake, label: "Active deals", value: metrics.activeDeals.toLocaleString() },
-    { icon: CalendarClock, label: "Overdue follow-ups", value: metrics.overdueFollowUps.toLocaleString() },
+    { icon: BarChart3, label: "Pipeline value", value: formatCurrency(metrics.pipelineValue) },
   ];
   const hasPipelineData = metrics.leadPipeline.some((item) => item.value > 0);
-  const hasSourceData = metrics.leadSources.some((item) => item.value > 0);
+  const hasBusinessPipelineData = metrics.businessPipeline.some((item) => item.value > 0);
+  const hasInterestCategoryData = metrics.leadInterestCategories.some((item) => item.value > 0);
   const firstName = String(member?.displayName ?? user?.displayName ?? user?.email ?? "there").trim().split(/\s+/)[0] || "there";
+  const canCreateLead = hasPermission(member, "leads.create");
+  const canCreateOffering = hasPermission(member, "offerings.create");
 
   return (
     <section className="grid min-w-0 gap-5 md:gap-6">
@@ -61,8 +64,8 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">Operational snapshot for {new Date().toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })}.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
-          <ButtonLink className="h-11 md:h-10" href="/leads/new" variant="secondary">Capture lead</ButtonLink>
-          <ButtonLink className="h-11 md:h-10" href="/properties/new" variant="outline">List property</ButtonLink>
+          {canCreateLead ? <ButtonLink className="h-11 md:h-10" href="/leads/new" variant="secondary">Capture lead</ButtonLink> : null}
+          {canCreateOffering ? <ButtonLink className="h-11 md:h-10" href="/offerings/new" variant="outline">Add offering</ButtonLink> : null}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
@@ -94,7 +97,7 @@ export default function DashboardPage() {
                   <XAxis dataKey="name" />
                   <YAxis allowDecimals={false} />
                   <Tooltip />
-                  <Bar dataKey="value" fill="#b11226" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" fill="#14550f" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -103,38 +106,55 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Lead Sources</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Business Pipeline</CardTitle></CardHeader>
           <CardContent className="min-w-0 p-3 md:p-5">
-            {hasSourceData ? (
+            {hasBusinessPipelineData ? (
               <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
-                  <Pie data={metrics.leadSources} dataKey="value" nameKey="name" innerRadius={58} outerRadius={96}>
-                    {metrics.leadSources.map((entry) => <Cell fill={entry.color ?? "#b11226"} key={entry.name} />)}
+                  <Pie data={metrics.businessPipeline.filter((entry) => entry.value > 0)} dataKey="value" nameKey="name" innerRadius={58} outerRadius={96}>
+                    {metrics.businessPipeline.filter((entry) => entry.value > 0).map((entry) => <Cell fill={entry.color ?? "#14550f"} key={entry.name} />)}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="grid h-64 place-items-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground md:h-80">No lead source data yet.</div>
+              <div className="grid h-64 place-items-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground md:h-80">No business pipeline value yet.</div>
             )}
+            <div className="mt-4 grid gap-2 text-sm">
+              {metrics.businessPipeline.map((item) => (
+                <div className="flex items-center justify-between gap-3 rounded-md border bg-white px-3 py-2" key={item.name}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color ?? "#14550f" }} />
+                    <span className="truncate">{item.name}</span>
+                  </span>
+                  <strong>{formatCurrency(item.value)}</strong>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
-          <CardHeader><CardTitle>Property Availability</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Operations</CardTitle></CardHeader>
           <CardContent className="grid gap-3 text-sm">
             <div className="flex justify-between"><span>Available units</span><strong>{metrics.availableUnits}</strong></div>
             <div className="flex justify-between"><span>Reserved units</span><strong>{metrics.reservedUnits}</strong></div>
             <div className="flex justify-between"><span>Active properties</span><strong>{metrics.activeProperties}</strong></div>
             <div className="flex justify-between"><span>Upcoming inspections</span><strong>{metrics.upcomingInspections}</strong></div>
+            <div className="flex justify-between"><span>Overdue follow-ups</span><strong>{metrics.overdueFollowUps}</strong></div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Pipeline Value</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold">{formatCurrency(metrics.pipelineValue)}</p>
-            <p className="mt-2 text-sm text-muted-foreground">Estimated from open lead budgets in the current accessible pipeline.</p>
+          <CardHeader><CardTitle>Lead Interest Mix</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            {hasInterestCategoryData || metrics.leadInterestCategories.length ? metrics.leadInterestCategories.slice(0, 5).map((item) => (
+              <div className="flex items-center justify-between gap-3" key={item.name}>
+                <span>{item.name}</span>
+                <strong>{item.value.toLocaleString()}</strong>
+              </div>
+            )) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No lead categories yet.</div>}
+            <p className="text-sm text-muted-foreground">Pipeline value is estimated from open deals first, then lead budgets when deals do not exist yet.</p>
           </CardContent>
         </Card>
         <Card>

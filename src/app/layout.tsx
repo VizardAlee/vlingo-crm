@@ -14,12 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Beacon Operations CRM",
-  description: "Secure real estate operations platform for Beacon Corporate Realty Limited.",
+  title: "Vlingo Systems CRM",
+  description: "Secure business operations platform for Vlingo Systems Nig. Ltd.",
   icons: {
-    icon: "/branding/beacon-logo.jpeg",
-    shortcut: "/branding/beacon-logo.jpeg",
-    apple: "/branding/beacon-logo.jpeg",
+    icon: "/branding/vlingo-logo.jpeg",
+    shortcut: "/branding/vlingo-logo.jpeg",
+    apple: "/branding/vlingo-logo.jpeg",
   },
 };
 

@@ -102,14 +102,16 @@ export function ReportsDashboard() {
       ["Available units", metrics.availableUnits],
       ["Reserved units", metrics.reservedUnits],
       ["Overdue follow-ups", metrics.overdueFollowUps],
-      ["Estimated lead pipeline", estimatedPipeline],
+      ["Estimated pipeline", metrics.pipelineValue],
+      ...metrics.businessPipeline.map((item) => [`Business pipeline - ${item.name}`, item.value]),
+      ...metrics.leadInterestCategories.map((item) => [`Lead interest - ${item.name}`, item.value]),
     ];
     const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `beacon-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `vlingo-report-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -134,7 +136,7 @@ export function ReportsDashboard() {
     ["Available units", metrics.availableUnits.toLocaleString()],
     ["Reserved units", metrics.reservedUnits.toLocaleString()],
     ["Overdue follow-ups", metrics.overdueFollowUps.toLocaleString()],
-    ["Estimated pipeline", formatCurrency(estimatedPipeline)],
+    ["Estimated pipeline", formatCurrency(metrics.pipelineValue || estimatedPipeline)],
   ];
 
   return (
@@ -142,7 +144,7 @@ export function ReportsDashboard() {
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
           <h1 className="text-xl font-semibold md:text-2xl">Reports</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Operational reporting from live leads, clients, properties, units, and tasks.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Operational reporting from live leads, deals, offerings, properties, units, and tasks.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
           <Button onClick={loadReports} type="button" variant="outline">
@@ -171,6 +173,8 @@ export function ReportsDashboard() {
         {[
           ["Lead Pipeline", leadStatusRows],
           ["Lead Sources", sourceRows],
+          ["Business Pipeline Value", metrics.businessPipeline.map((item) => [item.name, item.value])],
+          ["Lead Interest Mix", metrics.leadInterestCategories.map((item) => [item.name, item.value])],
           ["Unit Availability", unitRows],
           ["Task Status", taskRows],
         ].map(([title, rows]) => (

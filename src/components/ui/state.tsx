@@ -31,13 +31,31 @@ export function ErrorState({ message }: { message: string }) {
   );
 }
 
-export function PermissionDenied() {
+export function PermissionDenied({
+  currentPermissions,
+  memberRole,
+  requiredPermissions,
+  route,
+}: {
+  currentPermissions?: string[];
+  memberRole?: string;
+  requiredPermissions?: string[];
+  route?: string;
+}) {
   return (
     <div className="grid min-h-96 place-items-center p-8 text-center">
       <div>
         <ShieldAlert className="mx-auto h-10 w-10 text-primary" />
         <h1 className="mt-4 text-xl font-semibold">Permission denied</h1>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">Your current role does not include access to this workspace area.</p>
+        {route || requiredPermissions?.length || memberRole ? (
+          <div className="mt-4 grid max-w-xl gap-2 rounded-md border bg-muted/40 p-4 text-left text-xs text-muted-foreground">
+            {route ? <p><span className="font-semibold text-foreground">Route:</span> {route}</p> : null}
+            {memberRole ? <p><span className="font-semibold text-foreground">Current role:</span> {memberRole}</p> : null}
+            {requiredPermissions?.length ? <p><span className="font-semibold text-foreground">Required permissions:</span> {requiredPermissions.join(", ")}</p> : null}
+            {currentPermissions ? <p><span className="font-semibold text-foreground">Current permissions:</span> {currentPermissions.length ? currentPermissions.join(", ") : "none on member document"}</p> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

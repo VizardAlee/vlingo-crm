@@ -7,7 +7,7 @@ import { Bell, ChevronsLeft, LogOut, Menu, MoreHorizontal, Plus, Search, X } fro
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { LoadingState, PermissionDenied } from "@/components/ui/state";
+import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { accessRuleForPath, navigation, notificationAccessPermissions } from "@/components/layout/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
@@ -21,7 +21,7 @@ const notificationsChangedEvent = "beacon:notifications-changed";
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { activeBranchId, activeOrganizationId, firebaseReady, loading, member, setActiveBranchId, signOutUser, user } = useAuth();
+  const { activeBranchId, activeOrganizationId, firebaseReady, loading, member, memberLoadError, setActiveBranchId, signOutUser, user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -136,11 +136,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const sidebar = (
     <aside className={cn("flex h-full min-h-0 flex-col border-r bg-white transition-all", collapsed ? "w-20" : "w-72")}>
       <div className="flex h-20 shrink-0 items-center gap-3 border-b px-4">
-        <Image src="/branding/beacon-logo.jpeg" alt="Beacon Corporate Realty Limited logo" width={42} height={42} className="h-11 w-11 rounded-md object-contain" priority />
+        <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={collapsed ? 44 : 128} height={44} className={cn("h-11 rounded-md object-contain", collapsed ? "w-11" : "w-32 object-left")} priority />
         {!collapsed ? (
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold">Beacon Operations CRM</p>
-            <p className="truncate text-xs text-muted-foreground">Corporate Realty Limited</p>
+            <p className="truncate text-sm font-bold">Vlingo Systems CRM</p>
+            <p className="truncate text-xs text-muted-foreground">Systems Nig. Ltd.</p>
           </div>
         ) : null}
       </div>
@@ -185,7 +185,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const tabletRail = (
     <aside className="no-print hidden h-screen w-[5.25rem] shrink-0 border-r bg-white md:flex lg:hidden">
       <div className="flex min-h-0 w-full flex-col items-center gap-3 py-4">
-        <Image src="/branding/beacon-logo.jpeg" alt="Beacon Corporate Realty Limited logo" width={42} height={42} className="h-11 w-11 rounded-md object-contain" priority />
+        <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={64} height={44} className="h-11 w-14 rounded-md object-contain" priority />
         <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto overscroll-contain px-2">
           {flatNavigation.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -227,7 +227,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
             <p className="text-base font-semibold">All sections</p>
-            <p className="text-xs text-muted-foreground">Beacon Operations CRM</p>
+            <p className="text-xs text-muted-foreground">Vlingo Systems CRM</p>
           </div>
           <Button aria-label="Close sections" onClick={() => setMobileOpen(false)} size="icon" variant="ghost">
             <X className="h-5 w-5" />
@@ -315,9 +315,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </Button>
             <div className="flex min-w-0 flex-1 items-center gap-3 md:hidden">
-              <Image src="/branding/beacon-logo.jpeg" alt="Beacon Corporate Realty Limited logo" width={34} height={34} className="h-9 w-9 rounded-md object-contain" priority />
+              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={72} height={36} className="h-9 w-16 rounded-md object-contain object-left" priority />
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{currentSection?.label ?? "Beacon CRM"}</p>
+                <p className="truncate text-sm font-semibold">{currentSection?.label ?? "Vlingo CRM"}</p>
                 <p className="truncate text-xs text-muted-foreground">{activeBranchName}</p>
               </div>
             </div>
@@ -366,7 +366,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="mb-5 hidden text-sm text-muted-foreground md:block">
             {crumbs.length ? crumbs.map(titleCase).join(" / ") : "Dashboard"}
           </div>
-          {firebaseReady ? (canViewCurrentRoute ? children : <PermissionDenied />) : (
+          {firebaseReady ? (memberLoadError ? (
+            <ErrorState message={memberLoadError} />
+          ) : canViewCurrentRoute ? children : (
+            <PermissionDenied
+              currentPermissions={member?.permissions ?? []}
+              memberRole={member?.roles?.join(", ") || member?.role}
+              requiredPermissions={currentAccessRule?.permissions}
+              route={pathname}
+            />
+          )) : (
             <div className="rounded-md border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
               Firebase environment variables are missing. Add `.env.local` values to connect authentication and Firestore.
             </div>

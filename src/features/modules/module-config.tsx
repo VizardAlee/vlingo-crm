@@ -13,7 +13,7 @@ export interface FormField {
   name: string;
   label: string;
   options?: string[];
-  optionSource?: "clients" | "internalManagers" | "leads" | "managementCompanies" | "properties" | "propertyDevelopers" | "propertyOwners" | "propertyUnits";
+  optionSource?: "clients" | "internalManagers" | "leads" | "managementCompanies" | "offerings" | "properties" | "propertyDevelopers" | "propertyOwners" | "propertyUnits";
   readOnly?: boolean;
   placeholder?: string;
   required?: boolean;
@@ -39,6 +39,8 @@ const dealStatuses = ["new", "qualified", "propertyRecommended", "inspectionSche
 const dealTypes = ["sale", "rent", "lease", "reservation", "investment", "other"];
 const dealFinanceStatuses = ["notInvoiced", "paymentPending", "partPaid", "paid", "overdue"];
 const dealLegalStatuses = ["notStarted", "drafting", "inReview", "signed", "completed", "blocked"];
+const dealProposalStatuses = ["notStarted", "drafting", "sent", "accepted", "rejected", "expired"];
+const dealFulfillmentStatuses = ["notStarted", "awaitingPayment", "procurement", "scheduled", "inProgress", "delivered", "completed", "onHold", "cancelled"];
 const propertyCategories = ["Residential", "Commercial", "Land", "Estate", "Apartment", "Detached house", "Semi-detached house", "Terrace", "Office", "Shop", "Warehouse", "Mixed-use", "Short-let", "Other"];
 const listingStatuses = ["listed", "draft", "private", "offMarket"];
 const marketingStatuses = ["active", "paused", "needsMedia", "comingSoon", "archived"];
@@ -90,9 +92,11 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "budgetMinimum", label: "Budget minimum", type: "number" },
       { name: "budgetMaximum", label: "Budget maximum", type: "number" },
       { name: "preferredBudgetCurrency", label: "Budget currency", type: "text" },
+      { name: "interestCategory", label: "Interest category", options: businessVerticals, type: "select" },
       { name: "transactionInterest", label: "Transaction interest", options: ["buy", "rent", "lease", "invest"], required: true, type: "select" },
       { helpText: "Optional: link the primary property this lead is asking about.", name: "propertyId", label: "Linked property", optionSource: "properties", section: "Linked offering", type: "select" },
       { helpText: "Optional if the interest is for a specific unit.", name: "unitId", label: "Linked unit", optionSource: "propertyUnits", section: "Linked offering", type: "select" },
+      { helpText: "Use this for solar, building materials, consultancy, installation packages, or any non-property product/service.", name: "offeringId", label: "Linked catalog offering", optionSource: "offerings", section: "Linked offering", type: "select" },
       { name: "source", label: "Source", options: leadSources, required: true, type: "select" },
       { name: "sourcePlatform", label: "Source platform", type: "text" },
       { name: "campaignName", label: "Campaign name", type: "text" },
@@ -144,6 +148,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     title: "Deals",
     fields: [
       { name: "title", label: "Deal title", placeholder: "Example: Lekki Phase 1 Duplex Sale", required: true, section: "Deal basics", type: "text" },
+      { helpText: "Choose the business line so only relevant deal fields are shown.", name: "dealCategory", label: "Deal category", options: businessVerticals, section: "Deal basics", type: "select" },
       { name: "dealType", label: "Deal type", options: dealTypes, required: true, section: "Deal basics", type: "select" },
       { name: "status", label: "Deal stage", options: dealStatuses, required: true, section: "Deal basics", type: "select" },
       { helpText: "Internal owner responsible for moving this deal forward.", name: "dealOwnerId", label: "Deal owner", optionSource: "internalManagers", section: "Deal basics", type: "select" },
@@ -154,18 +159,28 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { helpText: "Optional until the buyer, tenant, or investor has a client record.", name: "clientId", label: "Client", optionSource: "clients", section: "Linked records", type: "select" },
       { name: "propertyId", label: "Property", optionSource: "properties", section: "Linked records", type: "select" },
       { helpText: "Optional if the deal is for the full property.", name: "unitId", label: "Unit", optionSource: "propertyUnits", section: "Linked records", type: "select" },
+      { helpText: "Use this for non-real-estate products/services or to connect a deal to the broader catalog.", name: "offeringId", label: "Catalog offering", optionSource: "offerings", section: "Linked records", type: "select" },
 
       { name: "offerAmount", label: "Offer amount", section: "Commercial terms", type: "number" },
       { name: "agreedAmount", label: "Agreed amount", section: "Commercial terms", type: "number" },
+      { helpText: "For product/service deals, multiply quantity by unit price.", name: "offeringQuantity", label: "Quantity", section: "Commercial terms", type: "number" },
+      { name: "offeringUnitPrice", label: "Unit price", section: "Commercial terms", type: "number" },
+      { helpText: "Calculated from quantity and unit price.", name: "quoteSubtotal", label: "Quote subtotal", readOnly: true, section: "Commercial terms", type: "number" },
       { name: "reservationAmount", label: "Reservation amount", section: "Commercial terms", type: "number" },
       { name: "depositAmount", label: "Deposit amount", section: "Commercial terms", type: "number" },
       { name: "financeStatus", label: "Finance status", options: dealFinanceStatuses, section: "Commercial terms", type: "select" },
       { colSpan: "full", name: "paymentPlan", label: "Payment plan", section: "Commercial terms", type: "textarea" },
 
+      { name: "proposalStatus", label: "Proposal status", options: dealProposalStatuses, section: "Proposal and fulfillment", type: "select" },
+      { name: "fulfillmentStatus", label: "Fulfillment status", options: dealFulfillmentStatuses, section: "Proposal and fulfillment", type: "select" },
+      { name: "fulfillmentDueDate", label: "Fulfillment due date", section: "Proposal and fulfillment", type: "date" },
+      { colSpan: "full", name: "scopeOfWork", label: "Scope of work / order details", section: "Proposal and fulfillment", type: "textarea" },
+      { colSpan: "full", name: "deliveryNotes", label: "Delivery / installation notes", section: "Proposal and fulfillment", type: "textarea" },
+
       { name: "legalStatus", label: "Legal status", options: dealLegalStatuses, section: "Legal and closing", type: "select" },
       { name: "commissionType", label: "Commission type", options: ["percentage", "fixed", "none"], section: "Legal and closing", type: "select" },
       { name: "commissionValue", label: "Commission value", section: "Legal and closing", type: "number" },
-      { helpText: "Calculated from agreed amount first, then offer amount.", name: "commissionAmount", label: "Calculated commission amount", readOnly: true, section: "Legal and closing", type: "number" },
+      { helpText: "Calculated from agreed amount first, then quote subtotal or offer amount.", name: "commissionAmount", label: "Calculated commission amount", readOnly: true, section: "Legal and closing", type: "number" },
       { name: "lostReason", label: "Lost reason", section: "Legal and closing", type: "text" },
       { colSpan: "full", name: "notes", label: "Deal notes", section: "Legal and closing", type: "textarea" },
     ],
@@ -180,7 +195,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     route: "/properties",
     title: "Properties",
     fields: [
-      { name: "name", label: "Property name", placeholder: "Example: Beacon Court Phase 2", required: true, section: "Property basics", type: "text" },
+      { name: "name", label: "Property name", placeholder: "Example: Vlingo Court Phase 2", required: true, section: "Property basics", type: "text" },
       { name: "category", label: "Category", options: propertyCategories, required: true, section: "Property basics", type: "select" },
       { helpText: "Use commas for multiple options.", name: "transactionTypes", label: "Transaction types", placeholder: "sale, rent, lease", required: true, section: "Property basics", type: "text" },
       { name: "propertyStatus", label: "Property status", options: propertyStatuses, required: true, section: "Property basics", type: "select" },
@@ -374,7 +389,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     route: "/development",
     title: "Development Projects",
     fields: [
-      { name: "name", label: "Project name", placeholder: "Example: Beacon Court Phase 2 Construction", required: true, section: "Project basics", type: "text" },
+      { name: "name", label: "Project name", placeholder: "Example: Vlingo Court Phase 2 Construction", required: true, section: "Project basics", type: "text" },
       { name: "projectType", label: "Project type", options: developmentTypes, required: true, section: "Project basics", type: "select" },
       { helpText: "Optional: link this project to an existing property record.", name: "propertyId", label: "Linked property", optionSource: "properties", section: "Project basics", type: "select" },
       { name: "status", label: "Project status", options: developmentStatuses, required: true, section: "Project basics", type: "select" },
@@ -473,6 +488,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Lead", accessorKey: "fullName" },
       { header: "Phone", cell: ({ row }) => <WhatsAppPhoneLink displayNumber={String(row.original.phoneNumber ?? "")} phoneNumber={String(row.original.whatsappNumber ?? row.original.phoneNumber ?? "")} /> },
       { header: "Source", cell: ({ row }) => String(row.original.source ?? "") },
+      { header: "Offering", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
       { header: "Interest", cell: ({ row }) => titleCase(String(row.original.transactionInterest ?? "")) },
       statusColumn,
     ];
@@ -500,9 +516,10 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
         ),
       },
       { header: "Client/lead", cell: ({ row }) => String(row.original.clientName ?? row.original.leadName ?? "Not linked") },
-      { header: "Property", cell: ({ row }) => String(row.original.unitName ?? row.original.propertyName ?? "Not linked") },
+      { header: "Offering", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
       { header: "Value", cell: ({ row }) => formatCurrency(Number(row.original.agreedAmount ?? row.original.offerAmount ?? row.original.depositAmount ?? row.original.reservationAmount ?? 0)) },
       { header: "Owner", cell: ({ row }) => String(row.original.dealOwnerName ?? row.original.dealOwnerEmail ?? "Unassigned") },
+      { header: "Fulfillment", cell: ({ row }) => titleCase(String(row.original.fulfillmentStatus ?? row.original.proposalStatus ?? "notStarted")) },
       statusColumn,
     ];
   }

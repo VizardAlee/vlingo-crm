@@ -115,7 +115,7 @@ function InviteSetupContent() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold">Create your account</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Set your password to activate your Beacon Operations CRM access.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Set your password to activate your Vlingo Systems CRM access.</p>
             </div>
           </div>
 

@@ -21,9 +21,9 @@ export function formTourSteps(config: ModuleConfig): GuidedTourStep[] {
   if (config.collection === "deals") {
     return [
       {
-        body: "Give the opportunity a clear name. This becomes the label sales, finance, and management will recognize in lists and receipts.",
-        target: fieldTourTarget(config.collection, "title"),
-        title: "Name the deal",
+        body: "Choose the business line first. The form then shows only the fields that fit that deal category and type.",
+        target: fieldTourTarget(config.collection, "dealCategory"),
+        title: "Choose the category",
       },
       {
         body: "Link the original lead when this deal started from an enquiry. The deal keeps that source history without duplicating the lead.",
@@ -31,17 +31,17 @@ export function formTourSteps(config: ModuleConfig): GuidedTourStep[] {
         title: "Connect the lead",
       },
       {
-        body: "Select the client once the person or company has a client record. Finance will use this as payer context for receipts.",
+        body: "Give the opportunity a clear name. This becomes the label sales, finance, and management will recognize in lists and receipts.",
+        target: fieldTourTarget(config.collection, "title"),
+        title: "Name the deal",
+      },
+      {
+        body: "Attach the relevant record: property/unit for real estate, or catalog offering for products and services.",
         target: fieldTourTarget(config.collection, "clientId"),
-        title: "Attach the client",
+        title: "Link the context",
       },
       {
-        body: "Pick the property or unit being sold, rented, leased, or reserved. Unit selection can also fill the parent property automatically.",
-        target: fieldTourTarget(config.collection, "propertyId"),
-        title: "Link inventory",
-      },
-      {
-        body: "Record the commercial value here. Agreed amount takes priority for finance and pipeline reporting; offer amount is useful before terms are final.",
+        body: "Record the active commercial value. Depending on the deal type, this may be agreed amount, reservation amount, or the calculated quote subtotal.",
         target: fieldTourTarget(config.collection, "agreedAmount"),
         title: "Set the value",
       },

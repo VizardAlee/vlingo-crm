@@ -3,6 +3,7 @@
 import { collection, getDocs, orderBy, query, type Timestamp } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
+import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
 import { orgCollectionPath } from "@/services/firestore-paths";
 import type { Branch, BranchAccess, Member, RoleName } from "@/types/crm";
 
@@ -40,6 +41,14 @@ function assertFirebase() {
   return { auth, db, functions };
 }
 
+function assertDb() {
+  if (!db) {
+    throw new Error("Firebase is not configured.");
+  }
+
+  return db;
+}
+
 function normalizeDate(value: unknown) {
   if (value && typeof value === "object" && "toDate" in value) {
     return (value as Timestamp).toDate();
@@ -49,8 +58,13 @@ function normalizeDate(value: unknown) {
 }
 
 export async function listMembers(organizationId: string) {
-  const { db: firestore } = assertFirebase();
-  const snapshot = await getDocs(query(collection(firestore, orgCollectionPath(organizationId, "members")), orderBy("displayName", "asc")));
+  const firestore = assertDb();
+  let snapshot;
+  try {
+    snapshot = await getDocs(query(collection(firestore, orgCollectionPath(organizationId, "members")), orderBy("displayName", "asc")));
+  } catch (error) {
+    throw enrichFirestoreError(error, { action: "list", collectionName: "members", organizationId });
+  }
   return snapshot.docs.map((item) => {
     const data = item.data();
     const role = data.role as RoleName;
@@ -67,8 +81,13 @@ export async function listMembers(organizationId: string) {
 }
 
 export async function listBranches(organizationId: string) {
-  const { db: firestore } = assertFirebase();
-  const snapshot = await getDocs(query(collection(firestore, orgCollectionPath(organizationId, "branches")), orderBy("name", "asc")));
+  const firestore = assertDb();
+  let snapshot;
+  try {
+    snapshot = await getDocs(query(collection(firestore, orgCollectionPath(organizationId, "branches")), orderBy("name", "asc")));
+  } catch (error) {
+    throw enrichFirestoreError(error, { action: "list", organizationId, path: `organizations/${organizationId}/branches`, requiredPermission: "active organization membership" });
+  }
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as Branch);
 }
 

@@ -3,8 +3,8 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const variants = {
-  primary: "bg-primary text-primary-foreground hover:bg-[#8f0e1f]",
-  secondary: "bg-secondary text-secondary-foreground hover:bg-black",
+  primary: "bg-primary text-primary-foreground hover:bg-[#0f420c]",
+  secondary: "bg-secondary text-secondary-foreground hover:bg-[#2b2b2b]",
   outline: "border bg-surface text-foreground hover:bg-muted",
   ghost: "text-foreground hover:bg-muted",
   danger: "bg-destructive text-white hover:bg-red-800",

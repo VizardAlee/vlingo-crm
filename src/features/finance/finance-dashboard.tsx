@@ -11,11 +11,11 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
-import { approvalTone, createReceiptNumber, dealPaymentSummary, dealTargetAmount, paymentStatusForAmount, paymentTotal, rentalBalance } from "@/features/finance/finance-utils";
+import { approvalTone, createReceiptNumber, dealPaymentSummary, dealTargetAmount, paymentStatusForAmount, paymentTotal, rentalBalance, revenueCategoryFromDeal, revenueCategoryFromLead, revenueCategoryFromPayment, revenueCategoryLabel } from "@/features/finance/finance-utils";
 import { canAccessAllBranches, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import type { Deal, FinanceApprovalStatus, FinanceCommission, FinanceExpense, FinancePayment, FinancePaymentSourceType, Lead, PaymentVerificationStatus, Property, PropertyUnit, RentalPaymentMethod, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
+import type { Deal, FinanceApprovalStatus, FinanceCommission, FinanceExpense, FinancePayment, FinancePaymentSourceType, FinanceRevenueCategory, Lead, PaymentVerificationStatus, Property, PropertyUnit, RentalPaymentMethod, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
 
 type FinanceRental = RentalTenancy & { id: string };
 type FinanceProperty = Property & { id: string };
@@ -29,6 +29,7 @@ type RevenueSource = {
   payerName: string;
   propertyName: string;
   reference: string;
+  revenueCategory: FinanceRevenueCategory;
   sourceId: string;
   sourceType: FinancePaymentSourceType;
   value: string;
@@ -110,8 +111,9 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
           amount: Math.max(targetAmount - recordedAmount, 0) || targetAmount,
           label: `Deal: ${deal.title ?? deal.referenceNumber ?? "Deal"} (${titleCase(String(deal.financeStatus ?? deal.status ?? "new"))})`,
           payerName: deal.clientName ?? deal.leadName ?? "",
-          propertyName: [deal.unitName, deal.propertyName].filter(Boolean).join(" · "),
+          propertyName: [deal.offeringName, deal.unitName, deal.propertyName].filter(Boolean).join(" · "),
           reference: deal.referenceNumber ?? "",
+          revenueCategory: revenueCategoryFromDeal(deal),
           sourceId: deal.id,
           sourceType: "deal" as const,
           value: `deal:${deal.id}`,
@@ -123,8 +125,9 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
         amount: Number(lead.budgetMaximum ?? lead.budgetMinimum ?? 0),
         label: `Deal: ${lead.fullName ?? lead.referenceNumber ?? "Lead"} (${titleCase(String(lead.status ?? "new"))})`,
         payerName: lead.fullName ?? "",
-        propertyName: [lead.preferredPropertyCategory ?? lead.propertyType, lead.preferredLocation ?? lead.preferredCity].filter(Boolean).join(" · "),
+        propertyName: [lead.offeringName, lead.unitName, lead.propertyName, lead.preferredPropertyCategory ?? lead.propertyType, lead.preferredLocation ?? lead.preferredCity].filter(Boolean).join(" · "),
         reference: lead.referenceNumber ?? "",
+        revenueCategory: revenueCategoryFromLead(lead),
         sourceId: lead.id,
         sourceType: "lead" as const,
         value: `lead:${lead.id}`,
@@ -135,6 +138,7 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
       payerName: rental.tenantName ?? "",
       propertyName: String(rental.unitName ?? rental.propertyName ?? ""),
       reference: rental.referenceNumber ?? "",
+      revenueCategory: "rental" as const,
       sourceId: rental.id,
       sourceType: "rental" as const,
       value: `rental:${rental.id}`,
@@ -145,6 +149,7 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
       payerName: "",
       propertyName: property.name,
       reference: property.referenceNumber ?? "",
+      revenueCategory: "propertySale" as const,
       sourceId: property.id,
       sourceType: "property" as const,
       value: `property:${property.id}`,
@@ -155,6 +160,7 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
       payerName: "",
       propertyName: String(unit.propertyName ?? unit.unitNumber ?? ""),
       reference: unit.referenceNumber ?? "",
+      revenueCategory: "unitSale" as const,
       sourceId: unit.id,
       sourceType: "unit" as const,
       value: `unit:${unit.id}`,
@@ -165,6 +171,7 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
       payerName: "",
       propertyName: "",
       reference: "Other income",
+      revenueCategory: "other" as const,
       sourceId: "other",
       sourceType: "other" as const,
       value: "other:other",
@@ -336,6 +343,21 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     const sortedCommissions = commissions.slice().sort((a, b) => sortByDateDesc(a.dueAt ?? "", b.dueAt ?? ""));
     const verifiedPayments = sortedPayments.filter((payment) => payment.verificationStatus === "verified");
     const verifiedCollected = verifiedPayments.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+    const collectedByCategory = verifiedPayments.reduce<Record<FinanceRevenueCategory, number>>((totals, payment) => {
+      const category = revenueCategoryFromPayment(payment);
+      totals[category] = (totals[category] ?? 0) + Number(payment.amount ?? 0);
+      return totals;
+    }, {
+      buildingMaterials: 0,
+      custom: 0,
+      generalServices: 0,
+      other: 0,
+      propertySale: 0,
+      realEstate: 0,
+      rental: 0,
+      solar: 0,
+      unitSale: 0,
+    });
     const dealCollected = verifiedPayments
       .filter((payment) => payment.sourceType === "deal" || payment.sourceType === "lead")
       .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
@@ -360,6 +382,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
       activeRentals,
       approvedExpenses,
       commissionPayable: sortedCommissions.filter((commission) => ["approved", "paid"].includes(commission.approvalStatus)).reduce((sum, commission) => sum + Number(commission.amount ?? 0), 0),
+      collectedByCategory,
       dealCollected,
       inventorySalesValue: properties.reduce((sum, property) => sum + Number(property.askingPrice ?? 0), 0) + units.reduce((sum, unit) => sum + Number(unit.askingPrice ?? 0), 0),
       overdue: overdueRentals.reduce((sum, rental) => sum + rentalBalance(rental), 0),
@@ -419,6 +442,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
         paymentReference: paymentForm.paymentReference.trim(),
         propertyName: source.propertyName,
         receiptNumber,
+        revenueCategory: source.revenueCategory,
         sourceId: source.sourceId,
         sourceReference: source.reference,
         sourceType: source.sourceType,
@@ -438,6 +462,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
         propertyName: source.propertyName,
         receiptNumber,
         referenceNumber: receiptNumber,
+        revenueCategory: source.revenueCategory,
         sourceId: source.sourceId,
         sourceReference: source.reference,
         sourceType: source.sourceType,
@@ -473,7 +498,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
       if (canCreateActivity) {
         const relatedEntityType = source.sourceType === "rental" ? "tenancy" : source.sourceType === "other" ? undefined : source.sourceType;
         const activityId = await createOrgRecord("activities", {
-          body: paymentForm.note.trim() || `Receipt ${receiptNumber} created for ${titleCase(source.sourceType)} revenue. Verification is pending.`,
+          body: paymentForm.note.trim() || `Receipt ${receiptNumber} created for ${revenueCategoryLabel(source.revenueCategory)}. Verification is pending.`,
           relatedEntityId: source.sourceType === "other" ? "" : source.sourceId,
           relatedEntityType,
           status: "completed",
@@ -483,7 +508,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
         await writeAuditLog(context, "activity.create", "activities", activityId, { receiptNumber, relatedEntityId: source.sourceId, sourceType: source.sourceType });
       }
 
-      await writeAuditLog(context, "finance.payment.create", "financePayments", paymentId, { amount, receiptNumber, sourceId: source.sourceId, sourceType: source.sourceType });
+      await writeAuditLog(context, "finance.payment.create", "financePayments", paymentId, { amount, receiptNumber, revenueCategory: source.revenueCategory, sourceId: source.sourceId, sourceType: source.sourceType });
       setPaymentForm((current) => ({ ...current, amount: "", note: "", payerName: "", paymentReference: "" }));
       setSuccess(`Receipt ${receiptNumber} created and queued for verification.`);
       await loadFinance();
@@ -703,9 +728,10 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
 
   const metricCards = [
     { icon: CheckCircle2, label: "Total verified revenue", tone: "text-success", value: formatCurrency(finance.verifiedCollected) },
-    { icon: Receipt, label: "Pipeline receipts", tone: "text-warning", value: formatCurrency(finance.dealCollected) },
-    { icon: Banknote, label: "Rent collected", tone: "text-primary", value: formatCurrency(finance.rentCollected) },
-    { icon: WalletCards, label: "Sales collected", tone: "text-info", value: formatCurrency(finance.salesCollected) },
+    { icon: Receipt, label: "Real estate income", tone: "text-primary", value: formatCurrency(finance.collectedByCategory.realEstate + finance.collectedByCategory.propertySale + finance.collectedByCategory.unitSale + finance.collectedByCategory.rental) },
+    { icon: Banknote, label: "Solar income", tone: "text-warning", value: formatCurrency(finance.collectedByCategory.solar) },
+    { icon: WalletCards, label: "Materials income", tone: "text-info", value: formatCurrency(finance.collectedByCategory.buildingMaterials) },
+    { icon: ClipboardCheck, label: "Services income", tone: "text-success", value: formatCurrency(finance.collectedByCategory.generalServices) },
     { icon: ShieldCheck, label: "Pending approvals", tone: "text-warning", value: String(finance.pendingApprovals) },
   ];
 
@@ -714,7 +740,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
           <h1 className="text-xl font-semibold md:text-2xl">Finance</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Verify rent, property sale, unit sale, and other income receipts alongside expenses and commissions.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Verify real estate, rental, solar, materials, services, and other income receipts alongside expenses and commissions.</p>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 md:mt-0 md:flex">
           <ButtonLink href="/rentals" variant="outline">Rental ledger</ButtonLink>
@@ -878,7 +904,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
                   <div className="min-w-0">
                     <Link className="font-semibold text-primary hover:underline" href={`/finance/receipts/${payment.id}`}>{payment.receiptNumber}</Link>
                     <p className="mt-1 text-muted-foreground">{payment.payerName ?? payment.tenantName ?? "Payer"} · {displayDate(payment.at)} · {titleCase(payment.method)}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{titleCase(payment.sourceType ?? "rental")} · {payment.sourceReference || payment.tenancyReference || payment.tenancyId || payment.sourceId}{payment.paymentReference ? ` · ${payment.paymentReference}` : ""}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{revenueCategoryLabel(revenueCategoryFromPayment(payment))} · {payment.sourceReference || payment.tenancyReference || payment.tenancyId || payment.sourceId}{payment.paymentReference ? ` · ${payment.paymentReference}` : ""}</p>
                   </div>
                   <div className="grid gap-1 lg:text-right">
                     <span className="font-semibold">{formatCurrency(Number(payment.amount ?? 0))}</span>

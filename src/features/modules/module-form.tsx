@@ -13,13 +13,15 @@ import { ErrorState } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { GuidedTour } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
+import { dealCategoryFromFormValue, dealTypeFromFormValue, dealTypesForCategory, dealVisibleFieldNames } from "@/features/modules/deal-form-logic";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
 import { canAccessAllBranches, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import type { Client, Lead, Member, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
+import { listMembers } from "@/services/users";
+import type { BusinessVertical, Client, DealType, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
@@ -75,6 +77,63 @@ function groupFields(fields: FormField[]) {
 
 function isBlankFormValue(value: FormValue) {
   return value === "" || value === null || value === undefined || (Array.isArray(value) && value.length === 0);
+}
+
+function shouldShowDealField(field: FormField, category: BusinessVertical | "", dealType: DealType | "") {
+  return dealVisibleFieldNames(category, dealType).has(field.name);
+}
+
+function clearHiddenDealFields(parsedData: Record<string, unknown>, fields: FormField[], category: BusinessVertical | "", dealType: DealType | "") {
+  const visibleFieldNames = dealVisibleFieldNames(category, dealType);
+  for (const field of fields) {
+    if (visibleFieldNames.has(field.name)) {
+      continue;
+    }
+
+    parsedData[field.name] = field.type === "textarea" || field.type === "text" || field.type === "select" ? "" : undefined;
+  }
+}
+
+function offeringTypesForVertical(vertical: BusinessVertical | "") {
+  if (vertical === "realEstate") {
+    return ["property", "unit", "service", "other"];
+  }
+
+  if (vertical === "solar") {
+    return ["solarEquipment", "solarService", "installationProject", "maintenance", "consultancy", "other"];
+  }
+
+  if (vertical === "buildingMaterials") {
+    return ["material", "service", "other"];
+  }
+
+  if (vertical === "generalServices") {
+    return ["consultancy", "maintenance", "service", "installationProject", "other"];
+  }
+
+  return ["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
+}
+
+function shouldShowOfferingField(field: FormField, type: string) {
+  const stockFields = new Set(["stockQuantity", "reorderLevel"]);
+  const supplierFields = new Set(["supplierName"]);
+  const serviceFields = new Set(["serviceDurationDays"]);
+  const inventoryTypes = new Set(["material", "solarEquipment"]);
+  const serviceTypes = new Set(["solarService", "installationProject", "consultancy", "maintenance", "service"]);
+
+  if (stockFields.has(field.name)) {
+    return inventoryTypes.has(type);
+  }
+
+  if (supplierFields.has(field.name)) {
+    return inventoryTypes.has(type) || type === "other";
+  }
+
+  if (serviceFields.has(field.name)) {
+    return serviceTypes.has(type);
+  }
+
+  return true;
 }
 
 function dateInputValue(value: unknown) {
@@ -175,6 +234,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [clients, setClients] = useState<Client[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [offerings, setOfferings] = useState<Offering[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<PropertyUnit[]>([]);
   const [stakeholderForm, setStakeholderForm] = useState({ email: "", name: "", notes: "", phoneNumber: "", type: "owner" as StakeholderKind });
@@ -208,6 +268,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     commissionValue,
     agreedAmount,
     offerAmount,
+    offeringQuantity,
+    offeringUnitPrice,
     serviceCharge,
     cautionFee,
     legalFee,
@@ -216,16 +278,32 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     paymentCycle,
   ] = useWatch({
     control,
-    name: ["askingPrice", "rentAmount", "agencyFeeType", "agencyFeeValue", "agencyFee", "commissionType", "commissionValue", "agreedAmount", "offerAmount", "serviceCharge", "cautionFee", "legalFee", "leaseStartDate", "leaseEndDate", "paymentCycle"],
+    name: ["askingPrice", "rentAmount", "agencyFeeType", "agencyFeeValue", "agencyFee", "commissionType", "commissionValue", "agreedAmount", "offerAmount", "offeringQuantity", "offeringUnitPrice", "serviceCharge", "cautionFee", "legalFee", "leaseStartDate", "leaseEndDate", "paymentCycle"],
   });
+  const offeringSubtotal = Number(offeringQuantity || 0) * Number(offeringUnitPrice || 0);
   const basePropertyAmount = Number(askingPrice || rentAmount || 0);
   const calculatedAgencyFee = calculateFeeAmount(String(agencyFeeType ?? ""), Number(agencyFeeValue || 0), basePropertyAmount);
-  const baseCommissionAmount = config.collection === "deals" ? Number(agreedAmount || offerAmount || 0) : basePropertyAmount;
+  const baseCommissionAmount = config.collection === "deals" ? Number(agreedAmount || offeringSubtotal || offerAmount || 0) : basePropertyAmount;
   const commissionAmount = calculateFeeAmount(String(commissionType ?? ""), Number(commissionValue || 0), baseCommissionAmount);
   const totalInitialPayment = Number(rentAmount || 0) + Number(serviceCharge || 0) + Number(cautionFee || 0) + Number(directAgencyFee || 0) + Number(legalFee || 0);
   const selectedPropertyId = useWatch({ control, name: "propertyId" });
+  const selectedOfferingId = useWatch({ control, name: "offeringId" });
   const selectedLeadId = useWatch({ control, name: "leadId" });
   const selectedUnitId = useWatch({ control, name: "unitId" });
+  const selectedDealCategory = useWatch({ control, name: "dealCategory" });
+  const selectedDealType = useWatch({ control, name: "dealType" });
+  const selectedInterestCategory = useWatch({ control, name: "interestCategory" });
+  const selectedOfferingVertical = useWatch({ control, name: "vertical" });
+  const selectedOfferingType = useWatch({ control, name: "type" });
+  const effectiveDealCategory = config.collection === "deals"
+    ? dealCategoryFromFormValue(selectedDealCategory)
+      || dealCategoryFromFormValue(existing?.dealCategory)
+      || dealCategoryFromFormValue(existing?.offeringVertical)
+      || (existing?.propertyId || existing?.unitId ? "realEstate" : "")
+    : "";
+  const effectiveDealType = config.collection === "deals"
+    ? dealTypeFromFormValue(selectedDealType) || dealTypeFromFormValue(existing?.dealType) || "sale"
+    : "";
   const branchConstraints = useMemo<QueryConstraint[]>(() => (
     canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")]
   ), [activeBranchId, member]);
@@ -244,12 +322,15 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const developerOptions = useMemo(() => stakeholders.filter((item) => item.type === "developer").map(toStakeholderOption), [stakeholders]);
   const managementOptions = useMemo(() => stakeholders.filter((item) => item.type === "management").map(toStakeholderOption), [stakeholders]);
   const managerOptions = useMemo(
-    () => members.map((item) => {
-      const name = item.displayName || item.email || item.id;
-      const detail = [item.role, item.email].filter(Boolean).join(" · ");
-      return { label: `${name} (${detail})`, value: item.id };
-    }),
-    [members],
+    () => members
+      .filter((item) => item.status === "active")
+      .filter((item) => canAccessAllBranches(member) || item.branchId === activeBranchId || item.branchId === member?.branchId)
+      .map((item) => {
+        const name = item.displayName || item.email || item.id;
+        const detail = [item.role, item.email].filter(Boolean).join(" · ");
+        return { label: `${name} (${detail})`, value: item.id };
+      }),
+    [activeBranchId, member, members],
   );
   const propertyOptions = useMemo(
     () => properties.map((item) => {
@@ -281,6 +362,23 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       }),
     [propertyUnits, selectedPropertyId],
   );
+  const offeringOptions = useMemo(
+    () => offerings
+      .filter((item) => String(item.status ?? "active") === "active")
+      .filter((item) => {
+        const category = config.collection === "deals"
+          ? effectiveDealCategory
+          : config.collection === "leads"
+            ? dealCategoryFromFormValue(selectedInterestCategory)
+            : "";
+        return !category || category === "realEstate" || item.vertical === category;
+      })
+      .map((item) => {
+        const detail = [titleCase(item.vertical), titleCase(item.type), item.referenceNumber].filter(Boolean).join(" · ");
+        return { label: detail ? `${item.name} (${detail})` : item.name, value: item.id };
+      }),
+    [config.collection, effectiveDealCategory, offerings, selectedInterestCategory],
+  );
 
   useEffect(() => {
     if (config.collection !== "deals" && config.collection !== "leads" && config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
@@ -288,15 +386,17 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
 
     let mounted = true;
+    const loadMembers = () => listMembers(activeOrganizationId).catch(() => member ? [member] : []);
     const loadOptions = (() => {
       if (config.collection === "propertyUnits") {
         return Promise.all([
           Promise.resolve<Client[]>([]),
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
-          Promise.resolve<Member[]>([]),
+          loadMembers(),
           listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           Promise.resolve<PropertyUnit[]>([]),
+          Promise.resolve<Offering[]>([]),
         ]);
       }
 
@@ -305,9 +405,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Client[]>([]),
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
-          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          loadMembers(),
           Promise.resolve<Property[]>([]),
           Promise.resolve<PropertyUnit[]>([]),
+          listOrgRecords<Offering>(activeOrganizationId, "offerings", branchConstraints).catch(() => []),
         ]);
       }
 
@@ -316,9 +417,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Client[]>([]),
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
-          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          loadMembers(),
           listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           Promise.resolve<PropertyUnit[]>([]),
+          Promise.resolve<Offering[]>([]),
         ]);
       }
 
@@ -327,9 +429,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Client[]>([]),
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
-          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          loadMembers(),
           listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           Promise.resolve<PropertyUnit[]>([]),
+          Promise.resolve<Offering[]>([]),
         ]);
       }
 
@@ -341,6 +444,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Member[]>([]),
           listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
+          Promise.resolve<Offering[]>([]),
         ]);
       }
 
@@ -349,9 +453,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           listOrgRecords<Client>(activeOrganizationId, "clients", clientConstraints).catch(() => []),
           listOrgRecords<Lead>(activeOrganizationId, "leads", leadConstraints).catch(() => []),
           Promise.resolve<PropertyStakeholder[]>([]),
-          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          loadMembers(),
           listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
+          listOrgRecords<Offering>(activeOrganizationId, "offerings", branchConstraints).catch(() => []),
         ]);
       }
 
@@ -360,9 +465,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Client[]>([]),
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
-          listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+          loadMembers(),
           listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
           listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
+          listOrgRecords<Offering>(activeOrganizationId, "offerings", branchConstraints).catch(() => []),
         ]);
       }
 
@@ -370,14 +476,15 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         Promise.resolve<Client[]>([]),
         Promise.resolve<Lead[]>([]),
         listOrgRecords<PropertyStakeholder>(activeOrganizationId, "propertyStakeholders", branchConstraints).catch(() => []),
-        listOrgRecords<Member>(activeOrganizationId, "members").catch(() => member ? [member] : []),
+        loadMembers(),
         Promise.resolve<Property[]>([]),
         Promise.resolve<PropertyUnit[]>([]),
+        Promise.resolve<Offering[]>([]),
       ]);
     })();
 
     loadOptions
-      .then(([nextClients, nextLeads, nextStakeholders, nextMembers, nextProperties, nextPropertyUnits]) => {
+      .then(([nextClients, nextLeads, nextStakeholders, nextMembers, nextProperties, nextPropertyUnits, nextOfferings]) => {
         if (!mounted) {
           return;
         }
@@ -388,12 +495,68 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         setMembers(nextMembers);
         setProperties(nextProperties);
         setPropertyUnits(nextPropertyUnits);
+        setOfferings(nextOfferings);
       });
 
     return () => {
       mounted = false;
     };
   }, [activeOrganizationId, branchConstraints, clientConstraints, config.collection, leadConstraints, member]);
+
+  useEffect(() => {
+    if (config.collection !== "offerings") {
+      return;
+    }
+
+    const vertical = dealCategoryFromFormValue(selectedOfferingVertical);
+    const allowedTypes = offeringTypesForVertical(vertical);
+    const currentType = String(selectedOfferingType ?? "");
+    if (vertical && (!currentType || !allowedTypes.includes(currentType))) {
+      setValue("type", allowedTypes[0], { shouldDirty: true, shouldValidate: false });
+    }
+  }, [config.collection, selectedOfferingType, selectedOfferingVertical, setValue]);
+
+  useEffect(() => {
+    if (config.collection !== "deals" && config.collection !== "leads") {
+      return;
+    }
+
+    const category = config.collection === "deals" ? effectiveDealCategory : dealCategoryFromFormValue(selectedInterestCategory);
+    if (!category || category === "realEstate" || !selectedOfferingId) {
+      return;
+    }
+
+    const selectedOffering = offerings.find((offering) => offering.id === selectedOfferingId);
+    if (selectedOffering && selectedOffering.vertical !== category) {
+      setValue("offeringId", "", { shouldDirty: true, shouldValidate: false });
+    }
+  }, [config.collection, effectiveDealCategory, offerings, selectedInterestCategory, selectedOfferingId, setValue]);
+
+  useEffect(() => {
+    if (config.collection !== "deals" || !effectiveDealCategory) {
+      return;
+    }
+
+    const allowedDealTypes = dealTypesForCategory(effectiveDealCategory);
+    const currentDealType = String(getValues("dealType") ?? "");
+    if (currentDealType && !allowedDealTypes.includes(currentDealType)) {
+      setValue("dealType", allowedDealTypes[0], { shouldDirty: true, shouldValidate: false });
+    }
+
+    if (effectiveDealCategory === "realEstate") {
+      if (!isBlankFormValue(getValues("offeringId"))) {
+        setValue("offeringId", "", { shouldDirty: true, shouldValidate: false });
+      }
+      return;
+    }
+
+    if (!isBlankFormValue(getValues("propertyId"))) {
+      setValue("propertyId", "", { shouldDirty: true, shouldValidate: false });
+    }
+    if (!isBlankFormValue(getValues("unitId"))) {
+      setValue("unitId", "", { shouldDirty: true, shouldValidate: false });
+    }
+  }, [config.collection, effectiveDealCategory, getValues, setValue]);
 
   useEffect(() => {
     if ((config.collection !== "rentalTenancies" && config.collection !== "deals" && config.collection !== "leads") || !selectedUnitId) {
@@ -425,10 +588,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       setLinkedDefault("serviceCharge", selectedUnit.serviceCharge);
       setLinkedDefault("cautionFee", selectedUnit.cautionFee);
       setLinkedDefault("legalFee", selectedUnit.legalFee);
-    } else if (config.collection === "deals") {
+    } else if (config.collection === "deals" && (effectiveDealType === "sale" || effectiveDealType === "investment")) {
       setLinkedDefault("offerAmount", selectedUnit.askingPrice ?? selectedUnit.rentAmount);
     }
-  }, [config.collection, getValues, propertyUnits, selectedUnitId, setValue]);
+  }, [config.collection, effectiveDealType, getValues, propertyUnits, selectedUnitId, setValue]);
 
   useEffect(() => {
     if ((config.collection !== "rentalTenancies" && config.collection !== "deals" && config.collection !== "leads") || !selectedPropertyId) {
@@ -464,10 +627,34 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         setLinkedDefault("agencyFee", selectedProperty.agencyFee);
         setLinkedDefault("legalFee", selectedProperty.legalFee);
       }
-    } else if (config.collection === "deals" && !selectedUnitId) {
+    } else if (config.collection === "deals" && !selectedUnitId && (effectiveDealType === "sale" || effectiveDealType === "investment")) {
       setLinkedDefault("offerAmount", selectedProperty.askingPrice ?? selectedProperty.rentAmount);
     }
-  }, [config.collection, getValues, properties, propertyUnits, selectedPropertyId, selectedUnitId, setValue]);
+  }, [config.collection, effectiveDealType, getValues, properties, propertyUnits, selectedPropertyId, selectedUnitId, setValue]);
+
+  useEffect(() => {
+    if (config.collection !== "deals" || !selectedOfferingId) {
+      return;
+    }
+
+    const selectedOffering = offerings.find((offering) => offering.id === selectedOfferingId);
+    if (!selectedOffering) {
+      return;
+    }
+
+    if (isBlankFormValue(getValues("dealCategory"))) {
+      setValue("dealCategory", selectedOffering.vertical, { shouldDirty: true, shouldValidate: false });
+    }
+
+    if (isBlankFormValue(getValues("offeringQuantity"))) {
+      setValue("offeringQuantity", 1, { shouldDirty: true, shouldValidate: false });
+    }
+
+    if (isBlankFormValue(getValues("offeringUnitPrice"))) {
+      setValue("offeringUnitPrice", selectedOffering.sellingPrice, { shouldDirty: true, shouldValidate: false });
+    }
+
+  }, [config.collection, getValues, offerings, selectedOfferingId, setValue]);
 
   useEffect(() => {
     if (config.collection !== "deals" || !selectedLeadId) {
@@ -498,12 +685,22 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     setDealDefault("title", `${selectedLead.fullName} ${titleCase(selectedLead.transactionInterest)} deal`);
     setDealDefault("dealType", dealTypeFromLeadInterest(selectedLead.transactionInterest), true);
+    setDealDefault("dealCategory", selectedLead.interestCategory ?? selectedLead.offeringVertical ?? (selectedLead.propertyId || selectedLead.unitId ? "realEstate" : ""));
     setDealDefault("status", dealStatusFromLeadStatus(selectedLead.status), true);
     setDealDefault("financeStatus", "notInvoiced");
     setDealDefault("dealOwnerId", selectedLead.assignedTo);
     setDealDefault("propertyId", selectedLead.propertyId);
     setDealDefault("unitId", selectedLead.unitId);
-    setDealDefault("offerAmount", selectedLead.budgetMaximum ?? selectedLead.budgetMinimum);
+    setDealDefault("offeringId", selectedLead.offeringId);
+    const inheritedBudget = selectedLead.budgetMaximum ?? selectedLead.budgetMinimum;
+    const inheritedDealType = dealTypeFromLeadInterest(selectedLead.transactionInterest);
+    if (inheritedDealType === "sale" || inheritedDealType === "investment") {
+      setDealDefault("offerAmount", inheritedBudget);
+    } else if (inheritedDealType === "reservation") {
+      setDealDefault("reservationAmount", inheritedBudget);
+    } else {
+      setDealDefault("agreedAmount", inheritedBudget);
+    }
     setDealDefault("closeProbability", selectedLead.score);
   }, [config.collection, getValues, id, leads, selectedLeadId, setValue]);
 
@@ -595,12 +792,38 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       parsedData.commissionAmount = commissionAmount;
     }
 
+    if (config.collection === "offerings") {
+      const offeringType = String(parsedData.type ?? "");
+      const isInventoryOffering = ["material", "solarEquipment"].includes(offeringType);
+      const isServiceOffering = ["solarService", "installationProject", "consultancy", "maintenance", "service"].includes(offeringType);
+      if (!isInventoryOffering) {
+        parsedData.stockQuantity = undefined;
+        parsedData.reorderLevel = undefined;
+      }
+
+      if (!isInventoryOffering && offeringType !== "other") {
+        parsedData.supplierName = "";
+      }
+
+      if (!isServiceOffering) {
+        parsedData.serviceDurationDays = undefined;
+      }
+    }
+
     if (config.collection === "deals") {
       const linkedLead = leads.find((item) => item.id === parsedData.leadId);
       const linkedClient = clients.find((item) => item.id === parsedData.clientId);
       const linkedProperty = properties.find((item) => item.id === parsedData.propertyId);
       const linkedUnit = propertyUnits.find((item) => item.id === parsedData.unitId);
+      const linkedOffering = offerings.find((item) => item.id === parsedData.offeringId);
       const dealOwner = members.find((item) => item.id === parsedData.dealOwnerId);
+      const resolvedDealCategory = dealCategoryFromFormValue(parsedData.dealCategory)
+        || dealCategoryFromFormValue(linkedOffering?.vertical)
+        || dealCategoryFromFormValue(linkedLead?.interestCategory)
+        || dealCategoryFromFormValue(linkedLead?.offeringVertical)
+        || (linkedProperty || linkedUnit ? "realEstate" : "");
+      const resolvedDealType = dealTypeFromFormValue(parsedData.dealType) || "sale";
+      parsedData.dealCategory = resolvedDealCategory || undefined;
       parsedData.leadName = linkedLead?.fullName ?? "";
       parsedData.clientName = linkedClient?.fullName ?? "";
       parsedData.clientPhone = linkedClient?.phoneNumber ?? linkedLead?.phoneNumber ?? "";
@@ -608,6 +831,35 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       parsedData.propertyName = linkedProperty?.name ?? linkedUnit?.propertyName ?? "";
       parsedData.propertyReferenceNumber = linkedProperty?.referenceNumber ?? linkedUnit?.propertyReferenceNumber ?? "";
       parsedData.unitName = linkedUnit?.unitNumber ?? "";
+      parsedData.offeringName = linkedOffering?.name ?? "";
+      parsedData.offeringReferenceNumber = linkedOffering?.referenceNumber ?? "";
+      parsedData.offeringType = linkedOffering?.type ?? undefined;
+      parsedData.offeringVertical = linkedOffering?.vertical ?? undefined;
+      parsedData.quoteSubtotal = offeringSubtotal || undefined;
+      clearHiddenDealFields(parsedData, config.fields, resolvedDealCategory, resolvedDealType);
+      if (resolvedDealCategory === "realEstate") {
+        parsedData.offeringId = "";
+        parsedData.offeringName = "";
+        parsedData.offeringReferenceNumber = "";
+        parsedData.offeringType = undefined;
+        parsedData.offeringVertical = undefined;
+        parsedData.offeringQuantity = undefined;
+        parsedData.offeringUnitPrice = undefined;
+        parsedData.quoteSubtotal = undefined;
+        parsedData.proposalStatus = undefined;
+        parsedData.fulfillmentStatus = undefined;
+        parsedData.fulfillmentDueDate = undefined;
+        parsedData.scopeOfWork = "";
+        parsedData.deliveryNotes = "";
+      } else if (resolvedDealCategory) {
+        parsedData.offerAmount = undefined;
+        parsedData.propertyId = "";
+        parsedData.propertyName = "";
+        parsedData.propertyReferenceNumber = "";
+        parsedData.unitId = "";
+        parsedData.unitName = "";
+        parsedData.legalStatus = undefined;
+      }
       parsedData.dealOwnerName = dealOwner?.displayName ?? "";
       parsedData.dealOwnerEmail = dealOwner?.email ?? "";
       parsedData.commissionAmount = commissionAmount;
@@ -616,9 +868,14 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     if (config.collection === "leads") {
       const linkedProperty = properties.find((item) => item.id === parsedData.propertyId);
       const linkedUnit = propertyUnits.find((item) => item.id === parsedData.unitId);
+      const linkedOffering = offerings.find((item) => item.id === parsedData.offeringId);
       parsedData.propertyName = linkedProperty?.name ?? linkedUnit?.propertyName ?? "";
       parsedData.propertyReferenceNumber = linkedProperty?.referenceNumber ?? linkedUnit?.propertyReferenceNumber ?? "";
       parsedData.unitName = linkedUnit?.unitNumber ?? "";
+      parsedData.offeringName = linkedOffering?.name ?? "";
+      parsedData.offeringReferenceNumber = linkedOffering?.referenceNumber ?? "";
+      parsedData.offeringType = linkedOffering?.type ?? undefined;
+      parsedData.offeringVertical = linkedOffering?.vertical ?? undefined;
     }
 
     if (config.collection === "propertyUnits") {
@@ -725,6 +982,18 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return unitOptions;
     }
 
+    if (field.optionSource === "offerings") {
+      return offeringOptions;
+    }
+
+    if (config.collection === "deals" && field.name === "dealType") {
+      return dealTypesForCategory(effectiveDealCategory).map((value) => ({ label: titleCase(value), value }));
+    }
+
+    if (config.collection === "offerings" && field.name === "type") {
+      return offeringTypesForVertical(dealCategoryFromFormValue(selectedOfferingVertical)).map((value) => ({ label: titleCase(value), value }));
+    }
+
     if (field.optionSource === "internalManagers") {
       return managerOptions;
     }
@@ -782,6 +1051,14 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
   }
 
+  function isFieldVisible(field: FormField) {
+    if (config.collection !== "deals") {
+      return config.collection === "offerings" ? shouldShowOfferingField(field, String(selectedOfferingType ?? "")) : true;
+    }
+
+    return shouldShowDealField(field, effectiveDealCategory, effectiveDealType);
+  }
+
   return (
     <Card>
       <CardContent>
@@ -793,7 +1070,13 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         <form className="grid gap-5" onSubmit={handleSubmit(onSubmit)}>
           {error ? <ErrorState message={error} /> : null}
           <div className="grid gap-6">
-            {sections.map((section) => (
+            {sections.map((section) => {
+              const visibleFields = section.fields.filter(isFieldVisible);
+              if (!visibleFields.length) {
+                return null;
+              }
+
+              return (
               <section className="grid gap-4 border-t pt-5 first:border-t-0 first:pt-0" key={section.title}>
                 <div>
                   <h2 className="text-base font-semibold">{section.title}</h2>
@@ -829,7 +1112,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                   </div>
                 ) : null}
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {section.fields.map((field) => (
+                  {visibleFields.map((field) => (
                     <div className={cn(field.colSpan === "full" && "lg:col-span-2")} data-tour={fieldTourTarget(config.collection, field.name)} key={field.name}>
                       <Field label={field.label} error={validationErrors[field.name]}>
                         <div className="grid gap-1.5">
@@ -844,6 +1127,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                             <Input readOnly type="number" value={calculatedAgencyFee} />
                           ) : field.name === "commissionAmount" ? (
                             <Input readOnly type="number" value={commissionAmount} />
+                          ) : field.name === "quoteSubtotal" ? (
+                            <Input readOnly type="number" value={offeringSubtotal} />
                           ) : field.name === "totalInitialPayment" ? (
                             <Input readOnly type="number" value={totalInitialPayment} />
                           ) : (
@@ -856,7 +1141,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                   ))}
                 </div>
               </section>
-            ))}
+              );
+            })}
           </div>
           <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] -mx-5 -mb-5 border-t bg-white p-4 md:static md:m-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0">
             <Button className="h-12 w-full md:h-10 md:w-auto" data-tour={fieldTourTarget(config.collection, "save")} disabled={isSubmitting} type="submit">

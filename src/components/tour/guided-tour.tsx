@@ -129,7 +129,7 @@ export function GuidedTour({
           <div className="absolute inset-0 bg-black/45" />
           {targetRect ? (
             <div
-              className="absolute rounded-lg border-2 border-primary bg-white/10 shadow-[0_0_0_9999px_rgb(0_0_0_/_0.42),0_0_0_8px_rgb(177_18_38_/_0.16)] transition-all duration-300"
+              className="absolute rounded-lg border-2 border-primary bg-white/10 shadow-[0_0_0_9999px_rgb(0_0_0_/_0.42),0_0_0_8px_rgb(20_85_15_/_0.16)] transition-all duration-300"
               style={{
                 height: targetRect.height + 12,
                 left: targetRect.left - 6,

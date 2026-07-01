@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { formTourSteps } from "../../src/features/modules/form-tour";
 
 describe("form tour steps", () => {
+  it("starts the deal guide on the category selector because the rest of the form is dynamic", () => {
+    const steps = formTourSteps({
+      collection: "deals",
+      createPermission: "deals.create",
+      editPermission: "deals.update",
+      emptyTitle: "No deals have been opened yet.",
+      fields: [],
+      listPermission: "deals.read",
+      prefix: "DEAL",
+      route: "/deals",
+      title: "Deals",
+    });
+
+    expect(steps[0]?.target).toBe("module-deals-dealCategory");
+  });
+
   it("keeps development guide targets unique", () => {
     const steps = formTourSteps({
       collection: "developmentProjects",

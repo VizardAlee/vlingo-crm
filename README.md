@@ -1,6 +1,6 @@
-# Beacon Operations CRM
+# Vlingo Systems CRM
 
-Production-oriented real estate operations CRM for Beacon Corporate Realty Limited.
+Production-oriented business operations CRM for Vlingo Systems Nig. Ltd.
 
 ## Quick Start
 

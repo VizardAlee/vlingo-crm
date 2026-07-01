@@ -43,27 +43,27 @@ function LoginContent() {
     <main className="grid min-h-screen bg-muted/50 lg:grid-cols-[1fr_520px]">
       <section className="hidden bg-secondary p-10 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center gap-3">
-          <Image src="/branding/beacon-logo.jpeg" alt="Beacon Corporate Realty Limited logo" width={56} height={56} className="h-14 w-14 rounded-md object-contain bg-white" priority />
+          <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={56} className="h-14 w-56 rounded-md bg-white object-contain object-left" priority />
           <div>
-            <p className="text-lg font-bold">Beacon Operations CRM</p>
-            <p className="text-sm text-white/70">Corporate Realty Limited</p>
+            <p className="text-lg font-bold">Vlingo Systems CRM</p>
+            <p className="text-sm text-white/70">Systems Nig. Ltd.</p>
           </div>
         </div>
         <div className="max-w-xl">
           <Building2 className="mb-6 h-10 w-10 text-primary" />
-          <h1 className="text-4xl font-semibold leading-tight">A secure source of truth for real estate operations.</h1>
-          <p className="mt-4 text-base leading-7 text-white/70">Manage leads, clients, properties, units, tasks, activities, roles, and audit trails with Firebase-backed organization isolation.</p>
+          <h1 className="text-4xl font-semibold leading-tight">A secure source of truth for business operations.</h1>
+          <p className="mt-4 text-base leading-7 text-white/70">Manage leads, clients, deals, projects, inventory, tasks, activities, roles, and audit trails with Firebase-backed organization isolation.</p>
         </div>
       </section>
       <section className="grid place-items-center p-6">
         <Card className="w-full max-w-md">
           <CardContent className="grid gap-6 p-6">
             <div className="lg:hidden">
-              <Image src="/branding/beacon-logo.jpeg" alt="Beacon Corporate Realty Limited logo" width={54} height={54} className="h-14 w-14 rounded-md object-contain" />
+              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={54} className="h-14 w-56 max-w-full rounded-md object-contain object-left" />
             </div>
             <div>
               <h1 className="text-2xl font-semibold">Sign in</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Use your Beacon workspace credentials.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Use your Vlingo workspace credentials.</p>
             </div>
             {!firebaseReady ? <ErrorState message="Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* environment variables." /> : null}
             {error ? <ErrorState message={error} /> : null}

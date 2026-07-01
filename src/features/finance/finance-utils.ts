@@ -1,4 +1,6 @@
-import type { Deal, DealFinanceStatus, FinanceApprovalStatus, FinancePayment, PaymentVerificationStatus, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
+import type { Deal, DealFinanceStatus, FinanceApprovalStatus, FinancePayment, FinancePaymentSourceType, FinanceRevenueCategory, Lead, PaymentVerificationStatus, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
+
+const revenueCategories: FinanceRevenueCategory[] = ["realEstate", "solar", "buildingMaterials", "generalServices", "custom", "propertySale", "unitSale", "rental", "other"];
 
 export function createReceiptNumber() {
   const now = new Date();
@@ -28,8 +30,91 @@ export function paymentStatusForAmount(amount: number, rental: Pick<RentalTenanc
   return nextTotal >= Number(rental.rentAmount ?? 0) ? "paid" : "partPaid";
 }
 
-export function dealTargetAmount(deal: Pick<Deal, "agreedAmount" | "depositAmount" | "offerAmount" | "reservationAmount">) {
-  return Number(deal.agreedAmount ?? deal.offerAmount ?? deal.depositAmount ?? deal.reservationAmount ?? 0);
+export function dealTargetAmount(deal: Pick<Deal, "agreedAmount" | "depositAmount" | "offerAmount" | "quoteSubtotal" | "reservationAmount">) {
+  return Number(deal.agreedAmount ?? deal.quoteSubtotal ?? deal.offerAmount ?? deal.depositAmount ?? deal.reservationAmount ?? 0);
+}
+
+export function normalizeRevenueCategory(value: unknown): FinanceRevenueCategory {
+  const category = String(value ?? "");
+  return revenueCategories.includes(category as FinanceRevenueCategory) ? category as FinanceRevenueCategory : "other";
+}
+
+export function revenueCategoryLabel(category: FinanceRevenueCategory) {
+  if (category === "realEstate") {
+    return "Real estate deals";
+  }
+
+  if (category === "buildingMaterials") {
+    return "Building materials";
+  }
+
+  if (category === "generalServices") {
+    return "Services and consultancy";
+  }
+
+  if (category === "propertySale") {
+    return "Property sales";
+  }
+
+  if (category === "unitSale") {
+    return "Unit sales";
+  }
+
+  if (category === "rental") {
+    return "Rentals";
+  }
+
+  if (category === "solar") {
+    return "Solar";
+  }
+
+  if (category === "custom") {
+    return "Custom";
+  }
+
+  return "Other income";
+}
+
+export function revenueCategoryFromDeal(deal: Pick<Deal, "dealCategory" | "offeringVertical" | "propertyId" | "unitId">): FinanceRevenueCategory {
+  const category = normalizeRevenueCategory(deal.dealCategory ?? deal.offeringVertical);
+  if (category !== "other") {
+    return category;
+  }
+
+  return deal.propertyId || deal.unitId ? "realEstate" : "other";
+}
+
+export function revenueCategoryFromLead(lead: Pick<Lead, "interestCategory" | "offeringVertical" | "propertyId" | "unitId">): FinanceRevenueCategory {
+  const category = normalizeRevenueCategory(lead.interestCategory ?? lead.offeringVertical);
+  if (category !== "other") {
+    return category;
+  }
+
+  return lead.propertyId || lead.unitId ? "realEstate" : "other";
+}
+
+export function revenueCategoryFromPaymentSource(sourceType: FinancePaymentSourceType | undefined): FinanceRevenueCategory {
+  if (sourceType === "rental") {
+    return "rental";
+  }
+
+  if (sourceType === "property") {
+    return "propertySale";
+  }
+
+  if (sourceType === "unit") {
+    return "unitSale";
+  }
+
+  if (sourceType === "deal" || sourceType === "lead") {
+    return "realEstate";
+  }
+
+  return "other";
+}
+
+export function revenueCategoryFromPayment(payment: Pick<FinancePayment, "revenueCategory" | "sourceType">): FinanceRevenueCategory {
+  return payment.revenueCategory ? normalizeRevenueCategory(payment.revenueCategory) : revenueCategoryFromPaymentSource(payment.sourceType);
 }
 
 export function dealPaymentSummary(

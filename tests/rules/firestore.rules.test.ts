@@ -37,6 +37,54 @@ async function seedLead(orgId: string, leadId: string, assignedTo: string) {
   });
 }
 
+async function seedClient(orgId: string, clientId: string, assignedTo: string) {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `organizations/${orgId}/clients/${clientId}`), {
+      assignedRelationshipManager: assignedTo,
+      branchId: "head-office",
+      createdBy: "system",
+      fullName: "Test Client",
+      isDeleted: false,
+      organizationId: orgId,
+      phoneNumber: "08010000000",
+      status: "active",
+      updatedBy: "system",
+    });
+  });
+}
+
+async function seedDeal(orgId: string, dealId: string, dealOwnerId: string) {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `organizations/${orgId}/deals/${dealId}`), {
+      branchId: "head-office",
+      createdBy: "system",
+      dealOwnerId,
+      dealType: "sale",
+      financeStatus: "notInvoiced",
+      isDeleted: false,
+      organizationId: orgId,
+      status: "negotiation",
+      title: "Test sale deal",
+      updatedBy: "system",
+    });
+  });
+}
+
+async function seedTask(orgId: string, taskId: string, assignedTo: string) {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `organizations/${orgId}/tasks/${taskId}`), {
+      assignedTo,
+      branchId: "head-office",
+      createdBy: "system",
+      isDeleted: false,
+      organizationId: orgId,
+      status: "open",
+      title: "Test task",
+      updatedBy: "system",
+    });
+  });
+}
+
 describe("Beacon Firestore rules", () => {
   beforeAll(async () => {
     testEnv = await initializeTestEnvironment({
@@ -209,6 +257,7 @@ describe("Beacon Firestore rules", () => {
     await assertSucceeds(setDoc(dealRef, {
       branchId: "head-office",
       createdBy: "sales-1",
+      dealOwnerId: "sales-1",
       dealType: "sale",
       isDeleted: false,
       organizationId: "org-a",
@@ -224,6 +273,56 @@ describe("Beacon Firestore rules", () => {
       updatedBy: "sales-1",
     }));
     await assertSucceeds(getDoc(doc(financeDb, "organizations/org-a/deals/deal-1")));
+  });
+
+  it("keeps sales executive deal updates assigned-only", async () => {
+    await seedMember("sales-1", "org-a", ["deals.read", "deals.update"], "salesExecutive");
+    await seedDeal("org-a", "owned-deal", "sales-1");
+    await seedDeal("org-a", "other-deal", "sales-2");
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertSucceeds(updateDoc(doc(db, "organizations/org-a/deals/owned-deal"), {
+      agreedAmount: 25000000,
+      organizationId: "org-a",
+      updatedBy: "sales-1",
+    }));
+
+    await assertFails(updateDoc(doc(db, "organizations/org-a/deals/other-deal"), {
+      agreedAmount: 30000000,
+      organizationId: "org-a",
+      updatedBy: "sales-1",
+    }));
+  });
+
+  it("keeps assigned-only users scoped when client or task update permissions are added", async () => {
+    await seedMember("sales-1", "org-a", ["clients.read", "clients.update", "tasks.read", "tasks.update"], "salesExecutive");
+    await seedClient("org-a", "owned-client", "sales-1");
+    await seedClient("org-a", "other-client", "sales-2");
+    await seedTask("org-a", "owned-task", "sales-1");
+    await seedTask("org-a", "other-task", "sales-2");
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertSucceeds(updateDoc(doc(db, "organizations/org-a/clients/owned-client"), {
+      organizationId: "org-a",
+      updatedBy: "sales-1",
+      WhatsAppNumber: "08020000000",
+    }));
+    await assertFails(updateDoc(doc(db, "organizations/org-a/clients/other-client"), {
+      organizationId: "org-a",
+      updatedBy: "sales-1",
+      WhatsAppNumber: "08030000000",
+    }));
+
+    await assertSucceeds(updateDoc(doc(db, "organizations/org-a/tasks/owned-task"), {
+      organizationId: "org-a",
+      status: "inProgress",
+      updatedBy: "sales-1",
+    }));
+    await assertFails(updateDoc(doc(db, "organizations/org-a/tasks/other-task"), {
+      organizationId: "org-a",
+      status: "inProgress",
+      updatedBy: "sales-1",
+    }));
   });
 
   it("allows finance users to sync only deal finance summary fields", async () => {

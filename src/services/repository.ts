@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
+import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
 import { createReference } from "@/lib/utils";
 import { orgCollectionPath, type OrgCollection } from "@/services/firestore-paths";
 
@@ -61,8 +62,9 @@ export async function listOrgRecords<T extends { id: string }>(
       ),
     );
   } catch (error) {
-    logQueryError(`${organizationId}/${collectionName}`, error);
-    throw error;
+    const nextError = enrichFirestoreError(error, { action: "list", collectionName, organizationId });
+    logQueryError(`${organizationId}/${collectionName}`, nextError);
+    throw nextError;
   }
 
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as T);
@@ -74,7 +76,14 @@ export async function getOrgRecord<T extends { id: string }>(
   id: string,
 ) {
   const firestore = assertDb();
-  const snapshot = await getDoc(doc(firestore, orgCollectionPath(organizationId, collectionName), id));
+  let snapshot;
+  try {
+    snapshot = await getDoc(doc(firestore, orgCollectionPath(organizationId, collectionName), id));
+  } catch (error) {
+    const nextError = enrichFirestoreError(error, { action: "read", collectionName, organizationId, path: `${orgCollectionPath(organizationId, collectionName)}/${id}` });
+    logQueryError(`${organizationId}/${collectionName}/${id}`, nextError);
+    throw nextError;
+  }
   if (!snapshot.exists()) {
     return null;
   }
@@ -101,8 +110,12 @@ export async function createOrgRecord<T extends Record<string, unknown>>(
     referenceNumber: data.referenceNumber ?? createReference(prefix),
   }) as WithFieldValue<DocumentData>;
 
-  const ref = await addDoc(collection(firestore, orgCollectionPath(context.organizationId, collectionName)), payload);
-  return ref.id;
+  try {
+    const ref = await addDoc(collection(firestore, orgCollectionPath(context.organizationId, collectionName)), payload);
+    return ref.id;
+  } catch (error) {
+    throw enrichFirestoreError(error, { action: "create", collectionName, organizationId: context.organizationId });
+  }
 }
 
 export async function updateOrgRecord<T extends Record<string, unknown>>(
@@ -112,23 +125,31 @@ export async function updateOrgRecord<T extends Record<string, unknown>>(
   context: WriteContext,
 ) {
   const firestore = assertDb();
-  await updateDoc(doc(firestore, orgCollectionPath(context.organizationId, collectionName), id), serialize({
-    ...data,
-    organizationId: context.organizationId,
-    updatedAt: serverTimestamp(),
-    updatedBy: context.userId,
-  }));
+  try {
+    await updateDoc(doc(firestore, orgCollectionPath(context.organizationId, collectionName), id), serialize({
+      ...data,
+      organizationId: context.organizationId,
+      updatedAt: serverTimestamp(),
+      updatedBy: context.userId,
+    }));
+  } catch (error) {
+    throw enrichFirestoreError(error, { action: "update", collectionName, organizationId: context.organizationId, path: `${orgCollectionPath(context.organizationId, collectionName)}/${id}` });
+  }
 }
 
 export async function softDeleteOrgRecord(collectionName: OrgCollection, id: string, context: WriteContext) {
   const firestore = assertDb();
-  await updateDoc(doc(firestore, orgCollectionPath(context.organizationId, collectionName), id), {
-    deletedAt: serverTimestamp(),
-    deletedBy: context.userId,
-    isDeleted: true,
-    updatedAt: serverTimestamp(),
-    updatedBy: context.userId,
-  });
+  try {
+    await updateDoc(doc(firestore, orgCollectionPath(context.organizationId, collectionName), id), {
+      deletedAt: serverTimestamp(),
+      deletedBy: context.userId,
+      isDeleted: true,
+      updatedAt: serverTimestamp(),
+      updatedBy: context.userId,
+    });
+  } catch (error) {
+    throw enrichFirestoreError(error, { action: "delete", collectionName, organizationId: context.organizationId, path: `${orgCollectionPath(context.organizationId, collectionName)}/${id}` });
+  }
 }
 
 export async function writeAuditLog(context: WriteContext, action: string, entityType: string, entityId: string, newValue?: unknown) {

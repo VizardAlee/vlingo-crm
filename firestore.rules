@@ -80,6 +80,11 @@ service cloud.firestore {
         resource.data.assignedTo == request.auth.uid;
     }
 
+    function assignedOnlyTaskAccess(orgId) {
+      return !assignedOnlySalesUser(orgId) ||
+        resource.data.assignedTo == request.auth.uid;
+    }
+
     function canReadDeals(orgId) {
       return hasAnyPermission(orgId, ["deals.read", "reports.viewFinancial"]);
     }
@@ -224,14 +229,20 @@ service cloud.firestore {
           assignedOnlyClientAccess(orgId) &&
           (canUseDeals(orgId) || hasAnyPermission(orgId, ["clients.read", "rentals.create", "rentals.read", "rentals.update"]));
         allow create: if hasPermission(orgId, "clients.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "clients.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow update: if hasPermission(orgId, "clients.update") &&
+          organizationUnchanged(orgId) &&
+          canReadRecordBranch(orgId) &&
+          assignedOnlyClientAccess(orgId);
         allow delete: if false;
       }
 
       match /deals/{dealId} {
         allow read: if canReadRecordBranch(orgId) && assignedOnlyDealAccess(orgId) && canReadDeals(orgId);
         allow create: if canCreateDeals(orgId) && hasMetadata(orgId);
-        allow update: if (canUpdateDeals(orgId) && organizationUnchanged(orgId) && canReadRecordBranch(orgId)) ||
+        allow update: if (canUpdateDeals(orgId) &&
+          organizationUnchanged(orgId) &&
+          canReadRecordBranch(orgId) &&
+          assignedOnlyDealAccess(orgId)) ||
           canUpdateDealFinanceSummary(orgId);
         allow delete: if false;
       }
@@ -303,7 +314,10 @@ service cloud.firestore {
           hasPermission(orgId, "tasks.read") &&
           (resource.data.assignedTo == request.auth.uid || hasAnyPermission(orgId, ["dashboard.viewExecutive", "users.manage"]));
         allow create: if hasPermission(orgId, "tasks.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "tasks.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow update: if hasPermission(orgId, "tasks.update") &&
+          organizationUnchanged(orgId) &&
+          canReadRecordBranch(orgId) &&
+          assignedOnlyTaskAccess(orgId);
         allow delete: if false;
       }
 

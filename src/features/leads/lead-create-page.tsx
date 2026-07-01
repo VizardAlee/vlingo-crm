@@ -15,7 +15,7 @@ import { canAccessAllBranches, hasPermission, memberRoles } from "@/lib/permissi
 import { leadSchema } from "@/lib/validation/schemas";
 import { createOrgRecord, listOrgRecords, writeAuditLog } from "@/services/repository";
 import { listBranches, listMembers } from "@/services/users";
-import type { Branch, Member, Property, PropertyUnit } from "@/types/crm";
+import type { Branch, Member, Offering, Property, PropertyUnit } from "@/types/crm";
 
 type LeadFormState = Record<string, string>;
 
@@ -38,6 +38,13 @@ const interests = ["buy", "rent", "lease", "invest"];
 const paymentPreferences = ["outright", "installment", "mortgage", "leasePlan", "notDecided"];
 const temperatures = ["cold", "warm", "hot"];
 const contactPreferences = ["phone", "whatsapp", "email", "sms"];
+const interestCategories = [
+  { label: "Real estate", value: "realEstate" },
+  { label: "Solar", value: "solar" },
+  { label: "Building materials", value: "buildingMaterials" },
+  { label: "Services / consultancy", value: "generalServices" },
+  { label: "Custom", value: "custom" },
+];
 
 const defaultLead: LeadFormState = {
   assignedTo: "",
@@ -47,6 +54,7 @@ const defaultLead: LeadFormState = {
   contactPreference: "whatsapp",
   email: "",
   fullName: "",
+  interestCategory: "",
   intendedUse: "",
   leadTemperature: "warm",
   nextFollowUpAt: "",
@@ -56,6 +64,9 @@ const defaultLead: LeadFormState = {
   propertyId: "",
   propertyName: "",
   propertyReferenceNumber: "",
+  offeringId: "",
+  offeringName: "",
+  offeringReferenceNumber: "",
   preferredBedrooms: "",
   preferredBudgetCurrency: "NGN",
   preferredCity: "",
@@ -86,6 +97,7 @@ const headerAliases: Record<string, string[]> = {
   contactPreference: ["contactpreference", "preferredcontact", "bestcontact"],
   email: ["email", "emailaddress"],
   fullName: ["fullname", "name", "clientname", "leadname", "customername"],
+  interestCategory: ["interestcategory", "businessvertical", "vertical", "categoryofinterest", "leadcategory"],
   intendedUse: ["intendeduse", "purpose", "use"],
   leadTemperature: ["temperature", "leadtemperature", "priority"],
   nextFollowUpAt: ["nextfollowup", "nextfollowupdate", "followup", "followupdate"],
@@ -95,6 +107,9 @@ const headerAliases: Record<string, string[]> = {
   propertyId: ["propertyid", "listingid"],
   propertyName: ["property", "propertyname", "listing", "listingname"],
   propertyReferenceNumber: ["propertyreference", "propertyreferencenumber", "listingreference", "propertyref", "listingref"],
+  offeringId: ["offeringid", "productid", "serviceid", "catalogid", "itemid"],
+  offeringName: ["offering", "offeringname", "product", "productname", "service", "servicename", "catalogitem", "item"],
+  offeringReferenceNumber: ["offeringreference", "offeringreferencenumber", "productreference", "servicereference", "sku", "itemcode"],
   preferredBedrooms: ["bedrooms", "beds", "preferredbedrooms"],
   preferredBudgetCurrency: ["currency", "budgetcurrency", "preferredbudgetcurrency"],
   preferredCity: ["city", "preferredcity"],
@@ -127,12 +142,16 @@ const importFields = [
   { key: "sourcePlatform", label: "Platform" },
   { key: "campaignName", label: "Campaign name" },
   { key: "sourceReference", label: "External reference" },
+  { key: "interestCategory", label: "Interest category" },
   { key: "transactionInterest", label: "Transaction interest" },
   { key: "propertyId", label: "Property ID" },
   { key: "propertyName", label: "Property name" },
   { key: "propertyReferenceNumber", label: "Property reference" },
   { key: "unitId", label: "Unit ID" },
   { key: "unitName", label: "Unit name/number" },
+  { key: "offeringId", label: "Offering ID" },
+  { key: "offeringName", label: "Offering name" },
+  { key: "offeringReferenceNumber", label: "Offering reference / SKU" },
   { key: "propertyType", label: "Property type" },
   { key: "preferredPropertyCategory", label: "Property category" },
   { key: "preferredBedrooms", label: "Bedrooms" },
@@ -213,10 +232,21 @@ function findUnit(values: Record<string, string>, propertyUnits: PropertyUnit[],
   });
 }
 
-function enrichLeadLinkage<T extends Record<string, unknown>>(payload: T, properties: Property[], propertyUnits: PropertyUnit[]) {
+function findOffering(values: Record<string, string>, offerings: Offering[]) {
+  const offeringId = values.offeringId;
+  const offeringName = values.offeringName;
+  const offeringReference = values.offeringReferenceNumber;
+  return offerings.find((offering) => {
+    const candidates = [offering.id, offering.name, offering.referenceNumber, offering.sku].map(normalizeLookup).filter(Boolean);
+    return [offeringId, offeringName, offeringReference].some((value) => value && candidates.includes(normalizeLookup(value)));
+  });
+}
+
+function enrichLeadLinkage<T extends Record<string, unknown>>(payload: T, properties: Property[], propertyUnits: PropertyUnit[], offerings: Offering[]) {
   const values = Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value ?? "")]));
   const linkedProperty = findProperty(values, properties);
   const linkedUnit = findUnit(values, propertyUnits, linkedProperty?.id) ?? findUnit(values, propertyUnits);
+  const linkedOffering = findOffering(values, offerings);
   const unitProperty = linkedUnit ? properties.find((property) => property.id === linkedUnit.propertyId) : undefined;
   const property = linkedProperty ?? unitProperty;
 
@@ -227,6 +257,12 @@ function enrichLeadLinkage<T extends Record<string, unknown>>(payload: T, proper
     propertyReferenceNumber: property?.referenceNumber ?? linkedUnit?.propertyReferenceNumber ?? payload.propertyReferenceNumber ?? "",
     unitId: linkedUnit?.id ?? payload.unitId ?? "",
     unitName: linkedUnit?.unitNumber ?? payload.unitName ?? "",
+    offeringId: linkedOffering?.id ?? payload.offeringId ?? "",
+    offeringName: linkedOffering?.name ?? payload.offeringName ?? "",
+    offeringReferenceNumber: linkedOffering?.referenceNumber ?? payload.offeringReferenceNumber ?? "",
+    offeringType: linkedOffering?.type ?? payload.offeringType,
+    offeringVertical: linkedOffering?.vertical ?? payload.offeringVertical,
+    interestCategory: linkedOffering?.vertical ?? payload.interestCategory,
   };
 }
 
@@ -261,6 +297,35 @@ function normalizeInterest(value: string) {
   return "buy";
 }
 
+function normalizeInterestCategory(value: string) {
+  const next = normalizeLookup(value);
+  if (!next) {
+    return "";
+  }
+
+  if (["realestate", "property", "properties", "land", "housing"].includes(next)) {
+    return "realEstate";
+  }
+
+  if (["solar", "solarpower", "renewableenergy"].includes(next)) {
+    return "solar";
+  }
+
+  if (["buildingmaterials", "materials", "constructionmaterials", "cement", "blocks", "steel"].includes(next)) {
+    return "buildingMaterials";
+  }
+
+  if (["generalservices", "service", "services", "consultancy", "consulting", "installation", "maintenance"].includes(next)) {
+    return "generalServices";
+  }
+
+  if (next === "custom") {
+    return "custom";
+  }
+
+  return "";
+}
+
 function formToLeadPayload(values: LeadFormState) {
   return {
     ...values,
@@ -270,11 +335,12 @@ function formToLeadPayload(values: LeadFormState) {
     preferredBedrooms: values.preferredBedrooms,
     score: values.score || "25",
     tags: values.tags,
+    interestCategory: normalizeInterestCategory(values.interestCategory),
     transactionInterest: normalizeInterest(values.transactionInterest),
   };
 }
 
-function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormState, properties: Property[], propertyUnits: PropertyUnit[], mapping?: Record<string, string>) {
+function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormState, properties: Property[], propertyUnits: PropertyUnit[], offerings: Offering[], mapping?: Record<string, string>) {
   return rows.map<PreviewLead>((row, index) => {
     const values = { ...defaults };
     importFields.forEach(({ key }) => {
@@ -291,7 +357,7 @@ function parsePreviewRows(rows: Record<string, unknown>[], defaults: LeadFormSta
     values.status = values.status || "new";
     values.assignedTo = values.assignedTo || defaults.assignedTo;
 
-    const enrichedPayload = enrichLeadLinkage(formToLeadPayload(values), properties, propertyUnits);
+    const enrichedPayload = enrichLeadLinkage(formToLeadPayload(values), properties, propertyUnits, offerings);
     const parsed = leadSchema.safeParse(enrichedPayload);
     return {
       data: parsed.success ? parsed.data as Record<string, unknown> : enrichedPayload,
@@ -370,9 +436,12 @@ function downloadTemplate() {
     "source",
     "sourcePlatform",
     "campaignName",
+    "interestCategory",
     "transactionInterest",
     "propertyReferenceNumber",
     "unitName",
+    "offeringReferenceNumber",
+    "offeringName",
     "propertyType",
     "preferredLocation",
     "preferredState",
@@ -392,9 +461,12 @@ function downloadTemplate() {
     "Facebook",
     "Meta",
     "Lekki Q2 Campaign",
+    "realEstate",
     "buy",
     "PROP-2026-001",
     "Block A - Unit 3",
+    "OFR-2026-001",
+    "5kVA Solar Installation Package",
     "Apartment",
     "Lekki Phase 1",
     "Lagos",
@@ -421,6 +493,7 @@ export function LeadCreatePage() {
   const [mode, setMode] = useState<"manual" | "import">("manual");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [offerings, setOfferings] = useState<Offering[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<PropertyUnit[]>([]);
   const [branchId, setBranchId] = useState("");
@@ -459,7 +532,19 @@ export function LeadCreatePage() {
       }),
     [propertyUnits, values.propertyId],
   );
+  const offeringOptions = useMemo(
+    () => offerings
+      .filter((offering) => String(offering.status ?? "active") === "active")
+      .filter((offering) => !values.interestCategory || values.interestCategory === "realEstate" || offering.vertical === values.interestCategory)
+      .map((offering) => {
+        const detail = [offering.vertical, offering.type, offering.referenceNumber].filter(Boolean).join(" · ");
+        return { label: detail ? `${offering.name} (${detail})` : offering.name, value: offering.id };
+      }),
+    [offerings, values.interestCategory],
+  );
   const validPreviewRows = preview.filter((row) => row.errors.length === 0);
+  const hasInterestCategory = Boolean(values.interestCategory);
+  const isRealEstateInterest = values.interestCategory === "realEstate";
 
   useEffect(() => {
     if (success) {
@@ -477,16 +562,18 @@ export function LeadCreatePage() {
     setLoading(true);
     setError(null);
     try {
-      const [nextBranches, nextMembers, nextProperties, nextPropertyUnits] = await Promise.all([
+      const [nextBranches, nextMembers, nextProperties, nextPropertyUnits, nextOfferings] = await Promise.all([
         listBranches(activeOrganizationId),
         listMembers(activeOrganizationId),
         listOrgRecords<Property>(activeOrganizationId, "properties", optionBranchConstraints).catch(() => []),
         listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", optionBranchConstraints).catch(() => []),
+        listOrgRecords<Offering>(activeOrganizationId, "offerings", optionBranchConstraints).catch(() => []),
       ]);
       const visibleBranches = canAccessAllBranches(member) ? nextBranches : nextBranches.filter((branch) => branch.id === member?.branchId);
       const nextBranchId = visibleBranches[0]?.id || member?.branchId || "";
       setBranches(nextBranches);
       setMembers(nextMembers);
+      setOfferings(canAccessAllBranches(member) ? nextOfferings : nextOfferings.filter((offering) => offering.branchId === nextBranchId));
       setProperties(canAccessAllBranches(member) ? nextProperties : nextProperties.filter((property) => property.branchId === nextBranchId));
       setPropertyUnits(canAccessAllBranches(member) ? nextPropertyUnits : nextPropertyUnits.filter((unit) => unit.branchId === nextBranchId));
       setBranchId((current) => current && visibleBranches.some((branch) => branch.id === current) ? current : nextBranchId);
@@ -511,6 +598,29 @@ export function LeadCreatePage() {
 
   function updateField(field: string, value: string) {
     setValues((current) => {
+      if (field === "interestCategory") {
+        const normalizedCategory = normalizeInterestCategory(value);
+        const currentOffering = offerings.find((offering) => offering.id === current.offeringId);
+        const keepOffering = Boolean(normalizedCategory && normalizedCategory !== "realEstate" && currentOffering?.vertical === normalizedCategory);
+        return {
+          ...current,
+          interestCategory: normalizedCategory,
+          intendedUse: normalizedCategory ? current.intendedUse : "",
+          offeringId: keepOffering ? current.offeringId : "",
+          offeringName: keepOffering ? current.offeringName : "",
+          offeringReferenceNumber: keepOffering ? current.offeringReferenceNumber : "",
+          propertyId: normalizedCategory === "realEstate" ? current.propertyId : "",
+          propertyName: normalizedCategory === "realEstate" ? current.propertyName : "",
+          propertyReferenceNumber: normalizedCategory === "realEstate" ? current.propertyReferenceNumber : "",
+          propertyType: normalizedCategory === "realEstate" ? current.propertyType : "",
+          preferredBedrooms: normalizedCategory === "realEstate" ? current.preferredBedrooms : "",
+          preferredInspectionDate: normalizedCategory === "realEstate" ? current.preferredInspectionDate : "",
+          preferredPropertyCategory: normalizedCategory === "realEstate" ? current.preferredPropertyCategory : "",
+          unitId: normalizedCategory === "realEstate" ? current.unitId : "",
+          unitName: normalizedCategory === "realEstate" ? current.unitName : "",
+        };
+      }
+
       if (field === "propertyId") {
         const selectedUnit = propertyUnits.find((unit) => unit.id === current.unitId);
         return {
@@ -525,8 +635,18 @@ export function LeadCreatePage() {
         const selectedUnit = propertyUnits.find((unit) => unit.id === value);
         return {
           ...current,
+          interestCategory: "realEstate",
           propertyId: selectedUnit?.propertyId ?? current.propertyId,
           unitId: value,
+        };
+      }
+
+      if (field === "offeringId") {
+        const selectedOffering = offerings.find((offering) => offering.id === value);
+        return {
+          ...current,
+          interestCategory: selectedOffering?.vertical ?? current.interestCategory,
+          offeringId: value,
         };
       }
 
@@ -551,7 +671,7 @@ export function LeadCreatePage() {
     setSuccess(null);
     setSaving(true);
     try {
-      const parsed = leadSchema.safeParse(enrichLeadLinkage(formToLeadPayload(values), properties, propertyUnits));
+      const parsed = leadSchema.safeParse(enrichLeadLinkage(formToLeadPayload(values), properties, propertyUnits, offerings));
       if (!parsed.success) {
         setError(parsed.error.issues.map((issue) => `${String(issue.path[0])}: ${issue.message}`).join(" · "));
         return;
@@ -594,7 +714,7 @@ export function LeadCreatePage() {
       setImportHeaders(headers);
       setImportRows(rows);
       setColumnMapping(nextMapping);
-      setPreview(parsePreviewRows(rows, values, properties, propertyUnits, nextMapping));
+      setPreview(parsePreviewRows(rows, values, properties, propertyUnits, offerings, nextMapping));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to read spreadsheet.");
     }
@@ -604,12 +724,12 @@ export function LeadCreatePage() {
     const next = { ...columnMapping, [field]: header };
     setColumnMapping(next);
     if (importRows.length) {
-      setPreview(parsePreviewRows(importRows, values, properties, propertyUnits, next));
+      setPreview(parsePreviewRows(importRows, values, properties, propertyUnits, offerings, next));
     }
   }
 
   function refreshImportPreview() {
-    setPreview(parsePreviewRows(importRows, values, properties, propertyUnits, columnMapping));
+    setPreview(parsePreviewRows(importRows, values, properties, propertyUnits, offerings, columnMapping));
   }
 
   async function importValidRows() {
@@ -719,6 +839,26 @@ export function LeadCreatePage() {
               </div>
 
               <div className="grid gap-4 lg:grid-cols-4">
+                <Field label="Interest category">
+                  <Select value={values.interestCategory} onChange={(event) => updateField("interestCategory", event.target.value)}>
+                    <option value="">Choose interest category</option>
+                    {interestCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </Select>
+                </Field>
+                {hasInterestCategory && !isRealEstateInterest ? (
+                  <Field label="Linked catalog offering">
+                    <Select value={values.offeringId} onChange={(event) => updateField("offeringId", event.target.value)}>
+                      <option value="">Select offering</option>
+                      {offeringOptions.map((offering) => <option key={offering.value} value={offering.value}>{offering.label}</option>)}
+                    </Select>
+                  </Field>
+                ) : null}
+                {hasInterestCategory && !isRealEstateInterest ? <Field label="Need / use case"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field> : null}
+                {hasInterestCategory && !isRealEstateInterest ? <Field label="Location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
+              </div>
+
+              {isRealEstateInterest ? (
+              <div className="grid gap-4 lg:grid-cols-4">
                 <Field label="Transaction interest">
                   <Select value={values.transactionInterest} onChange={(event) => updateField("transactionInterest", event.target.value)}>
                     {interests.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -733,7 +873,9 @@ export function LeadCreatePage() {
                 <Field label="Property category"><Input value={values.preferredPropertyCategory} onChange={(event) => updateField("preferredPropertyCategory", event.target.value)} /></Field>
                 <Field label="Bedrooms"><Input min="0" type="number" value={values.preferredBedrooms} onChange={(event) => updateField("preferredBedrooms", event.target.value)} /></Field>
               </div>
+              ) : null}
 
+              {isRealEstateInterest ? (
               <div className="grid gap-4 rounded-md border bg-muted/30 p-4 lg:grid-cols-2">
                 <Field label="Linked property">
                   <Select value={values.propertyId} onChange={(event) => updateField("propertyId", event.target.value)}>
@@ -748,11 +890,13 @@ export function LeadCreatePage() {
                   </Select>
                 </Field>
               </div>
+              ) : null}
 
+              {hasInterestCategory ? (
               <div className="grid gap-4 lg:grid-cols-4">
-                <Field label="Preferred location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field>
-                <Field label="State"><Input value={values.preferredState} onChange={(event) => updateField("preferredState", event.target.value)} /></Field>
-                <Field label="City"><Input value={values.preferredCity} onChange={(event) => updateField("preferredCity", event.target.value)} /></Field>
+                {isRealEstateInterest ? <Field label="Preferred location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
+                {isRealEstateInterest ? <Field label="State"><Input value={values.preferredState} onChange={(event) => updateField("preferredState", event.target.value)} /></Field> : null}
+                {isRealEstateInterest ? <Field label="City"><Input value={values.preferredCity} onChange={(event) => updateField("preferredCity", event.target.value)} /></Field> : null}
                 <Field label="Currency"><Input value={values.preferredBudgetCurrency} onChange={(event) => updateField("preferredBudgetCurrency", event.target.value)} /></Field>
                 <Field label="Budget minimum"><Input min="0" type="number" value={values.budgetMinimum} onChange={(event) => updateField("budgetMinimum", event.target.value)} /></Field>
                 <Field label="Budget maximum"><Input min="0" type="number" value={values.budgetMaximum} onChange={(event) => updateField("budgetMaximum", event.target.value)} /></Field>
@@ -761,9 +905,11 @@ export function LeadCreatePage() {
                     {paymentPreferences.map((item) => <option key={item} value={item}>{item}</option>)}
                   </Select>
                 </Field>
-                <Field label="Intended use"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field>
+                {isRealEstateInterest ? <Field label="Intended use"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field> : null}
               </div>
+              ) : null}
 
+              {hasInterestCategory ? (
               <div className="grid gap-4 lg:grid-cols-4">
                 <Field label="Status">
                   <Select value={values.status} onChange={(event) => updateField("status", event.target.value)}>
@@ -772,8 +918,9 @@ export function LeadCreatePage() {
                 </Field>
                 <Field label="Score"><Input max="100" min="0" type="number" value={values.score} onChange={(event) => updateField("score", event.target.value)} /></Field>
                 <Field label="Next follow-up"><Input type="date" value={values.nextFollowUpAt} onChange={(event) => updateField("nextFollowUpAt", event.target.value)} /></Field>
-                <Field label="Preferred inspection"><Input type="date" value={values.preferredInspectionDate} onChange={(event) => updateField("preferredInspectionDate", event.target.value)} /></Field>
+                {isRealEstateInterest ? <Field label="Preferred inspection"><Input type="date" value={values.preferredInspectionDate} onChange={(event) => updateField("preferredInspectionDate", event.target.value)} /></Field> : null}
               </div>
+              ) : null}
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <Field label="Referral name"><Input value={values.referralName} onChange={(event) => updateField("referralName", event.target.value)} /></Field>
@@ -858,7 +1005,7 @@ export function LeadCreatePage() {
                         <Badge tone={row.errors.length ? "danger" : "success"}>{row.errors.length ? "Issue" : "Valid"}</Badge>
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground">{String(row.data.phoneNumber ?? "No phone")} · {String(row.data.source ?? "No source")}</p>
-                      {row.data.propertyName || row.data.unitName ? <p className="mt-1 text-sm text-muted-foreground">{[row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ")}</p> : null}
+                      {row.data.propertyName || row.data.unitName || row.data.offeringName ? <p className="mt-1 text-sm text-muted-foreground">{[row.data.offeringName, row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ")}</p> : null}
                       {row.errors.length ? <p className="mt-2 text-sm text-destructive">{row.errors.join(" · ")}</p> : null}
                     </div>
                   ))}
@@ -886,7 +1033,7 @@ export function LeadCreatePage() {
                           </td>
                           <td className="px-4 py-3">{String(row.data.phoneNumber ?? "")}</td>
                           <td className="px-4 py-3">{String(row.data.source ?? "")}</td>
-                          <td className="px-4 py-3">{[row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ") || "Not linked"}</td>
+                          <td className="px-4 py-3">{[row.data.offeringName, row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ") || "Not linked"}</td>
                           <td className="px-4 py-3">{String(row.data.transactionInterest ?? "")}</td>
                           <td className="px-4 py-3"><Badge tone={row.errors.length ? "danger" : "success"}>{row.errors.length ? "Needs fix" : "Ready"}</Badge></td>
                         </tr>

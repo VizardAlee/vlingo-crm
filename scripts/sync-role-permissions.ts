@@ -34,6 +34,15 @@ function isKnownRole(role: unknown): role is RoleName {
   return typeof role === "string" && role in rolePermissions;
 }
 
+function normalizeRoles(role: unknown, roles: unknown): RoleName[] {
+  const assignedRoles = Array.isArray(roles) ? roles : [];
+  return Array.from(new Set([role, ...assignedRoles].filter(isKnownRole)));
+}
+
+function permissionsForAssignedRoles(roles: RoleName[]) {
+  return Array.from(new Set(roles.flatMap((role) => rolePermissions[role])));
+}
+
 async function syncWithAdminSdk() {
   const batch = db.batch();
   let writes = 0;
@@ -54,16 +63,17 @@ async function syncWithAdminSdk() {
 
   const members = await db.collection(`organizations/${organizationId}/members`).get();
   members.docs.forEach((member) => {
-    const role = member.data().role;
-    if (!isKnownRole(role)) {
-      console.warn(`Skipping member ${member.id}; unknown role: ${String(role)}`);
+    const assignedRoles = normalizeRoles(member.data().role, member.data().roles);
+    if (!assignedRoles.length) {
+      console.warn(`Skipping member ${member.id}; no known roles assigned.`);
       return;
     }
 
     batch.set(
       member.ref,
       {
-        permissions: rolePermissions[role],
+        permissions: permissionsForAssignedRoles(assignedRoles),
+        roles: assignedRoles,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -166,7 +176,7 @@ async function syncWithFirebaseCliRest() {
     writes += 1;
   }));
 
-  const membersResponse = await firestoreRequest<{ documents?: Array<{ fields?: { role?: { stringValue?: string } }; name: string }> }>(
+  const membersResponse = await firestoreRequest<{ documents?: Array<{ fields?: { role?: { stringValue?: string }; roles?: { arrayValue?: { values?: Array<{ stringValue?: string }> } } }; name: string }> }>(
     accessToken,
     `organizations/${organizationId}/members`,
   );
@@ -174,14 +184,17 @@ async function syncWithFirebaseCliRest() {
 
   await Promise.all(members.map(async (member) => {
     const role = member.fields?.role?.stringValue;
-    if (!isKnownRole(role)) {
-      console.warn(`Skipping member ${member.name}; unknown role: ${String(role)}`);
+    const roles = member.fields?.roles?.arrayValue?.values?.map((value) => value.stringValue).filter(Boolean) ?? [];
+    const assignedRoles = normalizeRoles(role, roles);
+    if (!assignedRoles.length) {
+      console.warn(`Skipping member ${member.name}; no known roles assigned.`);
       return;
     }
 
     const relativePath = member.name.split("/documents/")[1];
     await patchFirestoreDocument(accessToken, relativePath, {
-      permissions: firestoreStringArray(rolePermissions[role]),
+      permissions: firestoreStringArray(permissionsForAssignedRoles(assignedRoles)),
+      roles: firestoreStringArray(assignedRoles),
       updatedAt: { timestampValue: new Date().toISOString() },
     });
     writes += 1;
