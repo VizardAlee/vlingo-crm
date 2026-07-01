@@ -1,21 +1,37 @@
 import { describe, expect, it } from "vitest";
 import { formTourSteps } from "../../src/features/modules/form-tour";
+import type { ModuleConfig } from "../../src/features/modules/module-config";
 
 describe("form tour steps", () => {
-  it("starts the deal guide on the category selector because the rest of the form is dynamic", () => {
-    const steps = formTourSteps({
+  it("covers every visible deal field plus save", () => {
+    const config: ModuleConfig = {
       collection: "deals",
       createPermission: "deals.create",
       editPermission: "deals.update",
       emptyTitle: "No deals have been opened yet.",
-      fields: [],
+      fields: [
+        { name: "title", label: "Deal title", type: "text" },
+        { name: "dealCategory", label: "Deal category", type: "select" },
+        { name: "dealType", label: "Deal type", type: "select" },
+        { name: "status", label: "Deal stage", type: "select" },
+        { name: "leadId", label: "Linked lead", type: "select" },
+      ],
       listPermission: "deals.read",
       prefix: "DEAL",
       route: "/deals",
       title: "Deals",
-    });
+    };
+    const steps = formTourSteps(config, config.fields);
+    const targets = steps.map((step) => step.target);
 
-    expect(steps[0]?.target).toBe("module-deals-dealCategory");
+    expect(targets).toEqual([
+      "module-deals-title",
+      "module-deals-dealCategory",
+      "module-deals-dealType",
+      "module-deals-status",
+      "module-deals-leadId",
+      "module-deals-save",
+    ]);
   });
 
   it("keeps development guide targets unique", () => {

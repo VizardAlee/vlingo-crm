@@ -1,6 +1,6 @@
 "use client";
 
-import { Save } from "lucide-react";
+import { Crosshair, MapPin, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
@@ -17,7 +17,7 @@ import { dealCategoryFromFormValue, dealTypeFromFormValue, dealTypesForCategory,
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
-import { canAccessAllBranches, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
+import { effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { listMembers } from "@/services/users";
@@ -240,9 +240,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [stakeholderForm, setStakeholderForm] = useState({ email: "", name: "", notes: "", phoneNumber: "", type: "owner" as StakeholderKind });
   const [stakeholders, setStakeholders] = useState<PropertyStakeholder[]>([]);
   const [stakeholderSaving, setStakeholderSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const schema = schemaByCollection[config.collection];
-  const tourSteps = formTourSteps(config);
   const {
     control,
     formState: { isSubmitting },
@@ -305,7 +305,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     ? dealTypeFromFormValue(selectedDealType) || dealTypeFromFormValue(existing?.dealType) || "sale"
     : "";
   const branchConstraints = useMemo<QueryConstraint[]>(() => (
-    canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")]
+    effectiveBranchId(member, activeBranchId) ? [where("branchId", "==", effectiveBranchId(member, activeBranchId))] : []
   ), [activeBranchId, member]);
   const clientConstraints = useMemo<QueryConstraint[]>(() => (
     user && isAssignedOnlySalesUser(member)
@@ -324,7 +324,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const managerOptions = useMemo(
     () => members
       .filter((item) => item.status === "active")
-      .filter((item) => canAccessAllBranches(member) || item.branchId === activeBranchId || item.branchId === member?.branchId)
+      .filter((item) => item.branchId === effectiveBranchId(member, activeBranchId))
       .map((item) => {
         const name = item.displayName || item.email || item.id;
         const detail = [item.role, item.email].filter(Boolean).join(" · ");
@@ -768,6 +768,48 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     setUnitDefault("availabilityDate", dateInputValue(selectedProperty.availabilityDate));
   }, [config.collection, getValues, id, properties, selectedPropertyId, setValue]);
 
+  function setLeadLocationField(fieldName: string, value: string) {
+    setValue(fieldName, value, { shouldDirty: true, shouldValidate: false });
+  }
+
+  function captureLeadLocation() {
+    setError(null);
+
+    if (!("geolocation" in navigator)) {
+      const message = "This browser does not support location capture.";
+      setError(message);
+      toast({ title: "Unable to capture location", description: message, variant: "error" });
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLeadLocationField("geoLatitude", position.coords.latitude.toFixed(6));
+        setLeadLocationField("geoLongitude", position.coords.longitude.toFixed(6));
+        setLeadLocationField("geoAccuracy", Math.round(position.coords.accuracy || 0).toString());
+        setLeadLocationField("geoCapturedAt", new Date().toISOString());
+        setLocating(false);
+        toast({ title: "Lead location captured", description: "Save the lead to keep the updated map location.", variant: "success" });
+      },
+      (locationError) => {
+        setLocating(false);
+        const message = locationError.message || "Unable to capture location. Check browser location permissions.";
+        setError(message);
+        toast({ title: "Unable to capture location", description: message, variant: "error" });
+      },
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 15000 },
+    );
+  }
+
+  function clearLeadLocation() {
+    setLeadLocationField("geoAccuracy", "");
+    setLeadLocationField("geoAddress", "");
+    setLeadLocationField("geoCapturedAt", "");
+    setLeadLocationField("geoLatitude", "");
+    setLeadLocationField("geoLongitude", "");
+  }
+
   async function onSubmit(values: FormValues) {
     if (!user) {
       const message = "You must be signed in to save records.";
@@ -930,7 +972,13 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       parsedData.campaignManagerEmail = campaignManager?.email ?? "";
     }
 
-    const context = { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid };
+    const context = {
+      branchId: activeBranchId,
+      organizationId: activeOrganizationId,
+      userEmail: member?.email || user.email || "",
+      userId: user.uid,
+      userName: member?.displayName || user.displayName || user.email || "",
+    };
     try {
       if (id) {
         await updateOrgRecord(config.collection, id, parsedData, context);
@@ -1016,7 +1064,13 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return;
     }
 
-    const context = { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid };
+    const context = {
+      branchId: activeBranchId,
+      organizationId: activeOrganizationId,
+      userEmail: member?.email || user.email || "",
+      userId: user.uid,
+      userName: member?.displayName || user.displayName || user.email || "",
+    };
     setStakeholderSaving(true);
     setError(null);
     try {
@@ -1058,6 +1112,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     return shouldShowDealField(field, effectiveDealCategory, effectiveDealType);
   }
+  const tourSteps = formTourSteps(config, config.fields.filter(isFieldVisible));
 
   return (
     <Card>
@@ -1078,9 +1133,27 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
               return (
               <section className="grid gap-4 border-t pt-5 first:border-t-0 first:pt-0" key={section.title}>
-                <div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <h2 className="text-base font-semibold">{section.title}</h2>
+                  {config.collection === "leads" && section.title === "Map location" ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button disabled={locating} onClick={captureLeadLocation} type="button" variant="outline">
+                        <Crosshair className="h-4 w-4" />
+                        {locating ? "Capturing" : "Use current location"}
+                      </Button>
+                      <Button onClick={clearLeadLocation} type="button" variant="ghost">
+                        <Trash2 className="h-4 w-4" />
+                        Clear
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
+                {config.collection === "leads" && section.title === "Map location" ? (
+                  <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span>Capture or edit the coordinates used by the Lead Locations map. Browser location requires HTTPS or localhost.</span>
+                  </div>
+                ) : null}
                 {config.collection === "properties" && section.title === "Ownership and management" ? (
                   <div className="grid gap-3 rounded-md border bg-muted/30 p-4">
                     <div className="grid gap-3 lg:grid-cols-4">
@@ -1131,6 +1204,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                             <Input readOnly type="number" value={offeringSubtotal} />
                           ) : field.name === "totalInitialPayment" ? (
                             <Input readOnly type="number" value={totalInitialPayment} />
+                          ) : field.name === "geoLatitude" || field.name === "geoLongitude" ? (
+                            <Input inputMode="decimal" placeholder={field.placeholder} readOnly={field.readOnly} step="any" {...register(field.name)} type="number" />
                           ) : (
                             <Input placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} type={field.type} />
                           )}

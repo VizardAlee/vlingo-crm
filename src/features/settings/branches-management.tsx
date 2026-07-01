@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
@@ -32,6 +33,20 @@ const defaultBranch: BranchFormState = {
   name: "",
   status: "active",
 };
+
+function branchTourTarget(name: string) {
+  return `branches-${name}`;
+}
+
+const branchTourSteps: GuidedTourStep[] = [
+  { target: branchTourTarget("create"), title: "Create branch", body: "Add branch name, code, status, and address to create a new location for users and records." },
+  { target: branchTourTarget("name"), title: "Branch name", body: "Use the clear office or location name that staff recognize." },
+  { target: branchTourTarget("code"), title: "Branch code", body: "Use a short unique code. It becomes part of branch identity and reporting." },
+  { target: branchTourTarget("status"), title: "Branch status", body: "Use active for open offices and closed when the branch should no longer be used for new work." },
+  { target: branchTourTarget("address"), title: "Address", body: "Record the physical branch address for operations and administration." },
+  { target: branchTourTarget("save"), title: "Save branch", body: "Create or update the branch after checking the details." },
+  { target: branchTourTarget("edit"), title: "Edit existing branches", body: "Existing branch cards let you update name, code, status, address, and save the changes." },
+];
 
 function branchToForm(branch: BranchRecord): BranchFormState {
   return {
@@ -166,10 +181,13 @@ export function BranchesManagement() {
           <h1 className="text-xl font-semibold md:text-2xl">Branches</h1>
           <p className="mt-1 text-sm text-muted-foreground">Create branch offices, update branch details, and close branches without removing historic records.</p>
         </div>
-        <Button className="mt-4 h-11 w-full md:mt-0 md:w-auto" onClick={loadBranches} type="button" variant="outline">
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="mt-4 grid gap-2 md:mt-0 md:flex">
+          <GuidedTour className="h-11 w-full md:w-auto" storageKey="beacon-tour:branches" steps={branchTourSteps} />
+          <Button className="h-11 w-full md:w-auto" onClick={loadBranches} type="button" variant="outline">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error ? <ErrorState message={error} /> : null}
@@ -185,24 +203,32 @@ export function BranchesManagement() {
           <CardTitle>Create Branch</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4 lg:grid-cols-[1fr_160px_160px]" onSubmit={submitCreate}>
+          <form className="grid gap-4 lg:grid-cols-[1fr_160px_160px]" data-tour={branchTourTarget("create")} onSubmit={submitCreate}>
+            <div data-tour={branchTourTarget("name")}>
             <Field label="Branch name">
               <Input required value={draft.name} onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))} />
             </Field>
+            </div>
+            <div data-tour={branchTourTarget("code")}>
             <Field label="Code">
               <Input required value={draft.code} onChange={(event) => setDraft((value) => ({ ...value, code: event.target.value }))} />
             </Field>
+            </div>
+            <div data-tour={branchTourTarget("status")}>
             <Field label="Status">
               <Select value={draft.status} onChange={(event) => setDraft((value) => ({ ...value, status: event.target.value as BranchStatus }))}>
                 <option value="active">Active</option>
                 <option value="closed">Closed</option>
               </Select>
             </Field>
+            </div>
+            <div data-tour={branchTourTarget("address")}>
             <Field label="Address">
               <Textarea required value={draft.address} onChange={(event) => setDraft((value) => ({ ...value, address: event.target.value }))} />
             </Field>
+            </div>
             <div className="lg:col-span-2 lg:flex lg:items-end lg:justify-end">
-              <Button className="h-11 w-full lg:w-auto" disabled={saving === "create"} type="submit">
+              <Button className="h-11 w-full lg:w-auto" data-tour={branchTourTarget("save")} disabled={saving === "create"} type="submit">
                 <Plus className="h-4 w-4" />
                 {saving === "create" ? "Creating" : "Create branch"}
               </Button>
@@ -217,7 +243,7 @@ export function BranchesManagement() {
         {branches.map((branch) => {
           const edit = editing[branch.id] ?? branchToForm(branch);
           return (
-            <Card key={branch.id}>
+            <Card data-tour={branchTourTarget("edit")} key={branch.id}>
               <CardContent className="grid gap-4 p-4">
                 <div className="flex items-start gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-md bg-primary/10 text-primary">

@@ -2,7 +2,7 @@
 
 import { readSheet } from "read-excel-file/browser";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { CheckCircle2, Download, FileSpreadsheet, Save, Upload } from "lucide-react";
+import { CheckCircle2, Crosshair, Download, FileSpreadsheet, MapPin, Save, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { canAccessAllBranches, hasPermission, memberRoles } from "@/lib/permissions";
 import { leadSchema } from "@/lib/validation/schemas";
@@ -46,6 +47,34 @@ const interestCategories = [
   { label: "Custom", value: "custom" },
 ];
 
+function leadTourTarget(name: string) {
+  return `lead-create-${name}`;
+}
+
+const manualLeadTourSteps: GuidedTourStep[] = [
+  { target: leadTourTarget("captureSettings"), title: "Capture settings", body: "Choose the branch and default assignee before entering the lead details. This controls ownership and branch reporting." },
+  { target: leadTourTarget("contact"), title: "Contact details", body: "Start with the lead name and reachable phone, WhatsApp, or email details so follow-up is reliable." },
+  { target: leadTourTarget("source"), title: "Source tracking", body: "Record where the lead came from so marketing and sales reports can show what is working." },
+  { target: leadTourTarget("interest"), title: "Interest category", body: "Choose the category first. The rest of the form changes to show the fields that fit that type of interest." },
+  { target: leadTourTarget("linkedOffering"), title: "Linked offering", body: "For non-real-estate leads, link the catalog product, service, solar package, installation, or consultancy offering when known." },
+  { target: leadTourTarget("realEstatePreference"), title: "Real estate preference", body: "For real-estate leads, capture transaction interest, property type, category, bedrooms, and inspection expectations." },
+  { target: leadTourTarget("linkedProperty"), title: "Linked property or unit", body: "Link the exact property or unit when the lead is asking about a known listing. This context can later flow into deals." },
+  { target: leadTourTarget("budget"), title: "Budget and location", body: "Capture location, currency, budget range, and payment preference so matching and qualification are easier." },
+  { target: leadTourTarget("geotag"), title: "Geotag location", body: "Capture the lead's site or preferred location from the device GPS when field teams need map visibility." },
+  { target: leadTourTarget("workflow"), title: "Workflow status", body: "Set status, score, follow-up date, and inspection date to keep the pipeline actionable." },
+  { target: leadTourTarget("notes"), title: "Notes and referral", body: "Add referral details, tags, and notes that help the assigned user understand the conversation." },
+  { target: leadTourTarget("save"), title: "Create lead", body: "Save the lead after reviewing the details. The system records creator, branch, assignment, and linked offering context." },
+];
+
+const importLeadTourSteps: GuidedTourStep[] = [
+  { target: leadTourTarget("captureSettings"), title: "Import settings", body: "Choose the branch and default assignee before importing. Imported leads inherit this context unless mapped data overrides it." },
+  { target: leadTourTarget("importFile"), title: "Upload file", body: "Upload a CSV or Excel sheet from another platform. The first row should contain headers." },
+  { target: leadTourTarget("template"), title: "Template", body: "Download the template when you want a clean example of supported fields." },
+  { target: leadTourTarget("columnMapping"), title: "Map columns", body: "Match your file headers to CRM fields. Required fields must be mapped before rows can be imported." },
+  { target: leadTourTarget("preview"), title: "Preview rows", body: "Review valid rows and issues before importing. Fix the sheet or mapping if important rows are rejected." },
+  { target: leadTourTarget("importSave"), title: "Import valid rows", body: "Import only valid rows. Each imported lead stores the current user as the inputter." },
+];
+
 const defaultLead: LeadFormState = {
   assignedTo: "",
   budgetMaximum: "",
@@ -54,6 +83,11 @@ const defaultLead: LeadFormState = {
   contactPreference: "whatsapp",
   email: "",
   fullName: "",
+  geoAccuracy: "",
+  geoAddress: "",
+  geoCapturedAt: "",
+  geoLatitude: "",
+  geoLongitude: "",
   interestCategory: "",
   intendedUse: "",
   leadTemperature: "warm",
@@ -97,6 +131,10 @@ const headerAliases: Record<string, string[]> = {
   contactPreference: ["contactpreference", "preferredcontact", "bestcontact"],
   email: ["email", "emailaddress"],
   fullName: ["fullname", "name", "clientname", "leadname", "customername"],
+  geoAccuracy: ["geoaccuracy", "accuracy", "locationaccuracy"],
+  geoAddress: ["geoaddress", "siteaddress", "mapaddress", "geotagaddress", "address"],
+  geoLatitude: ["geolatitude", "latitude", "lat"],
+  geoLongitude: ["geolongitude", "longitude", "lng", "lon"],
   interestCategory: ["interestcategory", "businessvertical", "vertical", "categoryofinterest", "leadcategory"],
   intendedUse: ["intendeduse", "purpose", "use"],
   leadTemperature: ["temperature", "leadtemperature", "priority"],
@@ -158,6 +196,10 @@ const importFields = [
   { key: "preferredLocation", label: "Preferred location" },
   { key: "preferredState", label: "State" },
   { key: "preferredCity", label: "City" },
+  { key: "geoAddress", label: "Map address / label" },
+  { key: "geoLatitude", label: "Latitude" },
+  { key: "geoLongitude", label: "Longitude" },
+  { key: "geoAccuracy", label: "GPS accuracy" },
   { key: "preferredBudgetCurrency", label: "Currency" },
   { key: "budgetMinimum", label: "Budget minimum" },
   { key: "budgetMaximum", label: "Budget maximum" },
@@ -332,6 +374,11 @@ function formToLeadPayload(values: LeadFormState) {
     assignedAgentId: values.assignedTo,
     budgetMaximum: values.budgetMaximum,
     budgetMinimum: values.budgetMinimum,
+    geoAccuracy: values.geoAccuracy,
+    geoAddress: values.geoAddress,
+    geoCapturedAt: values.geoCapturedAt,
+    geoLatitude: values.geoLatitude,
+    geoLongitude: values.geoLongitude,
     preferredBedrooms: values.preferredBedrooms,
     score: values.score || "25",
     tags: values.tags,
@@ -488,7 +535,7 @@ function downloadTemplate() {
 }
 
 export function LeadCreatePage() {
-  const { activeOrganizationId, member, user } = useAuth();
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [mode, setMode] = useState<"manual" | "import">("manual");
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -504,6 +551,7 @@ export function LeadCreatePage() {
   const [preview, setPreview] = useState<PreviewLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -570,7 +618,7 @@ export function LeadCreatePage() {
         listOrgRecords<Offering>(activeOrganizationId, "offerings", optionBranchConstraints).catch(() => []),
       ]);
       const visibleBranches = canAccessAllBranches(member) ? nextBranches : nextBranches.filter((branch) => branch.id === member?.branchId);
-      const nextBranchId = visibleBranches[0]?.id || member?.branchId || "";
+      const nextBranchId = visibleBranches.some((branch) => branch.id === activeBranchId) ? activeBranchId : visibleBranches[0]?.id || member?.branchId || "";
       setBranches(nextBranches);
       setMembers(nextMembers);
       setOfferings(canAccessAllBranches(member) ? nextOfferings : nextOfferings.filter((offering) => offering.branchId === nextBranchId));
@@ -586,7 +634,7 @@ export function LeadCreatePage() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, member, optionBranchConstraints, user?.uid]);
+  }, [activeBranchId, activeOrganizationId, member, optionBranchConstraints, user?.uid]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -654,12 +702,60 @@ export function LeadCreatePage() {
     });
   }
 
+  function captureLocation() {
+    setError(null);
+    setSuccess(null);
+
+    if (!("geolocation" in navigator)) {
+      setError("This browser does not support location capture.");
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const capturedAt = new Date().toISOString();
+        setValues((current) => ({
+          ...current,
+          geoAccuracy: Math.round(position.coords.accuracy || 0).toString(),
+          geoCapturedAt: capturedAt,
+          geoLatitude: position.coords.latitude.toFixed(6),
+          geoLongitude: position.coords.longitude.toFixed(6),
+        }));
+        setLocating(false);
+        setSuccess("Lead location captured.");
+      },
+      (locationError) => {
+        setLocating(false);
+        setError(locationError.message || "Unable to capture location. Check browser location permissions.");
+      },
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 15000 },
+    );
+  }
+
+  function clearLocation() {
+    setValues((current) => ({
+      ...current,
+      geoAccuracy: "",
+      geoAddress: "",
+      geoCapturedAt: "",
+      geoLatitude: "",
+      geoLongitude: "",
+    }));
+  }
+
   async function createLead(payload: Record<string, unknown>) {
     if (!user) {
       throw new Error("You must be signed in to create leads.");
     }
 
-    const context = { branchId, organizationId: activeOrganizationId, userId: user.uid };
+    const context = {
+      branchId,
+      organizationId: activeOrganizationId,
+      userEmail: member?.email || user.email || "",
+      userId: user.uid,
+      userName: member?.displayName || user.displayName || user.email || "",
+    };
     const id = await createOrgRecord("leads", payload, context, "LEAD");
     await writeAuditLog(context, "lead.create", "leads", id, payload);
     return id;
@@ -768,6 +864,7 @@ export function LeadCreatePage() {
           <p className="mt-1 text-sm text-muted-foreground">Capture leads manually or import lead sheets from external platforms.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
+          <GuidedTour className="col-span-2 md:col-span-1" storageKey={`beacon-tour:leads:${mode}`} steps={mode === "manual" ? manualLeadTourSteps : importLeadTourSteps} />
           <Button onClick={() => setMode("manual")} type="button" variant={mode === "manual" ? "primary" : "outline"}>Manual</Button>
           <Button onClick={() => setMode("import")} type="button" variant={mode === "import" ? "primary" : "outline"}>Import</Button>
         </div>
@@ -781,7 +878,7 @@ export function LeadCreatePage() {
         </div>
       ) : null}
 
-      <Card>
+      <Card data-tour={leadTourTarget("captureSettings")}>
         <CardHeader>
           <CardTitle>Capture Settings</CardTitle>
         </CardHeader>
@@ -806,7 +903,7 @@ export function LeadCreatePage() {
           </CardHeader>
           <CardContent>
             <form className="grid gap-5" onSubmit={submitManual}>
-              <div className="grid gap-4 lg:grid-cols-3">
+              <div className="grid gap-4 lg:grid-cols-3" data-tour={leadTourTarget("contact")}>
                 <Field label="Full name"><Input required value={values.fullName} onChange={(event) => updateField("fullName", event.target.value)} /></Field>
                 <Field label="Phone number"><Input required value={values.phoneNumber} onChange={(event) => updateField("phoneNumber", event.target.value)} /></Field>
                 <Field label="WhatsApp number"><Input value={values.whatsappNumber} onChange={(event) => updateField("whatsappNumber", event.target.value)} /></Field>
@@ -823,7 +920,7 @@ export function LeadCreatePage() {
                 </Field>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-4">
+              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("source")}>
                 <Field label="Source">
                   <Select value={values.source} onChange={(event) => updateField("source", event.target.value)}>
                     {leadSources.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -838,7 +935,7 @@ export function LeadCreatePage() {
                 <Field label="External reference"><Input value={values.sourceReference} onChange={(event) => updateField("sourceReference", event.target.value)} /></Field>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-4">
+              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("interest")}>
                 <Field label="Interest category">
                   <Select value={values.interestCategory} onChange={(event) => updateField("interestCategory", event.target.value)}>
                     <option value="">Choose interest category</option>
@@ -846,19 +943,21 @@ export function LeadCreatePage() {
                   </Select>
                 </Field>
                 {hasInterestCategory && !isRealEstateInterest ? (
+                  <div data-tour={leadTourTarget("linkedOffering")}>
                   <Field label="Linked catalog offering">
                     <Select value={values.offeringId} onChange={(event) => updateField("offeringId", event.target.value)}>
                       <option value="">Select offering</option>
                       {offeringOptions.map((offering) => <option key={offering.value} value={offering.value}>{offering.label}</option>)}
                     </Select>
                   </Field>
+                  </div>
                 ) : null}
                 {hasInterestCategory && !isRealEstateInterest ? <Field label="Need / use case"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field> : null}
                 {hasInterestCategory && !isRealEstateInterest ? <Field label="Location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
               </div>
 
               {isRealEstateInterest ? (
-              <div className="grid gap-4 lg:grid-cols-4">
+              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("realEstatePreference")}>
                 <Field label="Transaction interest">
                   <Select value={values.transactionInterest} onChange={(event) => updateField("transactionInterest", event.target.value)}>
                     {interests.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -876,7 +975,7 @@ export function LeadCreatePage() {
               ) : null}
 
               {isRealEstateInterest ? (
-              <div className="grid gap-4 rounded-md border bg-muted/30 p-4 lg:grid-cols-2">
+              <div className="grid gap-4 rounded-md border bg-muted/30 p-4 lg:grid-cols-2" data-tour={leadTourTarget("linkedProperty")}>
                 <Field label="Linked property">
                   <Select value={values.propertyId} onChange={(event) => updateField("propertyId", event.target.value)}>
                     <option value="">Select property</option>
@@ -893,7 +992,7 @@ export function LeadCreatePage() {
               ) : null}
 
               {hasInterestCategory ? (
-              <div className="grid gap-4 lg:grid-cols-4">
+              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("budget")}>
                 {isRealEstateInterest ? <Field label="Preferred location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
                 {isRealEstateInterest ? <Field label="State"><Input value={values.preferredState} onChange={(event) => updateField("preferredState", event.target.value)} /></Field> : null}
                 {isRealEstateInterest ? <Field label="City"><Input value={values.preferredCity} onChange={(event) => updateField("preferredCity", event.target.value)} /></Field> : null}
@@ -909,8 +1008,59 @@ export function LeadCreatePage() {
               </div>
               ) : null}
 
+              <div className="grid gap-4 rounded-md border bg-muted/30 p-4" data-tour={leadTourTarget("geotag")}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <MapPin className="h-4 w-4 text-primary" />
+                      Map location
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">Capture the site, inspection point, or preferred location for map follow-up.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button disabled={locating} onClick={captureLocation} type="button" variant="outline">
+                      <Crosshair className="h-4 w-4" />
+                      {locating ? "Capturing" : "Use current location"}
+                    </Button>
+                    {values.geoLatitude && values.geoLongitude ? (
+                      <Button onClick={clearLocation} type="button" variant="ghost">
+                        <Trash2 className="h-4 w-4" />
+                        Clear
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-4">
+                  <Field className="lg:col-span-2" label="Location label / address">
+                    <Input placeholder="Site address, landmark, or preferred area" value={values.geoAddress} onChange={(event) => updateField("geoAddress", event.target.value)} />
+                  </Field>
+                  <Field label="Latitude">
+                    <Input inputMode="decimal" placeholder="6.524379" value={values.geoLatitude} onChange={(event) => updateField("geoLatitude", event.target.value)} />
+                  </Field>
+                  <Field label="Longitude">
+                    <Input inputMode="decimal" placeholder="3.379206" value={values.geoLongitude} onChange={(event) => updateField("geoLongitude", event.target.value)} />
+                  </Field>
+                  <Field label="Accuracy (meters)">
+                    <Input inputMode="numeric" value={values.geoAccuracy} onChange={(event) => updateField("geoAccuracy", event.target.value)} />
+                  </Field>
+                  {values.geoLatitude && values.geoLongitude ? (
+                    <div className="flex items-end lg:col-span-3">
+                      <a
+                        className="inline-flex h-10 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium text-primary shadow-sm hover:bg-muted"
+                        href={`https://www.openstreetmap.org/?mlat=${values.geoLatitude}&mlon=${values.geoLongitude}#map=17/${values.geoLatitude}/${values.geoLongitude}`}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <MapPin className="h-4 w-4" />
+                        Open captured point
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
               {hasInterestCategory ? (
-              <div className="grid gap-4 lg:grid-cols-4">
+              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("workflow")}>
                 <Field label="Status">
                   <Select value={values.status} onChange={(event) => updateField("status", event.target.value)}>
                     {leadStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -922,7 +1072,7 @@ export function LeadCreatePage() {
               </div>
               ) : null}
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 lg:grid-cols-2" data-tour={leadTourTarget("notes")}>
                 <Field label="Referral name"><Input value={values.referralName} onChange={(event) => updateField("referralName", event.target.value)} /></Field>
                 <Field label="Referral phone"><Input value={values.referralPhone} onChange={(event) => updateField("referralPhone", event.target.value)} /></Field>
                 <Field label="Tags"><Input value={values.tags} onChange={(event) => updateField("tags", event.target.value)} /></Field>
@@ -930,7 +1080,7 @@ export function LeadCreatePage() {
               </div>
 
               <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] -mx-5 -mb-5 border-t bg-white p-4 md:static md:m-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0">
-                <Button className="h-12 w-full md:h-10 md:w-auto" disabled={saving} type="submit">
+                <Button className="h-12 w-full md:h-10 md:w-auto" data-tour={leadTourTarget("save")} disabled={saving} type="submit">
                   <Save className="h-4 w-4" />
                   {saving ? "Saving" : "Create lead"}
                 </Button>
@@ -945,11 +1095,13 @@ export function LeadCreatePage() {
           </CardHeader>
           <CardContent className="grid gap-5">
             <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <div data-tour={leadTourTarget("importFile")}>
               <Field label="CSV or Excel file">
                 <Input accept=".csv,.xls,.xlsx" type="file" onChange={(event) => handleImportFile(event.target.files?.[0] ?? null)} />
               </Field>
+              </div>
               <div className="md:flex md:items-end">
-                <Button className="h-11 w-full md:w-auto" onClick={downloadTemplate} type="button" variant="outline">
+                <Button className="h-11 w-full md:w-auto" data-tour={leadTourTarget("template")} onClick={downloadTemplate} type="button" variant="outline">
                   <Download className="h-4 w-4" />
                   Template
                 </Button>
@@ -961,7 +1113,7 @@ export function LeadCreatePage() {
             </div>
 
             {importHeaders.length ? (
-              <div className="grid gap-4 rounded-md border p-4">
+              <div className="grid gap-4 rounded-md border p-4" data-tour={leadTourTarget("columnMapping")}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h2 className="text-base font-semibold">Match columns</h2>
@@ -984,7 +1136,7 @@ export function LeadCreatePage() {
             ) : null}
 
             {preview.length ? (
-              <div className="grid gap-4">
+              <div className="grid gap-4" data-tour={leadTourTarget("preview")}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet className="h-5 w-5 text-primary" />
@@ -992,7 +1144,7 @@ export function LeadCreatePage() {
                     <Badge tone="success">{validPreviewRows.length} valid</Badge>
                     <Badge tone={preview.length - validPreviewRows.length ? "danger" : "muted"}>{preview.length - validPreviewRows.length} issues</Badge>
                   </div>
-                  <Button disabled={!validPreviewRows.length || saving} onClick={importValidRows} type="button">
+                  <Button data-tour={leadTourTarget("importSave")} disabled={!validPreviewRows.length || saving} onClick={importValidRows} type="button">
                     <Upload className="h-4 w-4" />
                     {saving ? "Importing" : "Import valid rows"}
                   </Button>

@@ -17,7 +17,7 @@ import { ModuleForm } from "@/features/modules/module-form";
 import { columnsFor, type ModuleConfig } from "@/features/modules/module-config";
 import { useAuth } from "@/features/auth/auth-provider";
 import { documentAccessPermissions } from "@/components/layout/navigation";
-import { canAccessAllBranches, hasAnyPermission, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
+import { effectiveBranchId, hasAnyPermission, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, type DocumentRecord } from "@/services/documents";
 import { sendBulkSalesEmail, sendSalesJourneyEmail } from "@/services/email-settings";
@@ -334,6 +334,9 @@ function recordSummaryEntries(record: Record<string, unknown>, collection: Modul
       "offeringName",
       "propertyName",
       "unitName",
+      "createdByName",
+      "createdByEmail",
+      "createdAt",
     ]
       .filter((key) => key in record)
       .map((key) => ({ key, label: titleCase(key), value: record[key] }));
@@ -350,6 +353,26 @@ function recordSummaryEntries(record: Record<string, unknown>, collection: Modul
       "offeringName",
       "propertyName",
       "unitName",
+      "createdByName",
+      "createdByEmail",
+      "createdAt",
+    ]
+      .filter((key) => key in record)
+      .map((key) => ({ key, label: titleCase(key), value: record[key] }));
+  }
+
+  if (collection === "clients") {
+    return [
+      "referenceNumber",
+      "fullName",
+      "phoneNumber",
+      "email",
+      "clientType",
+      "category",
+      "status",
+      "createdByName",
+      "createdByEmail",
+      "createdAt",
     ]
       .filter((key) => key in record)
       .map((key) => ({ key, label: titleCase(key), value: record[key] }));
@@ -372,6 +395,19 @@ function recordSummaryEntries(record: Record<string, unknown>, collection: Modul
   ]
     .filter((key) => key in record)
     .map((key) => ({ key, label: titleCase(key), value: record[key] }));
+}
+
+function shouldResolveUserSnapshots(collection: ModuleConfig["collection"]) {
+  return ["activities", "leads", "clients", "deals"].includes(collection);
+}
+
+function enrichCreatorSnapshot<T extends Record<string, unknown> | null>(record: T, members: Member[]): T {
+  if (!record || record.createdByName || !record.createdBy) {
+    return record;
+  }
+
+  const creator = members.find((member) => member.id === record.createdBy);
+  return creator ? { ...record, createdByEmail: creator.email, createdByName: creator.displayName || creator.email } as T : record;
 }
 
 function normalizedText(value: unknown) {
@@ -2044,8 +2080,9 @@ export function ModuleListPage({
     const constraints: QueryConstraint[] = [];
     const activeFixedFilters = JSON.parse(fixedFilterKey) as FixedFilter[];
 
-    if (!canAccessAllBranches(member)) {
-      constraints.push(where("branchId", "==", activeBranchId || member?.branchId || ""));
+    const branchId = effectiveBranchId(member, activeBranchId);
+    if (branchId) {
+      constraints.push(where("branchId", "==", branchId));
     }
 
     if (config.collection === "leads" && user && (isAssignedOnlySalesUser(member) || !hasPermission(member, "leads.readAll"))) {
@@ -2068,10 +2105,23 @@ export function ModuleListPage({
       constraints.push(where(filter.field, "==", filter.value));
     });
 
-    listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, constraints)
-      .then((items) => {
+    const shouldResolveCreators = ["leads", "clients", "deals"].includes(config.collection);
+    Promise.all([
+      listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, constraints),
+      shouldResolveCreators ? listMembers(activeOrganizationId).catch(() => [] as Member[]) : Promise.resolve([] as Member[]),
+    ])
+      .then(([items, nextMembers]) => {
         if (mounted) {
-          setRecords(items);
+          const enriched = nextMembers.length
+            ? items.map((item) => {
+                if (item.createdByName || !item.createdBy) {
+                  return item;
+                }
+                const creator = nextMembers.find((memberItem) => memberItem.id === item.createdBy);
+                return creator ? { ...item, createdByEmail: creator.email, createdByName: creator.displayName || creator.email } : item;
+              })
+            : items;
+          setRecords(enriched);
         }
       })
       .catch((nextError) => {
@@ -2176,7 +2226,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const branchConstraints = useMemo<QueryConstraint[]>(() => (
-    canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")]
+    effectiveBranchId(member, activeBranchId) ? [where("branchId", "==", effectiveBranchId(member, activeBranchId))] : []
   ), [activeBranchId, member]);
 
   useEffect(() => {
@@ -2201,14 +2251,15 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "offerings", branchConstraints),
-      config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
+      shouldResolveUserSnapshots(config.collection) ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ]);
+    const resolvedRecord = enrichCreatorSnapshot(nextRecord, nextMembers);
     const nextRelatedRecord = config.collection === "activities"
-      ? await safeGetRelatedRecord(activeOrganizationId, nextRecord)
+      ? await safeGetRelatedRecord(activeOrganizationId, resolvedRecord)
       : config.collection === "propertyUnits"
-        ? await safeGetLinkedProperty(activeOrganizationId, nextRecord)
+        ? await safeGetLinkedProperty(activeOrganizationId, resolvedRecord)
         : null;
-    setRecord(nextRecord);
+    setRecord(resolvedRecord);
     setRelatedRecord(nextRelatedRecord);
     setActivityMembers(nextMembers);
     setOfferings(config.collection === "leads" ? nextOfferings : []);
@@ -2233,23 +2284,24 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "offerings", branchConstraints),
-      config.collection === "activities" ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
+      shouldResolveUserSnapshots(config.collection) ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ])
       .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextOfferings, nextMembers]) => {
         if (!mounted) {
           return;
         }
 
+        const resolvedRecord = enrichCreatorSnapshot(nextRecord, nextMembers);
         const nextRelatedRecord = config.collection === "activities"
-          ? await safeGetRelatedRecord(activeOrganizationId, nextRecord)
+          ? await safeGetRelatedRecord(activeOrganizationId, resolvedRecord)
           : config.collection === "propertyUnits"
-            ? await safeGetLinkedProperty(activeOrganizationId, nextRecord)
+            ? await safeGetLinkedProperty(activeOrganizationId, resolvedRecord)
             : null;
         if (!mounted) {
           return;
         }
 
-        setRecord(nextRecord);
+        setRecord(resolvedRecord);
         setRelatedRecord(nextRelatedRecord);
         setActivityMembers(nextMembers);
         setOfferings(config.collection === "leads" ? nextOfferings : []);

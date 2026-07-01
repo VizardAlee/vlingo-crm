@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { canAccessAllBranches, hasAnyPermission } from "@/lib/permissions";
+import { effectiveBranchId, hasAnyPermission } from "@/lib/permissions";
 import { formatCurrency, statusTone, titleCase } from "@/lib/utils";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
 import { listOrgRecords } from "@/services/repository";
@@ -52,8 +52,8 @@ export function ReportsDashboard() {
     setError(null);
     setLoading(true);
     try {
-      const branchConstraints = canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")];
-      const branchId = branchConstraints.length ? activeBranchId || member?.branchId : undefined;
+      const branchId = effectiveBranchId(member, activeBranchId);
+      const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
       const [nextMetrics, nextLeads, nextUnits, nextTasks] = await Promise.all([
         getDashboardMetrics(activeOrganizationId, { branchId }),
         safeList(activeOrganizationId, "leads", branchConstraints),

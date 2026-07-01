@@ -45,6 +45,17 @@ export const leadSchema = z.object({
   preferredLocation: z.string().optional(),
   preferredState: z.string().optional(),
   preferredCity: z.string().optional(),
+  geoAddress: z.string().optional(),
+  geoLatitude: z.preprocess(
+    (value) => value === "" || value === null || value === undefined ? undefined : value,
+    z.coerce.number().min(-90).max(90).optional(),
+  ),
+  geoLongitude: z.preprocess(
+    (value) => value === "" || value === null || value === undefined ? undefined : value,
+    z.coerce.number().min(-180).max(180).optional(),
+  ),
+  geoAccuracy: optionalNumber,
+  geoCapturedAt: optionalDateString,
   propertyType: z.string().optional(),
   preferredPropertyCategory: z.string().optional(),
   preferredBedrooms: optionalNumber,

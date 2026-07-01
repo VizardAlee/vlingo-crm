@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasAnyPermission, rolePermissions } from "@/lib/permissions";
 import { titleCase } from "@/lib/utils";
@@ -20,6 +21,18 @@ const defaultOrganizationForm = {
   primaryColor: "#14550f",
   status: "active" as Organization["status"],
 };
+
+function organizationTourTarget(name: string) {
+  return `organization-${name}`;
+}
+
+const organizationTourSteps: GuidedTourStep[] = [
+  { target: organizationTourTarget("identity"), title: "Organization identity", body: "Set the public and legal organization names used across the workspace." },
+  { target: organizationTourTarget("logo"), title: "Logo", body: "Upload a logo or paste a logo URL. Uploads can also detect the primary brand color." },
+  { target: organizationTourTarget("color"), title: "Primary color", body: "Choose the main brand color used in navigation, buttons, and highlights." },
+  { target: organizationTourTarget("status"), title: "Status", body: "Keep the organization active unless access should be disabled." },
+  { target: organizationTourTarget("save"), title: "Save organization", body: "Save changes after reviewing the organization name, logo, color, and status." },
+];
 
 function componentToHex(value: number) {
   return Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
@@ -205,9 +218,12 @@ export function OrganizationSettings() {
 
   return (
     <section className="grid min-w-0 gap-5">
-      <div className="rounded-md bg-white p-4 shadow-sm md:bg-transparent md:p-0 md:shadow-none">
-        <h1 className="text-xl font-semibold md:text-2xl">Organization</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Branding, default organization scope, and deployment identity.</p>
+      <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
+        <div>
+          <h1 className="text-xl font-semibold md:text-2xl">Organization</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Branding, default organization scope, and deployment identity.</p>
+        </div>
+        <GuidedTour className="mt-4 h-11 w-full md:mt-0 md:w-auto" storageKey="beacon-tour:organization" steps={organizationTourSteps} />
       </div>
       <Card>
         <CardHeader><CardTitle>{form.legalName || form.name}</CardTitle></CardHeader>
@@ -218,7 +234,7 @@ export function OrganizationSettings() {
               <Field label="Organization ID">
                 <Input readOnly value={activeOrganizationId} />
               </Field>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2" data-tour={organizationTourTarget("identity")}>
                 <Field label="Organization name">
                   <Input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
                 </Field>
@@ -227,6 +243,7 @@ export function OrganizationSettings() {
                 </Field>
               </div>
               <div className="grid gap-4 md:grid-cols-[1fr_10rem]">
+                <div data-tour={organizationTourTarget("logo")}>
                 <Field label="Logo">
                   <div className="grid gap-3">
                     <div className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center">
@@ -246,18 +263,23 @@ export function OrganizationSettings() {
                     </div>
                   </div>
                 </Field>
+                </div>
+                <div data-tour={organizationTourTarget("color")}>
                 <Field label="Primary color">
                   <Input required type="color" value={form.primaryColor} onChange={(event) => setForm((current) => ({ ...current, primaryColor: event.target.value }))} />
                 </Field>
+                </div>
               </div>
+              <div data-tour={organizationTourTarget("status")}>
               <Field label="Status">
                 <Select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as Organization["status"] }))}>
                   <option value="active">Active</option>
                   <option value="disabled">Disabled</option>
                 </Select>
               </Field>
+              </div>
               <div className="flex justify-end">
-                <Button disabled={saving} type="submit">{saving ? "Saving" : "Save organization"}</Button>
+                <Button data-tour={organizationTourTarget("save")} disabled={saving} type="submit">{saving ? "Saving" : "Save organization"}</Button>
               </div>
             </form>
           )}

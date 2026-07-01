@@ -1182,6 +1182,8 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
   const leadRef = db.doc(`organizations/${organizationId}/leads/${leadId}`);
   const clientRef = db.collection(`organizations/${organizationId}/clients`).doc();
   let convertedLead: DocumentData | undefined;
+  const actorName = String(memberData?.displayName ?? request.auth.token.email ?? request.auth.uid);
+  const actorEmail = String(memberData?.email ?? request.auth.token.email ?? "");
   await db.runTransaction(async (transaction) => {
     const lead = await transaction.get(leadRef);
     if (!lead.exists) {
@@ -1205,6 +1207,8 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
       clientType: "individual",
       createdAt: FieldValue.serverTimestamp(),
       createdBy: request.auth?.uid,
+      createdByEmail: actorEmail,
+      createdByName: actorName,
       email: data?.email ?? "",
       fullName: data?.fullName,
       isDeleted: false,
@@ -1215,11 +1219,15 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
       tags: data?.tags ?? [],
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: request.auth?.uid,
+      updatedByEmail: actorEmail,
+      updatedByName: actorName,
     });
     transaction.update(leadRef, {
       clientId: clientRef.id,
       convertedAt: FieldValue.serverTimestamp(),
       convertedBy: request.auth?.uid,
+      convertedByEmail: actorEmail,
+      convertedByName: actorName,
       lastContactAt: FieldValue.serverTimestamp(),
       stageHistory: [
         ...stageHistory,
@@ -1228,12 +1236,16 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
           from: data?.status ?? "new",
           note: "Lead converted to client after confirmed commitment.",
           to: "converted",
+          userEmail: actorEmail,
           userId: request.auth?.uid,
+          userName: actorName,
         },
       ],
       status: "converted",
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: request.auth?.uid,
+      updatedByEmail: actorEmail,
+      updatedByName: actorName,
     });
   });
 
@@ -1242,6 +1254,8 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
     branchId: convertedLead?.branchId ?? memberData?.branchId ?? "",
     createdAt: FieldValue.serverTimestamp(),
     createdBy: request.auth.uid,
+    createdByEmail: actorEmail,
+    createdByName: actorName,
     isDeleted: false,
     organizationId,
     referenceNumber: `ACT-${Date.now()}`,
@@ -1252,12 +1266,14 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
     type: "internalNote",
     updatedAt: FieldValue.serverTimestamp(),
     updatedBy: request.auth.uid,
+    updatedByEmail: actorEmail,
+    updatedByName: actorName,
   });
 
   await writeAuditLog({
     action: "lead.convert",
     actorId: request.auth.uid,
-    actorName: String(memberData?.displayName ?? request.auth.token.email ?? request.auth.uid),
+    actorName,
     branchId: String(convertedLead?.branchId ?? memberData?.branchId ?? ""),
     entityId: leadId,
     entityType: "lead",

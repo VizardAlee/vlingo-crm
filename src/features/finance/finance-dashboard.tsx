@@ -10,9 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { approvalTone, createReceiptNumber, dealPaymentSummary, dealTargetAmount, paymentStatusForAmount, paymentTotal, rentalBalance, revenueCategoryFromDeal, revenueCategoryFromLead, revenueCategoryFromPayment, revenueCategoryLabel } from "@/features/finance/finance-utils";
-import { canAccessAllBranches, hasPermission } from "@/lib/permissions";
+import { effectiveBranchId, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import type { Deal, FinanceApprovalStatus, FinanceCommission, FinanceExpense, FinancePayment, FinancePaymentSourceType, FinanceRevenueCategory, Lead, PaymentVerificationStatus, Property, PropertyUnit, RentalPaymentMethod, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
@@ -34,6 +35,20 @@ type RevenueSource = {
   sourceType: FinancePaymentSourceType;
   value: string;
 };
+
+function financeTourTarget(name: string) {
+  return `finance-${name}`;
+}
+
+const financeTourSteps: GuidedTourStep[] = [
+  { target: financeTourTarget("paymentSource"), title: "Revenue source", body: "Choose the deal, lead, rental, property, or unit this payment belongs to so receipt and reporting records stay connected." },
+  { target: financeTourTarget("payer"), title: "Payer", body: "Confirm the payer name that should appear on the payment record and printable receipt." },
+  { target: financeTourTarget("paymentAmount"), title: "Payment amount", body: "Enter the amount received. Finance status and balances use this value." },
+  { target: financeTourTarget("paymentMethod"), title: "Payment method", body: "Record how the money was received, plus bank or transaction reference where available." },
+  { target: financeTourTarget("paymentSubmit"), title: "Create receipt", body: "Create the receipt after confirming source, payer, amount, date, method, and reference." },
+  { target: financeTourTarget("expense"), title: "Expense record", body: "Use this form to classify business costs by category, amount, date, vendor, related record, and description." },
+  { target: financeTourTarget("commission"), title: "Commission tracking", body: "Use this form to track commission source, beneficiary, amount, due date, and calculation basis." },
+];
 
 const paymentMethods: RentalPaymentMethod[] = ["bankTransfer", "cash", "pos", "cheque", "onlinePayment", "other"];
 const expenseCategories = ["Repairs", "Utilities", "Marketing", "Legal", "Agency", "Inspection", "Office", "Transport", "Other"];
@@ -251,7 +266,8 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     setLoading(true);
     setError(null);
     try {
-      const branchConstraints = canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")];
+      const branchId = effectiveBranchId(member, activeBranchId);
+      const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
       const [nextDeals, nextLeads, nextRentals, nextProperties, nextUnits, nextPayments, nextExpenses, nextCommissions] = await Promise.all([
         safeList<FinanceDeal>(activeOrganizationId, "deals", branchConstraints),
         safeList<FinanceLead>(activeOrganizationId, "leads", branchConstraints),
@@ -743,6 +759,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
           <p className="mt-1 text-sm text-muted-foreground">Verify real estate, rental, solar, materials, services, and other income receipts alongside expenses and commissions.</p>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 md:mt-0 md:flex">
+          <GuidedTour className="h-10" storageKey="beacon-tour:finance:forms" steps={financeTourSteps} />
           <ButtonLink href="/rentals" variant="outline">Rental ledger</ButtonLink>
           <ButtonLink href="/reports" variant="secondary">Reports</ButtonLink>
         </div>
@@ -775,6 +792,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
           <CardHeader><CardTitle>Create Payment Receipt</CardTitle></CardHeader>
           <CardContent>
             <form className="grid gap-4" onSubmit={submitPayment}>
+              <div data-tour={financeTourTarget("paymentSource")}>
               <Field label="Revenue source">
                 <Select disabled={!canCreateFinance} value={paymentForm.source} onChange={(event) => {
                   const source = revenueSources.find((item) => item.value === event.target.value);
@@ -789,15 +807,21 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
                   {revenueSources.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
                 </Select>
               </Field>
+              </div>
+              <div data-tour={financeTourTarget("payer")}>
               <Field label="Payer name">
                 <Input disabled={!canCreateFinance} value={paymentForm.payerName} onChange={(event) => setPaymentForm((current) => ({ ...current, payerName: event.target.value }))} />
               </Field>
+              </div>
+              <div data-tour={financeTourTarget("paymentAmount")}>
               <Field label="Amount">
                 <Input disabled={!canCreateFinance} min={0} type="number" value={paymentForm.amount} onChange={(event) => setPaymentForm((current) => ({ ...current, amount: event.target.value }))} />
               </Field>
+              </div>
               <Field label="Payment date">
                 <Input disabled={!canCreateFinance} type="date" value={paymentForm.at} onChange={(event) => setPaymentForm((current) => ({ ...current, at: event.target.value }))} />
               </Field>
+              <div data-tour={financeTourTarget("paymentMethod")}>
               <Field label="Method">
                 <Select disabled={!canCreateFinance} value={paymentForm.method} onChange={(event) => setPaymentForm((current) => ({ ...current, method: event.target.value as RentalPaymentMethod }))}>
                   {paymentMethods.map((method) => <option key={method} value={method}>{titleCase(method)}</option>)}
@@ -806,10 +830,11 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
               <Field label="Bank/reference">
                 <Input disabled={!canCreateFinance} value={paymentForm.paymentReference} onChange={(event) => setPaymentForm((current) => ({ ...current, paymentReference: event.target.value }))} />
               </Field>
+              </div>
               <Field label="Note">
                 <Textarea disabled={!canCreateFinance} value={paymentForm.note} onChange={(event) => setPaymentForm((current) => ({ ...current, note: event.target.value }))} />
               </Field>
-              <Button className="h-11" disabled={!canCreateFinance || saving === "payment"} type="submit">
+              <Button className="h-11" data-tour={financeTourTarget("paymentSubmit")} disabled={!canCreateFinance || saving === "payment"} type="submit">
                 <Receipt className="h-4 w-4" />
                 {saving === "payment" ? "Creating" : "Create receipt"}
               </Button>
@@ -820,7 +845,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
         <Card>
           <CardHeader><CardTitle>Record Expense</CardTitle></CardHeader>
           <CardContent>
-            <form className="grid gap-4" onSubmit={submitExpense}>
+            <form className="grid gap-4" data-tour={financeTourTarget("expense")} onSubmit={submitExpense}>
               <Field label="Category">
                 <Select disabled={!canCreateFinance} value={expenseForm.category} onChange={(event) => setExpenseForm((current) => ({ ...current, category: event.target.value }))}>
                   {expenseCategories.map((category) => <option key={category} value={category}>{category}</option>)}
@@ -857,7 +882,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
         <Card>
           <CardHeader><CardTitle>Track Commission</CardTitle></CardHeader>
           <CardContent>
-            <form className="grid gap-4" onSubmit={submitCommission}>
+            <form className="grid gap-4" data-tour={financeTourTarget("commission")} onSubmit={submitCommission}>
               <Field label="Source">
                 <Select disabled={!canCreateFinance} value={commissionForm.source} onChange={(event) => {
                   const source = commissionSources.find((item) => item.value === event.target.value);

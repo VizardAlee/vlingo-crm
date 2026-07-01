@@ -134,6 +134,10 @@ function defaultSortKey<TData extends Record<string, unknown>>(data: TData[]) {
   return sortCandidateKeys.find((key) => keys.has(key)) ?? "";
 }
 
+function inputByLabel(row: Record<string, unknown>) {
+  return rawValue(row.createdByName) || rawValue(row.createdByEmail) || rawValue(row.createdBy);
+}
+
 export function CrmTable<TData extends Record<string, unknown>>({
   compactContactView,
   columns,
@@ -288,6 +292,7 @@ export function CrmTable<TData extends Record<string, unknown>>({
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{compactContactView.getName(row.original)}</p>
                   <p className="mt-1 truncate text-sm text-muted-foreground">{compactContactView.getPhone(row.original) || "No phone"}</p>
+                  {inputByLabel(row.original) ? <p className="mt-1 truncate text-xs text-muted-foreground">Input by {inputByLabel(row.original)}</p> : null}
                 </div>
                 <span className="shrink-0 text-xs font-medium text-primary">View</span>
               </Link>
@@ -298,6 +303,7 @@ export function CrmTable<TData extends Record<string, unknown>>({
             {pageRows.map((row) => {
               const cells = row.getVisibleCells();
               const [primaryCell, ...detailCells] = cells;
+              const creator = inputByLabel(row.original);
               return (
                 <article className="rounded-md border bg-white p-4 shadow-sm md:min-h-56" key={row.id}>
                   <div className="flex items-start justify-between gap-3">
@@ -306,7 +312,7 @@ export function CrmTable<TData extends Record<string, unknown>>({
                     </div>
                   </div>
                   <dl className="mt-4 grid gap-3">
-                    {detailCells.slice(0, 5).map((cell) => (
+                    {detailCells.filter((cell) => headerLabel(cell.column.columnDef) !== "Input by").slice(0, 5).map((cell) => (
                       <div className="grid grid-cols-[6.5rem_1fr] items-start gap-3 text-sm" key={cell.id}>
                         <dt className="text-muted-foreground">{headerLabel(cell.column.columnDef)}</dt>
                         <dd className={cn("min-w-0 text-right font-medium", cell.column.id.toLowerCase().includes("status") && "text-left")}>
@@ -314,6 +320,12 @@ export function CrmTable<TData extends Record<string, unknown>>({
                         </dd>
                       </div>
                     ))}
+                    {creator ? (
+                      <div className="grid grid-cols-[6.5rem_1fr] items-start gap-3 text-sm">
+                        <dt className="text-muted-foreground">Input by</dt>
+                        <dd className="min-w-0 truncate text-right font-medium">{creator}</dd>
+                      </div>
+                    ) : null}
                   </dl>
                 </article>
               );

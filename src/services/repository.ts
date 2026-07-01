@@ -26,6 +26,8 @@ export interface WriteContext {
   organizationId: string;
   branchId: string;
   userId: string;
+  userEmail?: string;
+  userName?: string;
 }
 
 function assertDb() {
@@ -104,8 +106,12 @@ export async function createOrgRecord<T extends Record<string, unknown>>(
     branchId: context.branchId,
     createdAt: serverTimestamp(),
     createdBy: context.userId,
+    createdByEmail: context.userEmail,
+    createdByName: context.userName,
     updatedAt: serverTimestamp(),
     updatedBy: context.userId,
+    updatedByEmail: context.userEmail,
+    updatedByName: context.userName,
     isDeleted: false,
     referenceNumber: data.referenceNumber ?? createReference(prefix),
   }) as WithFieldValue<DocumentData>;
@@ -131,6 +137,8 @@ export async function updateOrgRecord<T extends Record<string, unknown>>(
       organizationId: context.organizationId,
       updatedAt: serverTimestamp(),
       updatedBy: context.userId,
+      updatedByEmail: context.userEmail,
+      updatedByName: context.userName,
     }));
   } catch (error) {
     throw enrichFirestoreError(error, { action: "update", collectionName, organizationId: context.organizationId, path: `${orgCollectionPath(context.organizationId, collectionName)}/${id}` });

@@ -157,6 +157,18 @@ export function canAccessBranch(member: Member | null, branchId: string) {
   return canAccessAllBranches(member) || member.branchId === branchId;
 }
 
+export function effectiveBranchId(member: Member | null, activeBranchId?: string) {
+  if (!member || member.status !== "active") {
+    return activeBranchId ?? "";
+  }
+
+  if (canAccessAllBranches(member)) {
+    return activeBranchId || member.branchId || "";
+  }
+
+  return member.branchId || activeBranchId || "";
+}
+
 export function isAssignedOnlySalesUser(member: Member | null) {
   const roles = memberRoles(member);
   if (!roles.includes("salesExecutive")) {

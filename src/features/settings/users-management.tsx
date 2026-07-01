@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { canAccessAllBranches, hasPermission, memberRoles, rolePermissions } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
@@ -32,6 +33,19 @@ const defaultInvite = {
   phoneNumber: "",
   roles: ["salesExecutive"] as RoleName[],
 };
+
+function userTourTarget(name: string) {
+  return `users-${name}`;
+}
+
+const userTourSteps: GuidedTourStep[] = [
+  { target: userTourTarget("identity"), title: "User identity", body: "Enter the staff member's name, email, and optional phone number. The email is used for account setup." },
+  { target: userTourTarget("branch"), title: "Branch assignment", body: "Choose the user's home branch. Branch-limited users only work inside this branch." },
+  { target: userTourTarget("access"), title: "Branch access", body: "Choose whether this user is restricted to their own branch or can work across all branches." },
+  { target: userTourTarget("roles"), title: "Roles", body: "Assign one or more roles. The combined roles determine visible sections and allowed actions." },
+  { target: userTourTarget("invite"), title: "Generate setup link", body: "Generate a setup link that the admin can copy and share with the new user." },
+  { target: userTourTarget("memberEdit"), title: "Edit existing users", body: "Use user cards or table rows to update roles, branch, branch access, and account status." },
+];
 
 function firstAssignableRole(options: RoleName[]) {
   return options.includes("salesExecutive") ? "salesExecutive" : options[0] ?? "agent";
@@ -251,10 +265,13 @@ export function UsersManagement() {
           <h1 className="text-xl font-semibold md:text-2xl">Users</h1>
           <p className="mt-1 text-sm text-muted-foreground">Invite-only access, role assignment, branch assignment, and account status controls.</p>
         </div>
-        <Button className="mt-4 h-11 w-full md:mt-0 md:w-auto" onClick={loadUsers} type="button" variant="outline">
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="mt-4 grid gap-2 md:mt-0 md:flex">
+          <GuidedTour className="h-11 w-full md:w-auto" storageKey="beacon-tour:users" steps={userTourSteps} />
+          <Button className="h-11 w-full md:w-auto" onClick={loadUsers} type="button" variant="outline">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error ? <ErrorState message={error} /> : null}
@@ -266,7 +283,7 @@ export function UsersManagement() {
       ) : null}
 
       {generatedInvite ? (
-        <div className="grid gap-3 rounded-md border bg-white p-4 shadow-sm">
+        <div className="grid gap-3 rounded-md border bg-white p-4 shadow-sm" data-tour={userTourTarget("generatedLink")}>
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
               <Link2 className="h-5 w-5" />
@@ -292,6 +309,7 @@ export function UsersManagement() {
         </CardHeader>
         <CardContent>
           <form className="grid gap-4 lg:grid-cols-5" onSubmit={submitInvite}>
+            <div data-tour={userTourTarget("identity")}>
             <Field label="Full name">
               <Input required value={invite.displayName} onChange={(event) => setInvite((value) => ({ ...value, displayName: event.target.value }))} />
             </Field>
@@ -301,11 +319,15 @@ export function UsersManagement() {
             <Field label="Phone">
               <Input value={invite.phoneNumber} onChange={(event) => setInvite((value) => ({ ...value, phoneNumber: event.target.value }))} />
             </Field>
+            </div>
+            <div data-tour={userTourTarget("branch")}>
             <Field label="Branch">
               <Select required value={invite.branchId} onChange={(event) => setInvite((value) => ({ ...value, branchId: event.target.value }))}>
                 {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </Select>
             </Field>
+            </div>
+            <div data-tour={userTourTarget("access")}>
             <Field label="Branch access">
               <Select
                 disabled={!canGrantAllBranches}
@@ -316,7 +338,9 @@ export function UsersManagement() {
                 <option value="all">All branches</option>
               </Select>
             </Field>
+            </div>
             <div className="lg:col-span-5">
+              <div data-tour={userTourTarget("roles")}>
               <Field label="Roles">
                 <RoleSelector
                   onChange={(nextRoles) => setInvite((value) => ({ ...value, roles: normalizeAssignableRoleSelection(nextRoles, defaultAssignableRole, assignableRoles) }))}
@@ -324,9 +348,10 @@ export function UsersManagement() {
                   rolesValue={invite.roles}
                 />
               </Field>
+              </div>
             </div>
             <div className="lg:col-span-5 lg:flex lg:justify-end">
-              <Button className="h-11 w-full lg:w-auto" disabled={saving === "invite"} type="submit">
+              <Button className="h-11 w-full lg:w-auto" data-tour={userTourTarget("invite")} disabled={saving === "invite"} type="submit">
                 <MailPlus className="h-4 w-4" />
                 {saving === "invite" ? "Generating link" : "Invite and generate link"}
               </Button>
@@ -342,7 +367,7 @@ export function UsersManagement() {
           const protectedRole = hasUnassignableRole(item, assignableRoles);
           const canEditTarget = !isSelf && !protectedRole;
           return (
-            <Card key={item.id}>
+            <Card data-tour={userTourTarget("memberEdit")} key={item.id}>
               <CardContent className="grid gap-4 p-4">
                 <div className="flex items-start gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-md bg-primary/10 text-primary">
@@ -387,7 +412,7 @@ export function UsersManagement() {
         })}
       </div>
 
-      <Card className="hidden lg:block">
+      <Card className="hidden lg:block" data-tour={userTourTarget("memberEdit")}>
         <CardHeader>
           <CardTitle>Organization Members</CardTitle>
         </CardHeader>

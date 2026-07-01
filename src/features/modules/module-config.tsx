@@ -86,6 +86,11 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "preferredLocation", label: "Preferred location", type: "text" },
       { name: "preferredState", label: "Preferred state", type: "text" },
       { name: "preferredCity", label: "Preferred city", type: "text" },
+      { colSpan: "full", helpText: "Address, site label, landmark, or preferred area shown on the lead location map.", name: "geoAddress", label: "Map location label / address", section: "Map location", type: "text" },
+      { helpText: "Latitude for the lead's site or preferred location.", name: "geoLatitude", label: "Latitude", section: "Map location", type: "number" },
+      { helpText: "Longitude for the lead's site or preferred location.", name: "geoLongitude", label: "Longitude", section: "Map location", type: "number" },
+      { helpText: "GPS accuracy in meters when captured from the browser.", name: "geoAccuracy", label: "Accuracy (meters)", section: "Map location", type: "number" },
+      { helpText: "ISO timestamp from the last browser GPS capture.", name: "geoCapturedAt", label: "Location captured at", readOnly: true, section: "Map location", type: "text" },
       { name: "propertyType", label: "Property type", type: "text" },
       { name: "preferredPropertyCategory", label: "Preferred property category", type: "text" },
       { name: "preferredBedrooms", label: "Preferred bedrooms", type: "number" },
@@ -481,6 +486,10 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       return <Badge tone={statusTone(status)}>{titleCase(status)}</Badge>;
     },
   } satisfies ColumnDef<Record<string, unknown>>;
+  const inputByColumn = {
+    header: "Input by",
+    cell: ({ row }) => String(row.original.createdByName ?? row.original.createdByEmail ?? row.original.createdBy ?? "Not recorded"),
+  } satisfies ColumnDef<Record<string, unknown>>;
 
   if (moduleKey === "leads") {
     return [
@@ -490,6 +499,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Source", cell: ({ row }) => String(row.original.source ?? "") },
       { header: "Offering", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
       { header: "Interest", cell: ({ row }) => titleCase(String(row.original.transactionInterest ?? "")) },
+      inputByColumn,
       statusColumn,
     ];
   }
@@ -500,6 +510,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Client", accessorKey: "fullName" },
       { header: "Type", cell: ({ row }) => titleCase(String(row.original.clientType ?? "")) },
       { header: "Phone", cell: ({ row }) => <WhatsAppPhoneLink displayNumber={String(row.original.phoneNumber ?? "")} phoneNumber={String(row.original.phoneNumber ?? "")} /> },
+      inputByColumn,
       statusColumn,
     ];
   }
@@ -519,6 +530,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Offering", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
       { header: "Value", cell: ({ row }) => formatCurrency(Number(row.original.agreedAmount ?? row.original.offerAmount ?? row.original.depositAmount ?? row.original.reservationAmount ?? 0)) },
       { header: "Owner", cell: ({ row }) => String(row.original.dealOwnerName ?? row.original.dealOwnerEmail ?? "Unassigned") },
+      inputByColumn,
       { header: "Fulfillment", cell: ({ row }) => titleCase(String(row.original.fulfillmentStatus ?? row.original.proposalStatus ?? "notStarted")) },
       statusColumn,
     ];

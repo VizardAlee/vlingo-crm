@@ -9,7 +9,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingState, ErrorState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { effectiveBranchId, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
 
@@ -25,7 +25,7 @@ export default function DashboardPage() {
     }
 
     const assignedTo = user && !hasPermission(member, "leads.readAll") ? user.uid : undefined;
-    const branchId = canAccessAllBranches(member) ? undefined : activeBranchId || member?.branchId;
+    const branchId = effectiveBranchId(member, activeBranchId);
     getDashboardMetrics(activeOrganizationId, { assignedTo, branchId })
       .then(setMetrics)
       .catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Unable to load dashboard."));

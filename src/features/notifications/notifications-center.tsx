@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
-import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { effectiveBranchId, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { ensureUserNotifications, listUserNotifications, markNotificationRead, markNotificationsRead, type NotificationDraft } from "@/services/notifications";
 import { listOrgRecords } from "@/services/repository";
@@ -181,7 +181,8 @@ export function NotificationsCenter() {
     try {
       const canReadAllLeads = hasPermission(member, "leads.readAll");
       const canReadElevatedTasks = hasAnyPermission(member, ["dashboard.viewExecutive", "users.manage"]);
-      const branchConstraints = canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")];
+      const branchId = effectiveBranchId(member, activeBranchId);
+      const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
       const taskConstraints = canReadElevatedTasks ? branchConstraints : [...branchConstraints, where("assignedTo", "==", user.uid)];
       const leadConstraints = canReadAllLeads ? branchConstraints : [...branchConstraints, where("assignedTo", "==", user.uid)];
       const [tasks, leads, rentals, activities] = await Promise.all([

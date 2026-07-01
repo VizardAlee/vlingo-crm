@@ -32,7 +32,9 @@ export function GuidedTour({
   const [activeIndex, setActiveIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
-  const activeStep = steps[activeIndex];
+  const activeIndexLimit = Math.max(steps.length - 1, 0);
+  const safeActiveIndex = Math.min(activeIndex, activeIndexLimit);
+  const activeStep = steps[safeActiveIndex];
   const completed = useMemo(() => {
     if (typeof window === "undefined") {
       return true;
@@ -105,12 +107,12 @@ export function GuidedTour({
   }
 
   function goNext() {
-    if (activeIndex >= steps.length - 1) {
+    if (safeActiveIndex >= steps.length - 1) {
       closeTour(true);
       return;
     }
 
-    setActiveIndex((index) => index + 1);
+    setActiveIndex((index) => Math.min(index + 1, steps.length - 1));
   }
 
   const viewportHeight = typeof window === "undefined" ? 720 : window.innerHeight;
@@ -149,7 +151,7 @@ export function GuidedTour({
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase text-primary">Step {activeIndex + 1} of {steps.length}</p>
+                <p className="text-xs font-semibold uppercase text-primary">Step {safeActiveIndex + 1} of {steps.length}</p>
                 <h2 className="mt-1 text-base font-semibold" id="guided-tour-title">{activeStep.title}</h2>
               </div>
               <Button aria-label="Close guide" onClick={() => closeTour(false)} size="icon" type="button" variant="ghost">
@@ -160,16 +162,16 @@ export function GuidedTour({
             <div className="mt-4 flex items-center justify-between gap-3">
               <div className="flex gap-1.5">
                 {steps.map((step, index) => (
-                  <span className={cn("h-1.5 w-5 rounded-full", index === activeIndex ? "bg-primary" : "bg-muted")} key={`${step.target}-${index}`} />
+                  <span className={cn("h-1.5 w-5 rounded-full", index === safeActiveIndex ? "bg-primary" : "bg-muted")} key={`${step.target}-${index}`} />
                 ))}
               </div>
               <div className="flex gap-2">
-                <Button disabled={activeIndex === 0} onClick={() => setActiveIndex((index) => Math.max(0, index - 1))} size="sm" type="button" variant="outline">
+                <Button disabled={safeActiveIndex === 0} onClick={() => setActiveIndex((index) => Math.max(0, Math.min(index, steps.length - 1) - 1))} size="sm" type="button" variant="outline">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <Button onClick={goNext} size="sm" type="button">
-                  {activeIndex >= steps.length - 1 ? <CheckCircle2 className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
-                  {activeIndex >= steps.length - 1 ? "Done" : "Next"}
+                  {safeActiveIndex >= steps.length - 1 ? <CheckCircle2 className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+                  {safeActiveIndex >= steps.length - 1 ? "Done" : "Next"}
                 </Button>
               </div>
             </div>

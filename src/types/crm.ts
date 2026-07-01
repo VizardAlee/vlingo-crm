@@ -68,8 +68,12 @@ export interface EntityMetadata {
   branchId: string;
   createdAt?: Date;
   createdBy: string;
+  createdByEmail?: string;
+  createdByName?: string;
   updatedAt?: Date;
   updatedBy: string;
+  updatedByEmail?: string;
+  updatedByName?: string;
   status: string;
   assignedTo?: string;
   teamId?: string;
@@ -139,6 +143,11 @@ export interface Lead extends EntityMetadata {
   preferredLocation?: string;
   preferredState?: string;
   preferredCity?: string;
+  geoAddress?: string;
+  geoLatitude?: number;
+  geoLongitude?: number;
+  geoAccuracy?: number;
+  geoCapturedAt?: string;
   propertyType?: string;
   preferredPropertyCategory?: string;
   preferredBedrooms?: number;

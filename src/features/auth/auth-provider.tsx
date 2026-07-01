@@ -5,10 +5,12 @@ import { doc, getDoc } from "firebase/firestore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { auth, db, initializeBeaconAppCheck } from "@/lib/firebase/client";
 import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
+import { canAccessAllBranches } from "@/lib/permissions";
 import type { Member, RoleName } from "@/types/crm";
 
 const defaultOrganizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID ?? "beacon-corporate-realty";
 const defaultBranchId = process.env.NEXT_PUBLIC_DEFAULT_BRANCH_ID ?? "head-office";
+const activeBranchStorageKey = `beacon:${defaultOrganizationId}:activeBranchId`;
 
 interface AuthState {
   activeBranchId: string;
@@ -44,6 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(Boolean(auth));
   const [activeBranchId, setActiveBranchId] = useState(defaultBranchId);
 
+  const updateActiveBranchId = useCallback((branchId: string) => {
+    setActiveBranchId(branchId);
+    if (typeof window !== "undefined" && branchId) {
+      window.localStorage.setItem(activeBranchStorageKey, branchId);
+    }
+  }, []);
+
   useEffect(() => {
     initializeBeaconAppCheck();
 
@@ -61,7 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const nextMember = snapshot.exists() ? normalizeMember(snapshot.id, snapshot.data()) : null;
           setMember(nextMember);
           setMemberLoadError(nextMember ? null : `No member document found at organizations/${defaultOrganizationId}/members/${nextUser.uid}.`);
-          setActiveBranchId(nextMember?.branchId ?? defaultBranchId);
+          const storedBranchId = typeof window !== "undefined" ? window.localStorage.getItem(activeBranchStorageKey) : null;
+          setActiveBranchId(canAccessAllBranches(nextMember) ? storedBranchId || nextMember?.branchId || defaultBranchId : nextMember?.branchId ?? defaultBranchId);
         } catch (error) {
           const nextError = enrichFirestoreError(error, {
             action: "read",
@@ -115,12 +125,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       member,
       memberLoadError,
       resetPassword,
-      setActiveBranchId,
+      setActiveBranchId: updateActiveBranchId,
       signIn,
       signOutUser,
       user,
     }),
-    [activeBranchId, loading, member, memberLoadError, resetPassword, signIn, signOutUser, user],
+    [activeBranchId, loading, member, memberLoadError, resetPassword, signIn, signOutUser, updateActiveBranchId, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

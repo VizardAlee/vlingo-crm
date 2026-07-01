@@ -11,9 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
+import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { documentAccessPermissions } from "@/components/layout/navigation";
-import { canAccessAllBranches, hasAnyPermission } from "@/lib/permissions";
+import { effectiveBranchId, hasAnyPermission } from "@/lib/permissions";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, uploadDocument, type DocumentRecord, type RelatedEntityType } from "@/services/documents";
 import { listOrgRecords } from "@/services/repository";
@@ -43,6 +44,19 @@ const relatedConfigs: RelatedConfig[] = [
   { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", permissions: ["properties.read"], type: "owner" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", permissions: ["properties.read"], type: "developer" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", permissions: ["properties.read"], type: "management" },
+];
+
+function documentTourTarget(name: string) {
+  return `documents-${name}`;
+}
+
+const documentTourSteps: GuidedTourStep[] = [
+  { target: documentTourTarget("title"), title: "Document title", body: "Give the file a clear title so the team can recognize it in lists and related records." },
+  { target: documentTourTarget("category"), title: "Category", body: "Choose the document category so files stay organized by purpose." },
+  { target: documentTourTarget("relatedType"), title: "Related type", body: "Choose what this document belongs to, such as a lead, client, deal, property, unit, tenancy, task, or offering." },
+  { target: documentTourTarget("relatedRecord"), title: "Related record", body: "Select the exact record so the document appears on the correct detail page and workflow." },
+  { target: documentTourTarget("file"), title: "File", body: "Choose the file from your computer. The upload keeps branch and user metadata." },
+  { target: documentTourTarget("upload"), title: "Upload", body: "Upload after checking the title, category, related record, and file." },
 ];
 
 function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
@@ -162,7 +176,7 @@ export function DocumentsManagement() {
   const [success, setSuccess] = useState<string | null>(null);
   const allowedRelatedConfigs = useMemo(() => relatedConfigs.filter((config) => hasAnyPermission(member, config.permissions)), [member]);
   const branchConstraints = useMemo<QueryConstraint[]>(() => (
-    canAccessAllBranches(member) ? [] : [where("branchId", "==", activeBranchId || member?.branchId || "")]
+    effectiveBranchId(member, activeBranchId) ? [where("branchId", "==", effectiveBranchId(member, activeBranchId))] : []
   ), [activeBranchId, member]);
   const canUseDocuments = hasAnyPermission(member, documentAccessPermissions);
 
@@ -292,10 +306,13 @@ export function DocumentsManagement() {
           <h1 className="text-xl font-semibold md:text-2xl">Documents</h1>
           <p className="mt-1 text-sm text-muted-foreground">Upload, categorize, and attach files to operational records.</p>
         </div>
-        <Button className="mt-4 h-11 w-full md:mt-0 md:w-auto" onClick={loadDocuments} type="button" variant="outline">
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="mt-4 grid gap-2 md:mt-0 md:flex">
+          <GuidedTour className="h-11 w-full md:w-auto" storageKey="beacon-tour:documents:upload" steps={documentTourSteps} />
+          <Button className="h-11 w-full md:w-auto" onClick={loadDocuments} type="button" variant="outline">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error ? <ErrorState message={error} /> : null}
@@ -312,9 +329,12 @@ export function DocumentsManagement() {
         </CardHeader>
         <CardContent>
           <form className="grid gap-4 lg:grid-cols-4" onSubmit={submitUpload}>
+            <div data-tour={documentTourTarget("title")}>
             <Field label="Title">
               <Input required value={title} onChange={(event) => setTitle(event.target.value)} />
             </Field>
+            </div>
+            <div data-tour={documentTourTarget("category")}>
             <Field label="Category">
               <Select value={category} onChange={(event) => setCategory(event.target.value)}>
                 <option value="general">General</option>
@@ -325,6 +345,8 @@ export function DocumentsManagement() {
                 <option value="inspection">Inspection</option>
               </Select>
             </Field>
+            </div>
+            <div data-tour={documentTourTarget("relatedType")}>
             <Field label="Related type">
               <Select value={relatedEntityType} onChange={(event) => {
                 const nextType = event.target.value;
@@ -338,6 +360,8 @@ export function DocumentsManagement() {
                 {allowedRelatedConfigs.map((config) => <option key={config.type} value={config.type}>{config.label}</option>)}
               </Select>
             </Field>
+            </div>
+            <div data-tour={documentTourTarget("relatedRecord")}>
             <Field label="Related record" error={relatedError ?? undefined}>
               <Select disabled={!relatedEntityType || relatedLoading} value={relatedEntityId} onChange={(event) => setRelatedEntityId(event.target.value)}>
                 <option value="">{relatedLoading ? "Loading records" : relatedEntityType ? "Select record" : "Select related type first"}</option>
@@ -345,13 +369,14 @@ export function DocumentsManagement() {
                 {relatedOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </Select>
             </Field>
-            <div className="lg:col-span-3">
+            </div>
+            <div className="lg:col-span-3" data-tour={documentTourTarget("file")}>
               <Field label="File">
                 <Input required type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
               </Field>
             </div>
             <div className="lg:flex lg:items-end lg:justify-end">
-              <Button className="h-11 w-full lg:w-auto" disabled={saving} type="submit">
+              <Button className="h-11 w-full lg:w-auto" data-tour={documentTourTarget("upload")} disabled={saving} type="submit">
                 <Upload className="h-4 w-4" />
                 {saving ? "Uploading" : "Upload"}
               </Button>

@@ -13,6 +13,7 @@ import {
   ListTodo,
   Mail,
   Megaphone,
+  MapPinned,
   Package,
   Receipt,
   Settings,
@@ -84,6 +85,7 @@ export const routeAccessRules: RouteAccessRule[] = [
   { exact: "/notifications", permissions: notificationAccessPermissions },
 
   { exact: "/leads/new", permissions: ["leads.create"] },
+  { exact: "/leads/map", permissions: ["leads.readAssigned", "leads.readAll"] },
   { pattern: /^\/leads\/[^/]+\/edit$/, permissions: ["leads.updateAssigned", "leads.assign"] },
   { pattern: /^\/leads(\/[^/]+)?$/, permissions: ["leads.readAssigned", "leads.readAll"] },
 
@@ -156,6 +158,7 @@ export const navigation: NavSection[] = [
     label: "CRM",
     items: [
       { href: "/leads", icon: Users, label: "Leads", permissions: ["leads.readAssigned", "leads.readAll"] },
+      { href: "/leads/map", icon: MapPinned, label: "Lead Locations", permissions: ["leads.readAssigned", "leads.readAll"] },
       { href: "/clients", icon: ClipboardCheck, label: "Clients", permissions: ["clients.read"] },
       { href: "/deals", icon: Handshake, label: "Deals", permissions: ["deals.read"] },
       { href: "/activities", icon: Activity, label: "Activities", permissions: ["activities.read"] },
