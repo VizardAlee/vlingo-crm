@@ -21,6 +21,87 @@ const defaultOrganizationForm = {
   status: "active" as Organization["status"],
 };
 
+function componentToHex(value: number) {
+  return Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
+}
+
+function rgbToHex(red: number, green: number, blue: number) {
+  return `#${componentToHex(red)}${componentToHex(green)}${componentToHex(blue)}`;
+}
+
+function saturationFor(red: number, green: number, blue: number) {
+  const max = Math.max(red, green, blue) / 255;
+  const min = Math.min(red, green, blue) / 255;
+  if (max === min) {
+    return 0;
+  }
+
+  const lightness = (max + min) / 2;
+  return lightness > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+}
+
+function extractLogoPrimaryColor(file: File) {
+  return new Promise<string | null>((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const size = 64;
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        if (!context) {
+          resolve(null);
+          return;
+        }
+
+        context.clearRect(0, 0, size, size);
+        context.drawImage(image, 0, 0, size, size);
+        const pixels = context.getImageData(0, 0, size, size).data;
+        const buckets = new Map<string, { blue: number; count: number; green: number; red: number; score: number }>();
+
+        for (let index = 0; index < pixels.length; index += 4) {
+          const red = pixels[index] ?? 0;
+          const green = pixels[index + 1] ?? 0;
+          const blue = pixels[index + 2] ?? 0;
+          const alpha = pixels[index + 3] ?? 0;
+          const brightness = (red + green + blue) / 3;
+          const saturation = saturationFor(red, green, blue);
+
+          if (alpha < 180 || brightness > 238 || brightness < 35 || saturation < 0.22) {
+            continue;
+          }
+
+          const bucketRed = Math.round(red / 24) * 24;
+          const bucketGreen = Math.round(green / 24) * 24;
+          const bucketBlue = Math.round(blue / 24) * 24;
+          const key = `${bucketRed},${bucketGreen},${bucketBlue}`;
+          const existing = buckets.get(key) ?? { blue: 0, count: 0, green: 0, red: 0, score: 0 };
+          existing.blue += blue;
+          existing.count += 1;
+          existing.green += green;
+          existing.red += red;
+          existing.score += saturation * Math.min(1, Math.abs(brightness - 128) / 128 + 0.55);
+          buckets.set(key, existing);
+        }
+
+        const dominant = Array.from(buckets.values()).sort((left, right) => right.count * right.score - left.count * left.score)[0];
+        resolve(dominant ? rgbToHex(dominant.red / dominant.count, dominant.green / dominant.count, dominant.blue / dominant.count) : null);
+      } catch {
+        resolve(null);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(null);
+    };
+    image.src = objectUrl;
+  });
+}
+
 export function OrganizationSettings() {
   const { activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
@@ -101,9 +182,14 @@ export function OrganizationSettings() {
     setUploadingLogo(true);
     setError(null);
     try {
+      const extractedColor = await extractLogoPrimaryColor(file);
       const logoUrl = await uploadOrganizationLogo({ file, organizationId: activeOrganizationId });
-      setForm((current) => ({ ...current, logoUrl }));
-      toast({ title: "Logo uploaded", description: "Review the preview, then save the organization settings.", variant: "success" });
+      setForm((current) => ({ ...current, logoUrl, primaryColor: extractedColor ?? current.primaryColor }));
+      toast({
+        title: "Logo uploaded",
+        description: extractedColor ? "Primary color was detected from the logo. Review it, then save the organization settings." : "Review the preview, then save the organization settings.",
+        variant: "success",
+      });
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to upload organization logo.";
       setError(message);
@@ -155,7 +241,7 @@ export function OrganizationSettings() {
                       <div className="grid flex-1 gap-2">
                         <Input value={form.logoUrl} onChange={(event) => setForm((current) => ({ ...current, logoUrl: event.target.value }))} />
                         <Input accept="image/*" disabled={uploadingLogo} type="file" onChange={onLogoSelected} />
-                        <p className="text-xs text-muted-foreground">{uploadingLogo ? "Uploading logo..." : "Upload a PNG, JPG, SVG, or WebP image up to 2 MB, or paste a hosted logo URL."}</p>
+                        <p className="text-xs text-muted-foreground">{uploadingLogo ? "Uploading logo and detecting brand color..." : "Upload a PNG, JPG, SVG, or WebP image up to 2 MB, or paste a hosted logo URL."}</p>
                       </div>
                     </div>
                   </div>

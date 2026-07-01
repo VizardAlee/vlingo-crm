@@ -33,6 +33,10 @@ const defaultInvite = {
   roles: ["salesExecutive"] as RoleName[],
 };
 
+function firstAssignableRole(options: RoleName[]) {
+  return options.includes("salesExecutive") ? "salesExecutive" : options[0] ?? "agent";
+}
+
 function canAssignRole(currentMember: Member | null, role: RoleName) {
   const permissions = rolePermissions[role];
   const roleIsPrivileged = role === "superAdmin" || role === "managingDirector" || permissions.some((permission) => ["users.manage", "roles.manage"].includes(permission));
@@ -43,8 +47,18 @@ function displayRoles(member: Member) {
   return memberRoles(member).map((role) => titleCase(role)).join(", ");
 }
 
+function hasUnassignableRole(target: Member, options: RoleName[]) {
+  return memberRoles(target).some((role) => !options.includes(role));
+}
+
 function normalizeRoleSelection(rolesValue: RoleName[], fallback: RoleName) {
   return rolesValue.length ? rolesValue : [fallback];
+}
+
+function normalizeAssignableRoleSelection(rolesValue: RoleName[], fallback: RoleName, options: RoleName[]) {
+  const allowed = rolesValue.filter((role) => options.includes(role));
+  const safeFallback = options.includes(fallback) ? fallback : firstAssignableRole(options);
+  return normalizeRoleSelection(allowed, safeFallback);
 }
 
 function toggleRole(rolesValue: RoleName[], role: RoleName) {
@@ -98,6 +112,7 @@ export function UsersManagement() {
 
   const assignableRoles = useMemo(() => roles.filter((role) => canAssignRole(member, role)), [member]);
   const canGrantAllBranches = hasPermission(member, "roles.manage") || canAccessAllBranches(member);
+  const defaultAssignableRole = firstAssignableRole(assignableRoles);
 
   const loadUsers = useCallback(async () => {
     setError(null);
@@ -133,7 +148,8 @@ export function UsersManagement() {
     try {
       const payload: InviteUserInput = {
         ...invite,
-        role: invite.roles[0],
+        roles: normalizeAssignableRoleSelection(invite.roles, defaultAssignableRole, assignableRoles),
+        role: normalizeAssignableRoleSelection(invite.roles, defaultAssignableRole, assignableRoles)[0],
         organizationId: activeOrganizationId,
       };
       const result = await inviteOrganizationMember(payload);
@@ -179,7 +195,8 @@ export function UsersManagement() {
     setError(null);
     setSuccess(null);
     try {
-      await updateOrganizationMember({ ...next, role: next.roles[0], organizationId: activeOrganizationId, uid: target.id });
+      const nextRoles = normalizeAssignableRoleSelection(next.roles, target.role, assignableRoles);
+      await updateOrganizationMember({ ...next, roles: nextRoles, role: nextRoles[0], organizationId: activeOrganizationId, uid: target.id });
       const message = `${target.displayName} was updated.`;
       setSuccess(message);
       toast({ title: "Member updated", description: message, variant: "success" });
@@ -302,7 +319,7 @@ export function UsersManagement() {
             <div className="lg:col-span-5">
               <Field label="Roles">
                 <RoleSelector
-                  onChange={(nextRoles) => setInvite((value) => ({ ...value, roles: normalizeRoleSelection(nextRoles, "salesExecutive") }))}
+                  onChange={(nextRoles) => setInvite((value) => ({ ...value, roles: normalizeAssignableRoleSelection(nextRoles, defaultAssignableRole, assignableRoles) }))}
                   options={assignableRoles}
                   rolesValue={invite.roles}
                 />
@@ -322,6 +339,8 @@ export function UsersManagement() {
         {members.map((item) => {
           const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item) };
           const isSelf = item.id === user?.uid;
+          const protectedRole = hasUnassignableRole(item, assignableRoles);
+          const canEditTarget = !isSelf && !protectedRole;
           return (
             <Card key={item.id}>
               <CardContent className="grid gap-4 p-4">
@@ -337,26 +356,27 @@ export function UsersManagement() {
                 </div>
                 <div className="grid gap-3 text-sm">
                   <Field label="Roles">
-                    <RoleSelector disabled={isSelf} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeRoleSelection(nextRoles, item.role) } }))} options={assignableRoles} rolesValue={edit.roles} />
+                    <RoleSelector disabled={!canEditTarget} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeAssignableRoleSelection(nextRoles, item.role, assignableRoles) } }))} options={protectedRole ? memberRoles(item) : assignableRoles} rolesValue={protectedRole ? memberRoles(item) : edit.roles.filter((role) => assignableRoles.includes(role))} />
+                    {protectedRole ? <p className="text-xs text-muted-foreground">Requires role management access.</p> : null}
                   </Field>
                   <Field label="Branch">
-                    <Select value={edit.branchId} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchId: event.target.value } }))}>
+                    <Select disabled={!canEditTarget} value={edit.branchId} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchId: event.target.value } }))}>
                       {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                     </Select>
                   </Field>
                   <Field label="Branch access">
-                    <Select disabled={!canGrantAllBranches || isSelf} value={edit.branchAccess} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchAccess: event.target.value as BranchAccess } }))}>
+                    <Select disabled={!canGrantAllBranches || !canEditTarget} value={edit.branchAccess} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchAccess: event.target.value as BranchAccess } }))}>
                       <option value="own">Own branch only</option>
                       <option value="all">All branches</option>
                     </Select>
                   </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button disabled={saving === `update-${item.id}` || isSelf} onClick={() => submitMemberUpdate(item)} type="button" variant="outline">
+                  <Button disabled={saving === `update-${item.id}` || !canEditTarget} onClick={() => submitMemberUpdate(item)} type="button" variant="outline">
                     <Pencil className="h-4 w-4" />
                     Save
                   </Button>
-                  <Button disabled={saving === `status-${item.id}` || isSelf} onClick={() => toggleStatus(item)} type="button" variant={item.status === "disabled" ? "secondary" : "danger"}>
+                  <Button disabled={saving === `status-${item.id}` || !canEditTarget} onClick={() => toggleStatus(item)} type="button" variant={item.status === "disabled" ? "secondary" : "danger"}>
                     {item.status === "disabled" ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
                     {item.status === "disabled" ? "Reactivate" : "Disable"}
                   </Button>
@@ -388,6 +408,8 @@ export function UsersManagement() {
               {members.map((item) => {
                 const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item) };
                 const isSelf = item.id === user?.uid;
+                const protectedRole = hasUnassignableRole(item, assignableRoles);
+                const canEditTarget = !isSelf && !protectedRole;
                 return (
                   <tr className="border-t" key={item.id}>
                     <td className="px-4 py-3">
@@ -396,17 +418,17 @@ export function UsersManagement() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="grid w-64 gap-2">
-                        <RoleSelector disabled={isSelf} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeRoleSelection(nextRoles, item.role) } }))} options={assignableRoles} rolesValue={edit.roles} />
-                        <p className="text-xs text-muted-foreground">{displayRoles(item)}</p>
+                        <RoleSelector disabled={!canEditTarget} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeAssignableRoleSelection(nextRoles, item.role, assignableRoles) } }))} options={protectedRole ? memberRoles(item) : assignableRoles} rolesValue={protectedRole ? memberRoles(item) : edit.roles.filter((role) => assignableRoles.includes(role))} />
+                        <p className="text-xs text-muted-foreground">{protectedRole ? "Requires role management access." : displayRoles(item)}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Select className="w-44" value={edit.branchId} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchId: event.target.value } }))}>
+                      <Select className="w-44" disabled={!canEditTarget} value={edit.branchId} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchId: event.target.value } }))}>
                         {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                       </Select>
                     </td>
                     <td className="px-4 py-3">
-                      <Select className="w-40" disabled={!canGrantAllBranches || isSelf} value={edit.branchAccess} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchAccess: event.target.value as BranchAccess } }))}>
+                      <Select className="w-40" disabled={!canGrantAllBranches || !canEditTarget} value={edit.branchAccess} onChange={(event) => setEditing((value) => ({ ...value, [item.id]: { ...edit, branchAccess: event.target.value as BranchAccess } }))}>
                         <option value="own">Own branch only</option>
                         <option value="all">All branches</option>
                       </Select>
@@ -415,11 +437,11 @@ export function UsersManagement() {
                     <td className="px-4 py-3 text-muted-foreground">{formatDate(item.updatedAt ?? item.createdAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <Button disabled={saving === `update-${item.id}` || isSelf} onClick={() => submitMemberUpdate(item)} size="sm" type="button" variant="outline">
+                        <Button disabled={saving === `update-${item.id}` || !canEditTarget} onClick={() => submitMemberUpdate(item)} size="sm" type="button" variant="outline">
                           <ShieldCheck className="h-4 w-4" />
                           Save
                         </Button>
-                        <Button disabled={saving === `status-${item.id}` || isSelf} onClick={() => toggleStatus(item)} size="sm" type="button" variant={item.status === "disabled" ? "secondary" : "danger"}>
+                        <Button disabled={saving === `status-${item.id}` || !canEditTarget} onClick={() => toggleStatus(item)} size="sm" type="button" variant={item.status === "disabled" ? "secondary" : "danger"}>
                           {item.status === "disabled" ? "Reactivate" : "Disable"}
                         </Button>
                       </div>
