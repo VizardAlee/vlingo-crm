@@ -202,6 +202,30 @@ service cloud.firestore {
         allow create, update, delete: if false;
       }
 
+      match /internalAiGuideUsage/{userId}/days/{dayId} {
+        allow get: if isActiveMember(orgId) && userId == request.auth.uid;
+        allow list: if false;
+        allow create: if isActiveMember(orgId) &&
+          userId == request.auth.uid &&
+          dayId == request.resource.data.day &&
+          request.resource.data.organizationId == orgId &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.day is string &&
+          request.resource.data.count == 1;
+        allow update: if isActiveMember(orgId) &&
+          userId == request.auth.uid &&
+          dayId == resource.data.day &&
+          dayId == request.resource.data.day &&
+          resource.data.organizationId == orgId &&
+          resource.data.userId == request.auth.uid &&
+          resource.data.day is string &&
+          request.resource.data.organizationId == orgId &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.day == resource.data.day &&
+          request.resource.data.count == resource.data.count + 1;
+        allow delete: if false;
+      }
+
       match /roles/{roleId} {
         allow read: if isActiveMember(orgId);
         allow write: if hasPermission(orgId, "roles.manage");

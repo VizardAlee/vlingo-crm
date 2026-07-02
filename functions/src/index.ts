@@ -540,16 +540,35 @@ async function getOrCreateUser(email: string, displayName: string): Promise<User
   }
 }
 
-function inviteUrl() {
-  if (!appBaseUrl) {
+function normalizedAppBaseUrl(origin?: string) {
+  const candidate = appBaseUrl || origin || "";
+  if (!candidate) {
     return undefined;
   }
 
-  return `${appBaseUrl.replace(/\/$/, "")}/invite/setup`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return undefined;
+    }
+
+    return url.origin;
+  } catch {
+    return undefined;
+  }
 }
 
-function appInviteSetupLink(firebaseLink: string, email: string) {
-  const setupUrl = inviteUrl();
+function inviteUrl(origin?: string) {
+  const baseUrl = normalizedAppBaseUrl(origin);
+  if (!baseUrl) {
+    return undefined;
+  }
+
+  return `${baseUrl}/invite/setup`;
+}
+
+function appInviteSetupLink(firebaseLink: string, email: string, origin?: string) {
+  const setupUrl = inviteUrl(origin);
   if (!setupUrl) {
     return firebaseLink;
   }
@@ -572,20 +591,21 @@ function appInviteSetupLink(firebaseLink: string, email: string) {
   }
 }
 
-async function generateInviteLink(email: string) {
-  const continueUrl = inviteUrl();
+async function generateInviteLinkForOrigin(email: string, origin?: string) {
+  const continueUrl = inviteUrl(origin);
   if (!continueUrl) {
     return auth.generatePasswordResetLink(email);
   }
 
   try {
     const firebaseLink = await auth.generatePasswordResetLink(email, { url: continueUrl });
-    return appInviteSetupLink(firebaseLink, email);
+    return appInviteSetupLink(firebaseLink, email, origin);
   } catch (error) {
     const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
     if (code === "auth/unauthorized-continue-uri") {
-      console.warn("APP_BASE_URL is not authorized in Firebase Authentication; generated invite link without continue URL.");
-      return auth.generatePasswordResetLink(email);
+      console.warn("Invite continue URL is not authorized in Firebase Authentication; generated a setup link from the default Firebase action code.");
+      const firebaseLink = await auth.generatePasswordResetLink(email);
+      return appInviteSetupLink(firebaseLink, email, origin);
     }
 
     throw error;
@@ -668,7 +688,8 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
     };
 
     await memberRef.set(payload, { merge: true });
-    const setupLink = await generateInviteLink(email);
+    const origin = typeof request.rawRequest.headers.origin === "string" ? request.rawRequest.headers.origin : undefined;
+    const setupLink = await generateInviteLinkForOrigin(email, origin);
 
     await writeAuditLog({
       action: previous.exists ? "member.updateInvite" : "member.invite",

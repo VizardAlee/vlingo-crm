@@ -52,13 +52,13 @@ gcloud projects add-iam-policy-binding beacon-operations-crm \
   --condition=None
 ```
 
-7. Configure invite setup links in the Functions runtime environment. The invite workflow provisions the user first, then generates a Firebase password setup link that admins can copy and share manually. `APP_BASE_URL` is optional, but recommended so the setup flow returns to the app:
+7. Configure invite setup links in the Functions runtime environment. The invite workflow provisions the user first, then generates a CRM password setup link that admins can copy and share manually. `APP_BASE_URL` is optional because the callable can fall back to the current app origin, but it is recommended for production so copied links always point to the deployed app:
 
 ```bash
 APP_BASE_URL="https://your-app.example.com"
 ```
 
-If `APP_BASE_URL` is set, add its domain to Firebase Authentication authorized domains. For local or Firebase CLI-managed Function deployments, put the variable in a Functions environment file such as `functions/.env.beacon-operations-crm`. For deployed Gen 2 Functions, confirm the same variable is present on the Cloud Run service for `provisionOrganizationMember`.
+If `APP_BASE_URL` is set, add its domain to Firebase Authentication authorized domains. For local or Firebase CLI-managed Function deployments, put the variable in a Functions environment file such as `functions/.env.beacon-operations-crm`. For deployed Gen 2 Functions, confirm the same variable is present on the Cloud Run service for `provisionOrganizationMember`. After changing the invite helper, redeploy `provisionOrganizationMember` before testing copied links in production.
 
 8. Configure user SMTP settings encryption before enabling client/lead email. `MAIL_SETTINGS_ENCRYPTION_KEY` is required by the Functions runtime and must be at least 32 characters. Treat it as a secret; prefer Secret Manager or a protected Functions environment file:
 
@@ -74,6 +74,17 @@ GEMINI_MODEL="gemini-3.5-flash"
 AI_GUIDE_DAILY_LIMIT="30"
 AI_GUIDE_RESPONSE_CHARACTER_LIMIT="3500"
 ```
+
+AI Guide quota is stored in Firestore under internal usage records, so logout, browser refresh, app restart, or redeploy should not reset a user's daily allowance before the UTC day changes.
+
+For local development, Admin Firestore access uses Google Application Default Credentials when `FIREBASE_ADMIN_CLIENT_EMAIL` and `FIREBASE_ADMIN_PRIVATE_KEY` are not configured. If AI Guide reports `invalid_rapt` or `invalid_grant`, refresh local credentials and restart the dev server:
+
+```bash
+gcloud auth application-default login
+npm run dev
+```
+
+For deployed hosting, prefer service-account credentials through `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, and `FIREBASE_ADMIN_PRIVATE_KEY`, or ensure the app runtime service account has Cloud Datastore User access.
 
 10. Create the first admin:
 

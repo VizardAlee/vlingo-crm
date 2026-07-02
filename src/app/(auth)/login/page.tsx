@@ -76,7 +76,7 @@ function LoginContent() {
 
         <div className="relative z-10 flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={56} className="h-14 w-56 rounded-md bg-white object-contain object-left shadow-2xl shadow-black/20" priority />
+            <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={56} className="h-auto w-56 rounded-md bg-white object-contain object-left shadow-2xl shadow-black/20" priority style={{ height: "auto" }} />
             <div>
               <p className="text-lg font-bold">Vlingo Systems CRM</p>
               <p className="text-sm text-white/70">Systems Nig. Ltd.</p>
@@ -159,7 +159,7 @@ function LoginContent() {
         <Card className="relative z-10 w-full max-w-md overflow-hidden border-0 bg-white/92 shadow-2xl shadow-[#14550f]/10 backdrop-blur">
           <CardContent className="grid gap-6 p-6 md:p-8">
             <div className="flex items-center justify-between gap-4">
-              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={54} className="h-14 w-56 max-w-full rounded-md object-contain object-left" />
+              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={54} className="h-auto w-56 max-w-full rounded-md object-contain object-left" style={{ height: "auto" }} />
               <span className="hidden rounded-md bg-[#edf5ea] px-3 py-2 text-xs font-semibold text-primary sm:inline-flex">
                 CRM
               </span>

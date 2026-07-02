@@ -9,6 +9,7 @@ export type OrgCollection =
   | "financeCommissions"
   | "financeExpenses"
   | "financePayments"
+  | "internalAiGuideUsage"
   | "leads"
   | "marketingCampaigns"
   | "members"

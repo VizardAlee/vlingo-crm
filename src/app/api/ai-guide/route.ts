@@ -1,16 +1,37 @@
 import { NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { appGuideContext, fallbackGuideAnswer } from "@/features/ai-guide/guide-knowledge";
 
 export const runtime = "nodejs";
 
-const dailyUsage = new Map<string, { count: number; day: string }>();
 const defaultDailyLimit = 30;
 const defaultResponseCharacterLimit = 3500;
 
 interface GuideHistoryItem {
   content: string;
   role: "assistant" | "user";
+}
+
+class AiGuideAdminFirestoreError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiGuideAdminFirestoreError";
+  }
+}
+
+function adminFirestoreAction(message: string) {
+  if (message.includes("invalid_rapt") || message.includes("invalid_grant")) {
+    return {
+      error: "AI Guide cannot reach Firestore because your local Google Application Default Credentials need reauthentication.",
+      requiredAction: "Run: gcloud auth application-default login, then restart npm run dev. For deployed hosting, configure FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL, and FIREBASE_ADMIN_PRIVATE_KEY instead of relying on local user credentials.",
+    };
+  }
+
+  return {
+    error: "AI Guide cannot reach Firestore with the current backend credentials.",
+    requiredAction: "Grant the app runtime service account Cloud Datastore User, then restart or redeploy the app.",
+  };
 }
 
 function numericEnv(name: string, fallback: number) {
@@ -20,30 +41,6 @@ function numericEnv(name: string, fallback: number) {
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function usageForUser(uid: string, dailyLimit: number) {
-  const day = todayKey();
-  const key = `${uid}:${day}`;
-  const current = dailyUsage.get(key);
-  const count = current?.day === day ? current.count : 0;
-  return {
-    count,
-    day,
-    key,
-    remaining: Math.max(dailyLimit - count, 0),
-  };
-}
-
-function incrementUsage(uid: string, dailyLimit: number) {
-  const usage = usageForUser(uid, dailyLimit);
-  const count = usage.count + 1;
-  dailyUsage.set(usage.key, { count, day: usage.day });
-  return {
-    count,
-    dailyLimit,
-    remaining: Math.max(dailyLimit - count, 0),
-  };
 }
 
 function capAnswer(value: string, characterLimit: number) {
@@ -128,29 +125,41 @@ function normalizeHistory(value: unknown): GuideHistoryItem[] {
     .slice(-10);
 }
 
-function firestoreStringValue(fields: Record<string, { stringValue?: string }> | undefined, key: string) {
-  return fields?.[key]?.stringValue ?? "";
-}
+async function reserveUsage(organizationId: string, uid: string, dailyLimit: number) {
+  const day = todayKey();
+  const usageRef = adminDb.doc(`organizations/${organizationId}/internalAiGuideUsage/${uid}/days/${day}`);
+  try {
+    return await adminDb.runTransaction(async (transaction) => {
+      const usageDoc = await transaction.get(usageRef);
+      const count = usageDoc.exists ? Number(usageDoc.data()?.count ?? 0) : 0;
+      if (count >= dailyLimit) {
+        return {
+          allowed: false,
+          count,
+          dailyLimit,
+          remaining: 0,
+        };
+      }
 
-async function readMemberWithUserToken(projectId: string, organizationId: string, uid: string, token: string) {
-  const documentPath = `organizations/${organizationId}/members/${uid}`;
-  const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
-  const baseUrl = emulatorHost
-    ? `http://${emulatorHost}/v1`
-    : "https://firestore.googleapis.com/v1";
-  const response = await fetch(`${baseUrl}/projects/${projectId}/databases/(default)/documents/${documentPath}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!response.ok) {
-    return null;
+      const nextCount = count + 1;
+      transaction.set(usageRef, {
+        count: nextCount,
+        day,
+        organizationId,
+        updatedAt: FieldValue.serverTimestamp(),
+        userId: uid,
+      }, { merge: true });
+      return {
+        allowed: true,
+        count: nextCount,
+        dailyLimit,
+        remaining: Math.max(dailyLimit - nextCount, 0),
+      };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Firestore error";
+    throw new AiGuideAdminFirestoreError(message);
   }
-
-  const payload = await response.json() as { fields?: Record<string, { stringValue?: string }> };
-  return {
-    organizationId: firestoreStringValue(payload.fields, "organizationId"),
-    status: firestoreStringValue(payload.fields, "status"),
-  };
 }
 
 async function verifyActiveMember(request: Request, organizationId: string) {
@@ -161,13 +170,14 @@ async function verifyActiveMember(request: Request, organizationId: string) {
   }
 
   const decoded = await adminAuth.verifyIdToken(token);
-  const projectId =
-    process.env.FIREBASE_ADMIN_PROJECT_ID ||
-    process.env.GOOGLE_CLOUD_PROJECT ||
-    process.env.GCLOUD_PROJECT ||
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
-    decoded.aud;
-  const member = await readMemberWithUserToken(projectId, organizationId, decoded.uid, token);
+  let memberSnapshot;
+  try {
+    memberSnapshot = await adminDb.doc(`organizations/${organizationId}/members/${decoded.uid}`).get();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Firestore error";
+    throw new AiGuideAdminFirestoreError(message);
+  }
+  const member = memberSnapshot.data();
   if (!member || member.status !== "active" || member.organizationId !== organizationId) {
     return null;
   }
@@ -193,30 +203,53 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ask a question with at least 3 characters." }, { status: 400 });
   }
 
+  let verified: Awaited<ReturnType<typeof verifyActiveMember>>;
   try {
-    const verified = await verifyActiveMember(request, organizationId);
-    if (!verified) {
-      return NextResponse.json({ error: "You must be signed in as an active CRM user to use AI Guide." }, { status: 401 });
-    }
-
-    const usage = usageForUser(verified.uid, dailyLimit);
-    if (usage.remaining <= 0) {
-      return NextResponse.json({
-        characterLimit,
-        dailyLimit,
-        error: `Daily AI Guide limit reached. You can ask ${dailyLimit} questions per day.`,
-        remaining: 0,
-      }, { status: 429 });
-    }
+    verified = await verifyActiveMember(request, organizationId);
   } catch (error) {
     console.error("[AI Guide auth failed]", error);
+    if (error instanceof AiGuideAdminFirestoreError) {
+      const action = adminFirestoreAction(error.message);
+      return NextResponse.json({
+        error: action.error,
+        requiredAction: action.requiredAction,
+      }, { status: 503 });
+    }
+
     return NextResponse.json({ error: "Unable to verify your session." }, { status: 401 });
+  }
+
+  if (!verified) {
+    return NextResponse.json({ error: "You must be signed in as an active CRM user to use AI Guide." }, { status: 401 });
+  }
+
+  let usage: Awaited<ReturnType<typeof reserveUsage>>;
+  try {
+    usage = await reserveUsage(organizationId, verified.uid, dailyLimit);
+  } catch (error) {
+    console.error("[AI Guide quota failed]", error);
+    if (error instanceof AiGuideAdminFirestoreError) {
+      const action = adminFirestoreAction(error.message);
+      return NextResponse.json({
+        error: action.error,
+        requiredAction: action.requiredAction,
+      }, { status: 503 });
+    }
+
+    return NextResponse.json({ error: "Unable to reserve your AI Guide quota right now." }, { status: 503 });
+  }
+
+  if (!usage.allowed) {
+    return NextResponse.json({
+      characterLimit,
+      dailyLimit,
+      error: `Daily AI Guide limit reached. You can ask ${dailyLimit} questions per day.`,
+      remaining: 0,
+    }, { status: 429 });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    const verified = await verifyActiveMember(request, organizationId);
-    const usage = verified ? incrementUsage(verified.uid, dailyLimit) : { dailyLimit, remaining: 0 };
     const capped = capAnswer(fallbackGuideAnswer(question), characterLimit);
     return NextResponse.json({
       answer: capped.answer,
@@ -229,11 +262,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const verified = await verifyActiveMember(request, organizationId);
-    if (!verified) {
-      return NextResponse.json({ error: "You must be signed in as an active CRM user to use AI Guide." }, { status: 401 });
-    }
-    const usage = incrementUsage(verified.uid, dailyLimit);
     const model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
     const modelPath = model.startsWith("models/") ? model : `models/${model}`;
     const contents = [
@@ -291,8 +319,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("[AI Guide failed]", error);
-    const verified = await verifyActiveMember(request, organizationId).catch(() => null);
-    const usage = verified ? usageForUser(verified.uid, dailyLimit) : { remaining: 0 };
     const capped = capAnswer(fallbackGuideAnswer(question), characterLimit);
     return NextResponse.json({
       answer: capped.answer,

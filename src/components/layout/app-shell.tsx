@@ -136,7 +136,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const sidebar = (
     <aside className={cn("flex h-full min-h-0 flex-col border-r bg-white transition-all", collapsed ? "w-20" : "w-72")}>
       <div className="flex h-20 shrink-0 items-center gap-3 border-b px-4">
-        <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={collapsed ? 44 : 128} height={44} className={cn("h-11 rounded-md object-contain", collapsed ? "w-11" : "w-32 object-left")} priority />
+        <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={collapsed ? 44 : 128} height={44} className={cn("h-auto rounded-md object-contain", collapsed ? "w-11" : "w-32 object-left")} priority style={{ height: "auto" }} />
         {!collapsed ? (
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">Vlingo Systems CRM</p>
@@ -185,7 +185,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const tabletRail = (
     <aside className="no-print hidden h-screen w-[5.25rem] shrink-0 border-r bg-white md:flex lg:hidden">
       <div className="flex min-h-0 w-full flex-col items-center gap-3 py-4">
-        <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={64} height={44} className="h-11 w-14 rounded-md object-contain" priority />
+        <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={64} height={44} className="h-auto w-14 rounded-md object-contain" priority style={{ height: "auto" }} />
         <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto overscroll-contain px-2">
           {flatNavigation.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -315,7 +315,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </Button>
             <div className="flex min-w-0 flex-1 items-center gap-3 md:hidden">
-              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={72} height={36} className="h-9 w-16 rounded-md object-contain object-left" priority />
+              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={72} height={36} className="h-auto w-16 rounded-md object-contain object-left" priority style={{ height: "auto" }} />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{currentSection?.label ?? "Vlingo CRM"}</p>
                 <p className="truncate text-xs text-muted-foreground">{activeBranchName}</p>

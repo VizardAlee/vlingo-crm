@@ -106,7 +106,7 @@ export default function HomePage() {
 
         <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 md:px-8">
           <Link className="flex min-w-0 items-center gap-3" href="/">
-            <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={56} className="h-12 w-48 rounded-md bg-white object-contain object-left md:h-14 md:w-56" priority />
+            <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={56} className="h-auto w-48 rounded-md bg-white object-contain object-left md:w-56" priority style={{ height: "auto" }} />
             <span className="hidden min-w-0 md:block">
               <span className="block text-sm font-semibold">Vlingo Systems Nig. Ltd.</span>
               <span className="block text-xs text-white/60">CRM and operations platform</span>
@@ -223,7 +223,7 @@ export default function HomePage() {
       <section className="bg-secondary px-5 py-12 text-white md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={56} className="h-14 w-56 rounded-md bg-white object-contain object-left" />
+            <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={220} height={56} className="h-auto w-56 rounded-md bg-white object-contain object-left" style={{ height: "auto" }} />
             <p className="mt-4 max-w-xl text-sm leading-6 text-white/65">A controlled operations CRM for Vlingo Systems Nig. Ltd. and the teams moving opportunities from conversation to delivery.</p>
           </div>
           <ButtonLink className="h-12 px-5" href="/login">

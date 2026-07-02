@@ -154,6 +154,30 @@ describe("Beacon Firestore rules", () => {
     await assertSucceeds(getDoc(doc(db, "organizations/org-a/members/sales-1")));
   });
 
+  it("allows active users to reserve only their own AI Guide quota", async () => {
+    await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
+    await seedMember("sales-2", "org-a", ["leads.readAssigned"]);
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+    const quotaRef = doc(db, "organizations/org-a/internalAiGuideUsage/sales-1/days/2026-07-02");
+
+    await assertSucceeds(getDoc(quotaRef));
+    await assertSucceeds(setDoc(quotaRef, {
+      count: 1,
+      day: "2026-07-02",
+      organizationId: "org-a",
+      updatedAt: "2026-07-02T00:00:00.000Z",
+      userId: "sales-1",
+    }));
+    await assertSucceeds(updateDoc(quotaRef, {
+      count: 2,
+      day: "2026-07-02",
+      organizationId: "org-a",
+      updatedAt: "2026-07-02T00:01:00.000Z",
+      userId: "sales-1",
+    }));
+    await assertFails(getDoc(doc(db, "organizations/org-a/internalAiGuideUsage/sales-2/days/2026-07-02")));
+  });
+
   it("allows sales manager to assign leads", async () => {
     await seedMember("manager-1", "org-a", ["leads.readAll", "leads.assign"], "salesManager");
     await seedLead("org-a", "lead-1", "sales-1");
