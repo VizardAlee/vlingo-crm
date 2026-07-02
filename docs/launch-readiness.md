@@ -55,7 +55,7 @@ gcloud projects add-iam-policy-binding beacon-operations-crm \
 7. Configure invite setup links in the Functions runtime environment. The invite workflow provisions the user first, then generates a CRM password setup link that admins can copy and share manually. `APP_BASE_URL` is optional because the callable can fall back to the current app origin, but it is recommended for production so copied links always point to the deployed app:
 
 ```bash
-APP_BASE_URL="https://your-app.example.com"
+APP_BASE_URL="https://vlingo-crm.svoltnigeria.com"
 ```
 
 If `APP_BASE_URL` is set, add its domain to Firebase Authentication authorized domains. For local or Firebase CLI-managed Function deployments, put the variable in a Functions environment file such as `functions/.env.beacon-operations-crm`. For deployed Gen 2 Functions, confirm the same variable is present on the Cloud Run service for `provisionOrganizationMember`. After changing the invite helper, redeploy `provisionOrganizationMember` before testing copied links in production.
