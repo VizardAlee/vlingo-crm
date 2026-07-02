@@ -18,6 +18,7 @@ describe("route access rules", () => {
   });
 
   it("protects expanded business module routes with matching permissions", () => {
+    expect(accessRuleForPath("/ai-guide")?.permissions).toEqual(expect.arrayContaining(["leads.readAssigned", "users.manage"]));
     expect(accessRuleForPath("/offerings")?.permissions).toEqual(["offerings.read"]);
     expect(accessRuleForPath("/offerings/new")?.permissions).toEqual(["offerings.create"]);
     expect(accessRuleForPath("/reports")?.permissions).toEqual(["reports.viewFinancial", "dashboard.viewExecutive"]);

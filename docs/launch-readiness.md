@@ -66,13 +66,22 @@ If `APP_BASE_URL` is set, add its domain to Firebase Authentication authorized d
 MAIL_SETTINGS_ENCRYPTION_KEY="replace-with-a-long-random-secret"
 ```
 
-9. Create the first admin:
+9. Optional: configure Gemini-backed AI Guide answers. If `GEMINI_API_KEY` is absent, AI Guide still works with the built-in CRM workflow guide. Keep the key server-side only:
+
+```bash
+GEMINI_API_KEY="..."
+GEMINI_MODEL="gemini-3.5-flash"
+AI_GUIDE_DAILY_LIMIT="30"
+AI_GUIDE_RESPONSE_CHARACTER_LIMIT="3500"
+```
+
+10. Create the first admin:
 
 ```bash
 FIRST_ADMIN_UID="firebase-auth-uid" FIRST_ADMIN_EMAIL="admin@example.com" npm run create:first-admin
 ```
 
-10. Sync role permissions after role changes:
+11. Sync role permissions after role changes:
 
 ```bash
 npm run sync:roles

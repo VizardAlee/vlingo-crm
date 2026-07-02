@@ -13,6 +13,7 @@ import { WhatsAppPhoneLink } from "@/components/ui/whatsapp-link";
 import { PermissionDenied, LoadingState, ErrorState } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { CrmTable } from "@/components/tables/crm-table";
+import { AiGuideLink } from "@/features/ai-guide/ai-guide-link";
 import { ModuleForm } from "@/features/modules/module-form";
 import { columnsFor, type ModuleConfig } from "@/features/modules/module-config";
 import { useAuth } from "@/features/auth/auth-provider";
@@ -2163,6 +2164,7 @@ export function ModuleListPage({
           <p className="mt-1 text-sm text-muted-foreground">{pageDescription}</p>
         </div>
         <div className="grid gap-2 md:flex">
+          <AiGuideLink className="h-11 w-full md:h-10 md:w-auto" question={`How do I use the ${pageTitle} section in Vlingo Systems CRM? Explain what this module is for and the best workflow.`} />
           {canBulkEmail ? (
             <Button className="h-11 w-full md:h-10 md:w-auto" onClick={() => setBulkEmailOpen((value) => !value)} type="button" variant={bulkEmailOpen ? "secondary" : "outline"}>
               <Mail className="h-4 w-4" />
@@ -2202,6 +2204,9 @@ export function ModuleCreatePage({ config }: { config: ModuleConfig }) {
       <div className="rounded-md bg-white p-4 shadow-sm md:bg-transparent md:p-0 md:shadow-none">
         <h1 className="text-xl font-semibold md:text-2xl">Create {config.title.slice(0, -1)}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Validated form data writes through the organization-scoped Firestore repository.</p>
+        <div className="mt-3">
+          <AiGuideLink question={`Guide me step by step to create a ${config.title.slice(0, -1)} in Vlingo Systems CRM. Explain what information I need before saving.`} />
+        </div>
       </div>
       <ModuleForm config={config} initialValues={initialValues} />
     </section>
@@ -2368,6 +2373,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
           <p className="mt-1 text-sm text-muted-foreground">{String(record.referenceNumber ?? id)} · {status}</p>
         </div>
         <div className="grid gap-2 md:flex">
+          <AiGuideLink className="h-11 w-full md:h-10 md:w-auto" question={`What should I do next on this ${config.title.slice(0, -1)} record in Vlingo Systems CRM? Explain the best workflow and related actions.`} />
           {config.collection === "leads" && hasPermission(member, "clients.create") && status !== "converted" && status !== "lost" ? (
             <Button className="h-11 w-full md:h-10 md:w-auto" disabled={actionLoading} onClick={handleConvertLead} type="button" variant="secondary">
               <Repeat2 className="h-4 w-4" />
@@ -2555,6 +2561,9 @@ export function ModuleEditPage({ config, id }: { config: ModuleConfig; id: strin
       <div className="rounded-md bg-white p-4 shadow-sm md:bg-transparent md:p-0 md:shadow-none">
         <h1 className="text-xl font-semibold md:text-2xl">Edit {config.title.slice(0, -1)}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Organization and audit fields are preserved by the repository and security rules.</p>
+        <div className="mt-3">
+          <AiGuideLink question={`Guide me step by step to edit a ${config.title.slice(0, -1)} in Vlingo Systems CRM. Explain what fields I should review before saving.`} />
+        </div>
       </div>
       <ModuleForm config={config} existing={record} id={id} />
     </section>

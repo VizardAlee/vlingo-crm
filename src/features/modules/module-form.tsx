@@ -13,6 +13,7 @@ import { ErrorState } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { GuidedTour } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
+import { AiGuideLink } from "@/features/ai-guide/ai-guide-link";
 import { dealCategoryFromFormValue, dealTypeFromFormValue, dealTypesForCategory, dealVisibleFieldNames } from "@/features/modules/deal-form-logic";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
@@ -1118,7 +1119,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     <Card>
       <CardContent>
         {tourSteps.length ? (
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex flex-wrap justify-end gap-2">
+            <AiGuideLink question={`How do I fill the ${config.title} form in Vlingo Systems CRM? Explain the important fields, required permissions, and common mistakes.`} size="sm" />
             <GuidedTour autoStart={!id && config.collection === "deals"} storageKey={`beacon-tour:${config.collection}:form`} steps={tourSteps} />
           </div>
         ) : null}

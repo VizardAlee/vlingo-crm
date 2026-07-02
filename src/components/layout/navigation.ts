@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   Bell,
+  Bot,
   Building2,
   ClipboardCheck,
   FileText,
@@ -74,6 +75,25 @@ export const emailSettingsAccessPermissions: Permission[] = [
   "users.manage",
 ];
 
+export const aiGuideAccessPermissions: Permission[] = [
+  "dashboard.viewExecutive",
+  "leads.create",
+  "leads.readAssigned",
+  "leads.readAll",
+  "clients.read",
+  "deals.read",
+  "properties.read",
+  "units.read",
+  "rentals.read",
+  "development.read",
+  "marketing.read",
+  "offerings.read",
+  "tasks.read",
+  "activities.read",
+  "reports.viewFinancial",
+  "users.manage",
+];
+
 export interface RouteAccessRule {
   exact?: string;
   pattern?: RegExp;
@@ -82,6 +102,7 @@ export interface RouteAccessRule {
 
 export const routeAccessRules: RouteAccessRule[] = [
   { exact: "/dashboard", permissions: ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"] },
+  { exact: "/ai-guide", permissions: aiGuideAccessPermissions },
   { exact: "/notifications", permissions: notificationAccessPermissions },
 
   { exact: "/leads/new", permissions: ["leads.create"] },
@@ -151,6 +172,7 @@ export const navigation: NavSection[] = [
     label: "Workspace",
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", permissions: ["leads.readAssigned", "leads.readAll", "dashboard.viewExecutive"] },
+      { href: "/ai-guide", icon: Bot, label: "AI Guide", permissions: aiGuideAccessPermissions },
       { href: "/notifications", icon: Bell, label: "Notifications", permissions: notificationAccessPermissions },
     ],
   },
