@@ -18,6 +18,7 @@ import {
   listBranches,
   listMembers,
   reactivateOrganizationMember,
+  resendOrganizationMemberInvite,
   updateOrganizationMember,
   type InviteUserInput,
 } from "@/services/users";
@@ -196,6 +197,26 @@ export function UsersManagement() {
       const message = "Unable to copy automatically. Select and copy the setup link manually.";
       setError(message);
       toast({ title: "Unable to copy setup link", description: message, variant: "error" });
+    }
+  }
+
+  async function resendInviteLink(target: Member) {
+    setSaving(`resend-${target.id}`);
+    setError(null);
+    setGeneratedInvite(null);
+    setSuccess(null);
+    try {
+      const result = await resendOrganizationMemberInvite(activeOrganizationId, target.id);
+      setGeneratedInvite({ email: result.email, setupLink: result.setupLink });
+      const message = `Fresh setup link generated for ${target.displayName}. Copy and share it with the user.`;
+      setSuccess(message);
+      toast({ title: "Setup link regenerated", description: message, variant: "success" });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to regenerate setup link.";
+      setError(message);
+      toast({ title: "Unable to regenerate setup link", description: message, variant: "error" });
+    } finally {
+      setSaving(null);
     }
   }
 
@@ -396,10 +417,14 @@ export function UsersManagement() {
                     </Select>
                   </Field>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-2 sm:grid-cols-3">
                   <Button disabled={saving === `update-${item.id}` || !canEditTarget} onClick={() => submitMemberUpdate(item)} type="button" variant="outline">
                     <Pencil className="h-4 w-4" />
                     Save
+                  </Button>
+                  <Button disabled={saving === `resend-${item.id}` || isSelf || item.status === "disabled"} onClick={() => resendInviteLink(item)} type="button" variant="outline">
+                    <Link2 className="h-4 w-4" />
+                    {saving === `resend-${item.id}` ? "Generating" : "Resend link"}
                   </Button>
                   <Button disabled={saving === `status-${item.id}` || !canEditTarget} onClick={() => toggleStatus(item)} type="button" variant={item.status === "disabled" ? "secondary" : "danger"}>
                     {item.status === "disabled" ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
@@ -465,6 +490,10 @@ export function UsersManagement() {
                         <Button disabled={saving === `update-${item.id}` || !canEditTarget} onClick={() => submitMemberUpdate(item)} size="sm" type="button" variant="outline">
                           <ShieldCheck className="h-4 w-4" />
                           Save
+                        </Button>
+                        <Button disabled={saving === `resend-${item.id}` || isSelf || item.status === "disabled"} onClick={() => resendInviteLink(item)} size="sm" type="button" variant="outline">
+                          <Link2 className="h-4 w-4" />
+                          {saving === `resend-${item.id}` ? "Generating" : "Resend link"}
                         </Button>
                         <Button disabled={saving === `status-${item.id}` || !canEditTarget} onClick={() => toggleStatus(item)} size="sm" type="button" variant={item.status === "disabled" ? "secondary" : "danger"}>
                           {item.status === "disabled" ? "Reactivate" : "Disable"}

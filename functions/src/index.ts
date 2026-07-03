@@ -713,6 +713,56 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
   }
 });
 
+export const resendOrganizationMemberInvite = onCall(callableOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+
+  try {
+    const organizationId = requireString(request.data?.organizationId, "organizationId");
+    const uid = requireString(request.data?.uid, "uid");
+    const actor = await getActor(request.auth.uid, organizationId);
+    const memberRef = db.doc(`organizations/${organizationId}/members/${uid}`);
+    const memberSnapshot = await memberRef.get();
+    const target = memberSnapshot.data();
+
+    if (!memberSnapshot.exists || !target) {
+      throw new HttpsError("not-found", "This organization member was not found.");
+    }
+
+    assertCanManageTargetMember(actor, target);
+
+    if (target.status === "disabled") {
+      throw new HttpsError("failed-precondition", "Reactivate this user before generating a setup link.");
+    }
+
+    const userRecord = await auth.getUser(uid);
+    const email = requireEmail(userRecord.email ?? target.email);
+    const origin = typeof request.rawRequest.headers.origin === "string" ? request.rawRequest.headers.origin : undefined;
+    const setupLink = await generateInviteLinkForOrigin(email, origin);
+
+    await writeAuditLog({
+      action: "member.resendInvite",
+      actorId: request.auth.uid,
+      actorName: actor.displayName,
+      branchId: typeof target.branchId === "string" ? target.branchId : actor.branchId,
+      entityId: uid,
+      entityType: "member",
+      newValue: { email, setupLinkGenerated: true },
+      organizationId,
+      previousValue: target,
+    });
+
+    return {
+      email,
+      setupLink,
+      uid,
+    };
+  } catch (error) {
+    throw inviteError(error);
+  }
+});
+
 export const getEmailSmtpSettings = onCall(callableOptions, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication is required.");

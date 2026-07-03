@@ -98,6 +98,13 @@ export async function inviteOrganizationMember(input: InviteUserInput) {
   return result.data;
 }
 
+export async function resendOrganizationMemberInvite(organizationId: string, uid: string) {
+  const firebase = assertFirebase();
+  const callable = httpsCallable<{ organizationId: string; uid: string }, InviteUserResult>(firebase.functions, "resendOrganizationMemberInvite");
+  const result = await callable({ organizationId, uid });
+  return result.data;
+}
+
 export async function updateOrganizationMember(input: UpdateMemberInput) {
   const { functions: callableFunctions } = assertFirebase();
   await httpsCallable<UpdateMemberInput, { ok: boolean }>(callableFunctions, "updateOrganizationMemberRole")(input);

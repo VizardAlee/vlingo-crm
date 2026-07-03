@@ -25,6 +25,21 @@ interface GuideUsage {
   remaining: number;
 }
 
+interface PersistedGuideChat {
+  messages: GuideMessage[];
+  savedAt: string;
+  usage: GuideUsage;
+}
+
+const defaultGuideMessage: GuideMessage = {
+  content: "Ask me how CRM works or how to use Vlingo Systems CRM. I can explain CRM concepts and walk you through leads, deals, finance, emails, roles, branches, notifications, geotagging, and more.",
+  mode: "built-in",
+  role: "assistant",
+};
+
+const defaultUsage: GuideUsage = { characterLimit: 3500, dailyLimit: 30, remaining: 30 };
+const guideStoragePrefix = "vlingo:ai-guide";
+
 const suggestedQuestions = [
   "What is CRM and how should our team use it?",
   "How do I create a lead and link it to a property?",
@@ -34,6 +49,67 @@ const suggestedQuestions = [
   "What can a sales executive see?",
   "How do I geotag a lead location?",
 ];
+
+function currentQuotaDay() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function guideStorageKey(organizationId: string, uid: string) {
+  return `${guideStoragePrefix}:${organizationId}:${uid}:${currentQuotaDay()}`;
+}
+
+function isGuideMessage(value: unknown): value is GuideMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const item = value as Partial<GuideMessage>;
+  return typeof item.content === "string" && (item.role === "assistant" || item.role === "user");
+}
+
+function isGuideUsage(value: unknown): value is GuideUsage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const item = value as Partial<GuideUsage>;
+  return typeof item.characterLimit === "number" && typeof item.dailyLimit === "number" && typeof item.remaining === "number";
+}
+
+function readPersistedGuideChat(storageKey: string) {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<PersistedGuideChat>;
+    if (!Array.isArray(parsed.messages) || !parsed.messages.every(isGuideMessage) || !isGuideUsage(parsed.usage)) {
+      return null;
+    }
+
+    return {
+      messages: parsed.messages,
+      usage: parsed.usage,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function pruneOldGuideChats() {
+  const activeDaySuffix = `:${currentQuotaDay()}`;
+  try {
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith(`${guideStoragePrefix}:`) && !key.endsWith(activeDaySuffix)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Storage can be unavailable in private browsing or locked-down browsers.
+  }
+}
 
 function renderGuideContent(content: string) {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
@@ -163,21 +239,17 @@ function renderGuideContent(content: string) {
 }
 
 export function AiGuidePage() {
-  const { firebaseReady, loading, member, user } = useAuth();
+  const { activeOrganizationId, firebaseReady, loading, member, user } = useAuth();
   const toast = useToast();
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState<GuideMessage[]>([
-    {
-      content: "Ask me how CRM works or how to use Vlingo Systems CRM. I can explain CRM concepts and walk you through leads, deals, finance, emails, roles, branches, notifications, geotagging, and more.",
-      mode: "built-in",
-      role: "assistant",
-    },
-  ]);
-  const [usage, setUsage] = useState<GuideUsage>({ characterLimit: 3500, dailyLimit: 30, remaining: 30 });
+  const [messages, setMessages] = useState<GuideMessage[]>([defaultGuideMessage]);
+  const [usage, setUsage] = useState<GuideUsage>(defaultUsage);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
 
   const canAsk = useMemo(() => Boolean(firebaseReady && user && member?.status === "active"), [firebaseReady, member?.status, user]);
+  const storageKey = user?.uid ? guideStorageKey(activeOrganizationId, user.uid) : "";
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -190,6 +262,47 @@ export function AiGuidePage() {
 
     return () => window.clearTimeout(timeout);
   }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (!storageKey) {
+        setMessages([defaultGuideMessage]);
+        setUsage(defaultUsage);
+        setStorageReady(false);
+        return;
+      }
+
+      const persisted = readPersistedGuideChat(storageKey);
+      if (persisted) {
+        setMessages(persisted.messages.length ? persisted.messages : [defaultGuideMessage]);
+        setUsage(persisted.usage);
+      } else {
+        setMessages([defaultGuideMessage]);
+        setUsage(defaultUsage);
+      }
+      pruneOldGuideChats();
+      setStorageReady(true);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageReady || !storageKey) {
+      return;
+    }
+
+    try {
+      const payload: PersistedGuideChat = {
+        messages,
+        savedAt: new Date().toISOString(),
+        usage,
+      };
+      window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch {
+      // Keep the chat usable even if browser storage is unavailable.
+    }
+  }, [messages, storageKey, storageReady, usage]);
 
   async function askGuide(nextQuestion?: string) {
     const text = (nextQuestion ?? question).trim();
