@@ -189,6 +189,33 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
+  it("allows only super admins to soft-delete leads", async () => {
+    await seedMember("admin-1", "org-a", [], "superAdmin");
+    await seedMember("manager-1", "org-a", ["leads.readAll", "leads.assign"], "salesManager");
+    await seedLead("org-a", "lead-1", "sales-1");
+    await seedLead("org-a", "lead-2", "sales-1");
+
+    const adminDb = testEnv.authenticatedContext("admin-1").firestore();
+    await assertSucceeds(updateDoc(doc(adminDb, "organizations/org-a/leads/lead-1"), {
+      deletedAt: "2026-07-03T00:00:00.000Z",
+      deletedBy: "admin-1",
+      isDeleted: true,
+      organizationId: "org-a",
+      updatedAt: "2026-07-03T00:00:00.000Z",
+      updatedBy: "admin-1",
+    }));
+
+    const managerDb = testEnv.authenticatedContext("manager-1").firestore();
+    await assertFails(updateDoc(doc(managerDb, "organizations/org-a/leads/lead-2"), {
+      deletedAt: "2026-07-03T00:00:00.000Z",
+      deletedBy: "manager-1",
+      isDeleted: true,
+      organizationId: "org-a",
+      updatedAt: "2026-07-03T00:00:00.000Z",
+      updatedBy: "manager-1",
+    }));
+  });
+
   it("allows project managers to create and update development projects", async () => {
     await seedMember("project-1", "org-a", ["development.create", "development.read", "development.update"], "projectManager");
     const db = testEnv.authenticatedContext("project-1").firestore();

@@ -192,6 +192,22 @@ service cloud.firestore {
         ]);
     }
 
+    function canSoftDeleteLead(orgId) {
+      return organizationUnchanged(orgId) &&
+        hasRole(orgId, ["superAdmin"]) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "deletedAt",
+          "deletedBy",
+          "isDeleted",
+          "updatedAt",
+          "updatedBy"
+        ]) &&
+        request.resource.data.isDeleted == true &&
+        resource.data.isDeleted == false &&
+        request.resource.data.deletedBy == request.auth.uid &&
+        request.resource.data.updatedBy == request.auth.uid;
+    }
+
     match /organizations/{orgId} {
       allow read: if isActiveMember(orgId);
       allow create, update, delete: if hasPermission(orgId, "users.manage");
@@ -241,10 +257,13 @@ service cloud.firestore {
           hasPermission(orgId, "leads.readAll") ||
           (hasPermission(orgId, "leads.readAssigned") && resource.data.assignedTo == request.auth.uid));
         allow create: if hasPermission(orgId, "leads.create") && hasMetadata(orgId);
-        allow update: if organizationUnchanged(orgId) &&
+        allow update: if canSoftDeleteLead(orgId) ||
+          (organizationUnchanged(orgId) &&
           canReadRecordBranch(orgId) &&
+          request.resource.data.isDeleted == resource.data.isDeleted &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(["deletedAt", "deletedBy"]) &&
           (hasPermission(orgId, "leads.assign") ||
-          (hasPermission(orgId, "leads.updateAssigned") && resource.data.assignedTo == request.auth.uid));
+          (hasPermission(orgId, "leads.updateAssigned") && resource.data.assignedTo == request.auth.uid)));
         allow delete: if false;
       }
 

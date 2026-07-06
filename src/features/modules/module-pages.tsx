@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, XCircle } from "lucide-react";
+import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,11 +18,11 @@ import { ModuleForm } from "@/features/modules/module-form";
 import { columnsFor, type ModuleConfig } from "@/features/modules/module-config";
 import { useAuth } from "@/features/auth/auth-provider";
 import { documentAccessPermissions } from "@/components/layout/navigation";
-import { effectiveBranchId, hasAnyPermission, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
+import { effectiveBranchId, hasAnyPermission, hasPermission, isAssignedOnlySalesUser, memberRoles } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, type DocumentRecord } from "@/services/documents";
 import { sendBulkSalesEmail, sendSalesJourneyEmail } from "@/services/email-settings";
-import { createOrgRecord, getOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
+import { createOrgRecord, getOrgRecord, listOrgRecords, softDeleteOrgRecord, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
 import type { Member } from "@/types/crm";
@@ -2215,7 +2215,7 @@ export function ModuleCreatePage({ config }: { config: ModuleConfig }) {
 
 export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: string }) {
   const router = useRouter();
-  const { activeBranchId, activeOrganizationId, member } = useAuth();
+  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [record, setRecord] = useState<Record<string, unknown> | null>(null);
   const [relatedRecord, setRelatedRecord] = useState<(Record<string, unknown> & { id: string }) | null>(null);
@@ -2349,6 +2349,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const canAttachDocuments = hasAnyPermission(member, documentAccessPermissions);
   const canCreateTask = hasPermission(member, "tasks.create");
   const canCreateActivity = hasPermission(member, "activities.create");
+  const canDeleteLead = config.collection === "leads" && memberRoles(member).includes("superAdmin");
 
   async function handleConvertLead() {
     setActionLoading(true);
@@ -2360,6 +2361,45 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       router.push(`/clients/${result.clientId}`);
     } catch (nextError) {
       setActionError(nextError instanceof Error ? nextError.message : "Unable to convert lead.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDeleteLead() {
+    const currentRecord = record;
+    if (!currentRecord) {
+      setActionError("Lead record is not loaded.");
+      return;
+    }
+
+    if (!user) {
+      setActionError("You must be signed in to delete a lead.");
+      return;
+    }
+
+    const confirmed = window.confirm("Delete this lead? This will remove it from lead lists and dashboards, but keep an audit trail.");
+    if (!confirmed) {
+      return;
+    }
+
+    setActionLoading(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const context = {
+        branchId: String(currentRecord.branchId ?? activeBranchId),
+        organizationId: activeOrganizationId,
+        userEmail: user.email ?? member?.email,
+        userId: user.uid,
+        userName: member?.displayName ?? user.displayName ?? undefined,
+      };
+      await softDeleteOrgRecord("leads", id, context);
+      await writeAuditLog(context, "lead.delete", "leads", id, { leadId: id, fullName: currentRecord.fullName ?? null, referenceNumber: currentRecord.referenceNumber ?? null });
+      toast({ title: "Lead deleted", description: "The lead was removed from active records.", variant: "success" });
+      router.push("/leads");
+    } catch (nextError) {
+      setActionError(nextError instanceof Error ? nextError.message : "Unable to delete lead.");
     } finally {
       setActionLoading(false);
     }
@@ -2381,6 +2421,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
             </Button>
           ) : null}
           {hasPermission(member, config.editPermission as never) ? <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={`${config.route}/${id}/edit`} variant="outline">Edit record</ButtonLink> : null}
+          {canDeleteLead ? (
+            <Button className="h-11 w-full md:h-10 md:w-auto" disabled={actionLoading} onClick={handleDeleteLead} type="button" variant="danger">
+              <Trash2 className="h-4 w-4" />
+              Delete lead
+            </Button>
+          ) : null}
         </div>
       </div>
       {actionError ? <ErrorState message={actionError} /> : null}
