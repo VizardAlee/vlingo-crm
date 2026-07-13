@@ -336,14 +336,20 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     route: "/tasks",
     title: "Tasks",
     fields: [
-      { name: "title", label: "Title", required: true, type: "text" },
-      { name: "description", label: "Description", type: "textarea" },
-      { name: "priority", label: "Priority", options: ["low", "medium", "high", "urgent"], required: true, type: "select" },
-      { name: "status", label: "Status", options: ["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"], required: true, type: "select" },
-      { name: "dueAt", label: "Due date", type: "date" },
-      { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", type: "select" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing", "offering"], type: "select" },
-      { name: "relatedEntityId", label: "Related entity ID", type: "text" },
+      { name: "title", label: "Title", required: true, section: "Task details", type: "text" },
+      { name: "priority", label: "Priority", options: ["low", "medium", "high", "urgent"], required: true, section: "Task details", type: "select" },
+      { name: "status", label: "Status", options: ["notStarted", "inProgress", "waiting", "completed", "cancelled", "overdue"], required: true, section: "Task details", type: "select" },
+      { colSpan: "full", name: "description", label: "Description", section: "Task details", type: "textarea" },
+      { colSpan: "full", helpText: "What should be achieved when this task is completed.", name: "expectedOutcome", label: "Expected outcome", section: "Task details", type: "textarea" },
+
+      { name: "dueAt", label: "Due date", section: "Schedule", type: "date" },
+      { name: "estimatedDurationMinutes", label: "Estimated duration (minutes)", section: "Schedule", type: "number" },
+      { name: "reminderMinutesBefore", label: "Reminder before due date (minutes)", section: "Schedule", type: "number" },
+      { colSpan: "full", name: "location", label: "Location / meeting point", section: "Schedule", type: "text" },
+
+      { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", section: "Ownership and link", type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing", "offering"], section: "Ownership and link", type: "select" },
+      { name: "relatedEntityId", label: "Related entity ID", section: "Ownership and link", type: "text" },
     ],
   },
   rentalTenancies: {

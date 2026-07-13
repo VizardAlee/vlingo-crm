@@ -707,7 +707,11 @@ export interface Task extends EntityMetadata {
   title: string;
   description?: string;
   dueAt?: Date | null;
+  estimatedDurationMinutes?: number;
+  expectedOutcome?: string;
+  location?: string;
   priority: "low" | "medium" | "high" | "urgent";
+  reminderMinutesBefore?: number;
   assignedTo?: string;
   assignedToEmail?: string;
   assignedToName?: string;

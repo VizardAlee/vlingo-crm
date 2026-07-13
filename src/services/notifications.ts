@@ -11,6 +11,7 @@ import {
   where,
   addDoc,
   type DocumentData,
+  onSnapshot,
   type Timestamp,
   type WithFieldValue,
 } from "firebase/firestore";
@@ -105,6 +106,38 @@ export async function listUserNotifications(organizationId: string, userId: stri
       const secondDate = normalizeDate(second.triggerAt ?? second.updatedAt ?? second.createdAt);
       return new Date(String(secondDate ?? 0)).getTime() - new Date(String(firstDate ?? 0)).getTime();
     });
+}
+
+export function subscribeToUnreadUserNotifications(
+  organizationId: string,
+  userId: string,
+  onNext: (items: AppNotification[]) => void,
+  onError?: (error: Error) => void,
+) {
+  const firestore = assertDb();
+  return onSnapshot(
+    query(
+      collection(firestore, orgCollectionPath(organizationId, "notifications")),
+      where("isDeleted", "==", false),
+      where("recipientId", "==", userId),
+      where("readAt", "==", null),
+      limit(50),
+    ),
+    (snapshot) => {
+      onNext(snapshot.docs.map((item) => {
+        const data = item.data();
+        return {
+          id: item.id,
+          ...data,
+          createdAt: normalizeDate(data.createdAt),
+          readAt: normalizeDate(data.readAt),
+          triggerAt: normalizeDate(data.triggerAt),
+          updatedAt: normalizeDate(data.updatedAt),
+        } as AppNotification;
+      }));
+    },
+    onError,
+  );
 }
 
 export async function ensureUserNotifications(context: NotificationContext, drafts: NotificationDraft[], existing: AppNotification[]) {

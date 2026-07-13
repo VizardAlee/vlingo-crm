@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#155f16" />
+    <title>Vlingo CRM Offline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      body {
+        align-items: center;
+        background: #f7fbf4;
+        color: #172112;
+        display: flex;
+        justify-content: center;
+        margin: 0;
+        min-height: 100vh;
+        padding: 24px;
+      }
+
+      main {
+        background: #ffffff;
+        border: 1px solid #dce8d4;
+        border-radius: 8px;
+        box-shadow: 0 24px 60px rgba(18, 42, 13, 0.12);
+        max-width: 520px;
+        padding: 28px;
+      }
+
+      img {
+        display: block;
+        height: auto;
+        margin-bottom: 24px;
+        max-width: 220px;
+        width: 70%;
+      }
+
+      h1 {
+        font-size: 24px;
+        margin: 0 0 10px;
+      }
+
+      p {
+        color: #516149;
+        line-height: 1.6;
+        margin: 0 0 20px;
+      }
+
+      button {
+        background: #155f16;
+        border: 0;
+        border-radius: 6px;
+        color: #ffffff;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        padding: 12px 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd." />
+      <h1>You are offline</h1>
+      <p>Vlingo CRM needs an internet connection for secure live data. Reconnect, then reload this page to continue working.</p>
+      <button type="button" onclick="window.location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

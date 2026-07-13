@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
+import { browserNotificationPermission, requestBrowserNotificationPermission } from "@/features/notifications/browser-notification-listener";
 import { effectiveBranchId, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { ensureUserNotifications, listUserNotifications, markNotificationRead, markNotificationsRead, type NotificationDraft } from "@/services/notifications";
@@ -165,6 +166,7 @@ export function NotificationsCenter() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | "unsupported">(() => browserNotificationPermission());
   const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "deals.read", "rentals.read", "activities.read", "reports.viewFinancial"]);
   const context = useMemo(
     () => user ? { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid } : null,
@@ -380,6 +382,18 @@ export function NotificationsCenter() {
     }
   }
 
+  async function enableBrowserNotifications() {
+    const result = await requestBrowserNotificationPermission();
+    setBrowserPermission(result);
+    if (result === "granted") {
+      toast({ title: "Browser notifications enabled", description: "New unread CRM notifications can now appear as browser alerts.", variant: "success" });
+    } else if (result === "denied") {
+      toast({ title: "Browser notifications blocked", description: "Enable notifications for this site in your browser settings to receive alerts.", variant: "error" });
+    } else {
+      toast({ title: "Notifications unsupported", description: "This browser does not support web notifications.", variant: "error" });
+    }
+  }
+
   if (!canViewNotifications) {
     return <PermissionDenied />;
   }
@@ -396,6 +410,10 @@ export function NotificationsCenter() {
           <p className="mt-1 text-sm text-muted-foreground">Actionable reminders from tasks, leads, rent, renewals, and recent activity.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
+          <Button disabled={browserPermission === "granted" || browserPermission === "unsupported"} onClick={() => void enableBrowserNotifications()} type="button" variant="outline">
+            <Bell className="h-4 w-4" />
+            {browserPermission === "granted" ? "Browser alerts on" : browserPermission === "denied" ? "Alerts blocked" : browserPermission === "unsupported" ? "Alerts unavailable" : "Enable alerts"}
+          </Button>
           <Button onClick={loadNotifications} type="button" variant="outline">
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -408,6 +426,7 @@ export function NotificationsCenter() {
       </div>
 
       {error ? <ErrorState message={error} /> : null}
+      {browserPermission === "denied" ? <ErrorState message="Browser notifications are blocked for this site. Enable them in your browser settings to receive alerts outside the app inbox." /> : null}
 
       <div className="grid grid-cols-3 gap-3">
         {[

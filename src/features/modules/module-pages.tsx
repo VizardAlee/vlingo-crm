@@ -790,7 +790,11 @@ function DevelopmentOperationsPanel({
         assignedTo: String(record.projectManagerId ?? context.userId),
         description: `Development task for ${String(record.name ?? record.referenceNumber ?? id)}`,
         dueAt: taskDueAt,
+        estimatedDurationMinutes: 60,
+        expectedOutcome: "Project team completes the next site action and updates the development record.",
+        location: String(record.siteAddress ?? record.location ?? record.city ?? record.state ?? ""),
         priority: taskPriority,
+        reminderMinutesBefore: 1440,
         relatedEntityId: id,
         relatedEntityType: "development",
         status: "notStarted",
@@ -1139,7 +1143,11 @@ function RentalOperationsPanel({
         assignedTo: context.userId,
         description: `Review renewal for ${String(record.tenantName ?? "tenant")} at ${String(record.propertyName ?? record.unitName ?? "rental property")}. Lease ends ${dateDisplay(record.leaseEndDate)}.`,
         dueAt: renewalDueAt,
+        estimatedDurationMinutes: 45,
+        expectedOutcome: "Confirm renewal, move-out, replacement tenant, or payment action before the lease expires.",
+        location: [record.propertyName, record.unitName].filter(Boolean).join(" - "),
         priority: "high",
+        reminderMinutesBefore: 1440,
         relatedEntityId: id,
         relatedEntityType: "tenancy",
         status: "notStarted",
@@ -1581,7 +1589,11 @@ function LeadJourneyPanel({
         assignedTo: String(record.assignedTo ?? context.userId),
         description: `Lead follow-up for ${String(record.fullName ?? record.referenceNumber ?? id)}`,
         dueAt: followUpDueAt || "",
+        estimatedDurationMinutes: 30,
+        expectedOutcome: "Contact the lead, record the outcome, and move the sales journey to the next accurate stage.",
+        location: String(record.geoAddress ?? record.preferredLocation ?? record.city ?? record.state ?? ""),
         priority: followUpPriority,
+        reminderMinutesBefore: 60,
         relatedEntityId: id,
         relatedEntityType: "lead",
         status: "notStarted",
@@ -2074,6 +2086,7 @@ export function ModuleListPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
+  const [calendarFeedLoading, setCalendarFeedLoading] = useState(false);
   const fixedFilterKey = JSON.stringify(fixedFilters);
 
   useEffect(() => {
@@ -2156,6 +2169,42 @@ export function ModuleListPage({
     : undefined;
   const canBulkEmail = (config.collection === "leads" || config.collection === "clients") && hasPermission(member, "activities.create");
 
+  async function copyTaskCalendarFeed() {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in again before creating your calendar feed link.", variant: "error" });
+      return;
+    }
+
+    setCalendarFeedLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/calendar/tasks/link", {
+        body: JSON.stringify({ organizationId: activeOrganizationId }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; url?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.error || "Unable to create calendar feed link.");
+      }
+
+      await navigator.clipboard.writeText(payload.url);
+      toast({
+        title: "Calendar feed copied",
+        description: "Subscribe to this URL in Google, Apple, or Outlook Calendar to sync your dated CRM tasks.",
+        variant: "success",
+      });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to create calendar feed link.";
+      toast({ title: "Unable to copy calendar feed", description: message, variant: "error" });
+    } finally {
+      setCalendarFeedLoading(false);
+    }
+  }
+
   return (
     <section className="grid min-w-0 gap-5">
       <div className="flex flex-col gap-3 rounded-md bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between md:bg-transparent md:p-0 md:shadow-none">
@@ -2165,6 +2214,12 @@ export function ModuleListPage({
         </div>
         <div className="grid gap-2 md:flex">
           <AiGuideLink className="h-11 w-full md:h-10 md:w-auto" question={`How do I use the ${pageTitle} section in Vlingo Systems CRM? Explain what this module is for and the best workflow.`} />
+          {config.collection === "tasks" ? (
+            <Button className="h-11 w-full md:h-10 md:w-auto" disabled={calendarFeedLoading} onClick={() => void copyTaskCalendarFeed()} type="button" variant="outline">
+              <CalendarClock className="h-4 w-4" />
+              {calendarFeedLoading ? "Preparing" : "Copy calendar feed"}
+            </Button>
+          ) : null}
           {canBulkEmail ? (
             <Button className="h-11 w-full md:h-10 md:w-auto" onClick={() => setBulkEmailOpen((value) => !value)} type="button" variant={bulkEmailOpen ? "secondary" : "outline"}>
               <Mail className="h-4 w-4" />
