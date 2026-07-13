@@ -2247,6 +2247,7 @@ export function ModuleListPage({
       }
     : undefined;
   const canBulkEmail = (config.collection === "leads" || config.collection === "clients") && hasPermission(member, "activities.create");
+  const canCreateRecord = hasPermission(member, config.createPermission as never);
 
   async function copyTaskCalendarFeed() {
     setCalendarFeedLoading(true);
@@ -2281,8 +2282,8 @@ export function ModuleListPage({
               Bulk email
             </Button>
           ) : null}
-          {hasPermission(member, config.createPermission as never) ? (
-            <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={createHref ?? `${config.route}/new`}>
+          {canCreateRecord ? (
+            <ButtonLink className={cn("h-11 w-full md:h-10 md:w-auto", config.collection === "tasks" && "hidden lg:inline-flex")} href={createHref ?? `${config.route}/new`}>
               <Plus className="h-4 w-4" />
               New {singularTitle}
             </ButtonLink>
@@ -2296,6 +2297,16 @@ export function ModuleListPage({
       {error ? <ErrorState message={error} /> : loading ? <LoadingState label={`Loading ${config.title.toLowerCase()}`} /> : (
         <CrmTable compactContactView={compactContactView} columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${singularTitle}`} emptyTitle={config.emptyTitle} exportFilename={`${config.collection}.csv`} />
       )}
+      {config.collection === "tasks" && canCreateRecord ? (
+        <ButtonLink
+          aria-label="Create new task"
+          className="no-print fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 z-20 h-12 px-4 shadow-xl md:bottom-6 md:right-6 lg:hidden"
+          href={createHref ?? "/tasks/new"}
+        >
+          <Plus className="h-5 w-5" />
+          New task
+        </ButtonLink>
+      ) : null}
     </section>
   );
 }
