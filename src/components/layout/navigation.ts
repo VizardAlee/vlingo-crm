@@ -191,7 +191,7 @@ export const navigation: NavSection[] = [
     items: [
       { href: "/properties", icon: Building2, label: "Properties", permissions: ["properties.read"] },
       { href: "/units", icon: Home, label: "Units", permissions: ["units.read"] },
-      { href: "/offerings", icon: Package, label: "Offerings", permissions: ["offerings.read"] },
+      { href: "/offerings", icon: Package, label: "Products/Services", permissions: ["offerings.read"] },
     ],
   },
   {

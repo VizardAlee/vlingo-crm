@@ -177,3 +177,21 @@ export function isAssignedOnlySalesUser(member: Member | null) {
 
   return !roles.some((role) => ["superAdmin", "managingDirector", "operationsManager", "salesManager"].includes(role));
 }
+
+const notificationOversightRoles: RoleName[] = [
+  "superAdmin",
+  "managingDirector",
+  "operationsManager",
+  "salesManager",
+  "propertyManager",
+  "financeManager",
+  "projectManager",
+];
+
+export function hasNotificationOversight(member: Member | null) {
+  if (!member || member.status !== "active") {
+    return false;
+  }
+
+  return memberRoles(member).some((role) => notificationOversightRoles.includes(role));
+}

@@ -6,6 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["business", "productivity"],
     description: "Secure CRM and operations platform for Vlingo Systems Nig. Ltd.",
     display: "standalone",
+    display_override: ["window-controls-overlay", "standalone"],
     icons: [
       {
         src: "/icons/icon-192x192.png",
@@ -26,8 +27,24 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     id: "/",
     name: "Vlingo Systems CRM",
-    orientation: "portrait-primary",
     scope: "/",
+    shortcuts: [
+      {
+        name: "Dashboard",
+        short_name: "Dashboard",
+        url: "/dashboard",
+      },
+      {
+        name: "Create lead",
+        short_name: "New lead",
+        url: "/leads/new",
+      },
+      {
+        name: "Tasks",
+        short_name: "Tasks",
+        url: "/tasks",
+      },
+    ],
     short_name: "Vlingo CRM",
     start_url: "/dashboard",
     theme_color: "#155f16",

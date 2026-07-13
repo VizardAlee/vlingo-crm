@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { where, type QueryConstraint } from "firebase/firestore";
 import { AlertTriangle, Bell, CheckCircle2, Clock, FileClock, ListTodo, MessageSquare, RefreshCw, WalletCards } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,9 +11,10 @@ import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/stat
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { browserNotificationPermission, requestBrowserNotificationPermission } from "@/features/notifications/browser-notification-listener";
-import { effectiveBranchId, hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { effectiveBranchId, hasAnyPermission, hasNotificationOversight, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { ensureUserNotifications, listUserNotifications, markNotificationRead, markNotificationsRead, type NotificationDraft } from "@/services/notifications";
+import { registerPushSubscription, removePushSubscription } from "@/services/push-notifications";
 import { listOrgRecords } from "@/services/repository";
 import type { AppNotification, NotificationKind, NotificationTone } from "@/types/crm";
 
@@ -159,6 +160,27 @@ function notificationIcon(kind: NotificationKind) {
   return MessageSquare;
 }
 
+function recordRelatesToUser(record: Record<string, unknown>, userId: string, relatedRecords: Set<string> = new Set()) {
+  const directUserFields = [
+    "assignedTo",
+    "assignedManager",
+    "assignedRelationshipManager",
+    "campaignManagerId",
+    "createdBy",
+    "dealOwnerId",
+    "projectManagerId",
+    "updatedBy",
+  ];
+
+  if (directUserFields.some((field) => String(record[field] ?? "") === userId)) {
+    return true;
+  }
+
+  const relatedType = String(record.relatedEntityType ?? "");
+  const relatedId = String(record.relatedEntityId ?? "");
+  return Boolean(relatedType && relatedId && relatedRecords.has(`${relatedType}:${relatedId}`));
+}
+
 export function NotificationsCenter() {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
@@ -167,6 +189,9 @@ export function NotificationsCenter() {
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | "unsupported">(() => browserNotificationPermission());
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<"idle" | "registering" | "enabled">("idle");
+  const registrationAttempted = useRef(false);
   const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "deals.read", "rentals.read", "activities.read", "reports.viewFinancial"]);
   const context = useMemo(
     () => user ? { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid } : null,
@@ -183,16 +208,26 @@ export function NotificationsCenter() {
     try {
       const canReadAllLeads = hasPermission(member, "leads.readAll");
       const canReadElevatedTasks = hasAnyPermission(member, ["dashboard.viewExecutive", "users.manage"]);
+      const hasOversight = hasNotificationOversight(member);
       const branchId = effectiveBranchId(member, activeBranchId);
       const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
       const taskConstraints = canReadElevatedTasks ? branchConstraints : [...branchConstraints, where("assignedTo", "==", user.uid)];
-      const leadConstraints = canReadAllLeads ? branchConstraints : [...branchConstraints, where("assignedTo", "==", user.uid)];
-      const [tasks, leads, rentals, activities] = await Promise.all([
+      const leadConstraints = canReadAllLeads && hasOversight ? branchConstraints : [...branchConstraints, where("assignedTo", "==", user.uid)];
+      const [tasks, leads, rentalRecords, activityRecords] = await Promise.all([
         hasPermission(member, "tasks.read") ? safeList(activeOrganizationId, "tasks", taskConstraints) : [],
         hasAnyPermission(member, ["leads.readAssigned", "leads.readAll"]) ? safeList(activeOrganizationId, "leads", leadConstraints) : [],
         hasPermission(member, "rentals.read") ? safeList(activeOrganizationId, "rentalTenancies", branchConstraints) : [],
         hasPermission(member, "activities.read") ? safeList(activeOrganizationId, "activities", branchConstraints) : [],
       ]);
+      const relatedRecords = new Set([
+        ...tasks.map((task) => `task:${task.id}`),
+        ...leads.map((lead) => `lead:${lead.id}`),
+      ]);
+      const rentals = hasOversight ? rentalRecords : rentalRecords.filter((rental) => recordRelatesToUser(rental, user.uid));
+      rentals.forEach((rental) => relatedRecords.add(`tenancy:${rental.id}`));
+      const activities = hasOversight
+        ? activityRecords
+        : activityRecords.filter((activity) => recordRelatesToUser(activity, user.uid, relatedRecords));
       const generated: NotificationDraft[] = [];
 
       tasks.forEach((task) => {
@@ -326,6 +361,36 @@ export function NotificationsCenter() {
     return () => window.clearTimeout(timeout);
   }, [loadNotifications]);
 
+  useEffect(() => {
+    if (browserPermission !== "granted" || !user?.uid || !member?.branchId || registrationAttempted.current) {
+      return;
+    }
+
+    registrationAttempted.current = true;
+    let active = true;
+    setPushStatus("registering");
+    void registerPushSubscription({
+      branchId: member.branchId,
+      organizationId: activeOrganizationId,
+      userId: user.uid,
+    }).then((registration) => {
+      if (!active) {
+        return;
+      }
+      if (registration.status === "enabled") {
+        setPushError(null);
+        setPushStatus("enabled");
+      } else {
+        setPushError(registration.message);
+        setPushStatus("idle");
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeOrganizationId, browserPermission, member?.branchId, user?.uid]);
+
   const summary = useMemo(() => {
     const unread = items.filter((item) => !item.readAt);
     return {
@@ -384,13 +449,48 @@ export function NotificationsCenter() {
 
   async function enableBrowserNotifications() {
     const result = await requestBrowserNotificationPermission();
+    registrationAttempted.current = true;
     setBrowserPermission(result);
     if (result === "granted") {
-      toast({ title: "Browser notifications enabled", description: "New unread CRM notifications can now appear as browser alerts.", variant: "success" });
+      if (!user?.uid || !member?.branchId) {
+        toast({ title: "Unable to enable notifications", description: "Your active member profile is unavailable.", variant: "error" });
+        return;
+      }
+
+      setPushError(null);
+      setPushStatus("registering");
+      const registration = await registerPushSubscription({
+        branchId: member.branchId,
+        organizationId: activeOrganizationId,
+        userId: user.uid,
+      });
+      if (registration.status === "enabled") {
+        setPushStatus("enabled");
+        toast({ title: "Browser notifications enabled", description: "This device can receive CRM alerts while the app is in the background.", variant: "success" });
+      } else {
+        setPushError(registration.message);
+        setPushStatus("idle");
+        toast({ title: "Background alerts unavailable", description: registration.message, variant: "error" });
+      }
     } else if (result === "denied") {
       toast({ title: "Browser notifications blocked", description: "Enable notifications for this site in your browser settings to receive alerts.", variant: "error" });
     } else {
       toast({ title: "Notifications unsupported", description: "This browser does not support web notifications.", variant: "error" });
+    }
+  }
+
+  async function disableBrowserNotifications() {
+    setPushStatus("registering");
+    setPushError(null);
+    try {
+      await removePushSubscription({ organizationId: activeOrganizationId });
+      setPushStatus("idle");
+      toast({ title: "Browser notifications disabled", description: "CRM push delivery has been turned off on this device.", variant: "success" });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to disable browser notifications.";
+      setPushError(message);
+      setPushStatus("enabled");
+      toast({ title: "Unable to disable notifications", description: message, variant: "error" });
     }
   }
 
@@ -407,12 +507,21 @@ export function NotificationsCenter() {
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
           <h1 className="text-xl font-semibold md:text-2xl">Notifications</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Actionable reminders from tasks, leads, rent, renewals, and recent activity.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {hasNotificationOversight(member)
+              ? "Branch oversight reminders from tasks, leads, rent, renewals, and recent activity."
+              : "Your assigned and related reminders from tasks, leads, rent, renewals, and recent activity."}
+          </p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
-          <Button disabled={browserPermission === "granted" || browserPermission === "unsupported"} onClick={() => void enableBrowserNotifications()} type="button" variant="outline">
+          <Button
+            disabled={browserPermission === "unsupported" || pushStatus === "registering"}
+            onClick={() => pushStatus === "enabled" ? void disableBrowserNotifications() : void enableBrowserNotifications()}
+            type="button"
+            variant="outline"
+          >
             <Bell className="h-4 w-4" />
-            {browserPermission === "granted" ? "Browser alerts on" : browserPermission === "denied" ? "Alerts blocked" : browserPermission === "unsupported" ? "Alerts unavailable" : "Enable alerts"}
+            {pushStatus === "registering" ? "Setting up" : pushStatus === "enabled" ? "Disable on device" : browserPermission === "denied" ? "Alerts blocked" : browserPermission === "unsupported" ? "Alerts unavailable" : "Enable alerts"}
           </Button>
           <Button onClick={loadNotifications} type="button" variant="outline">
             <RefreshCw className="h-4 w-4" />
@@ -427,6 +536,7 @@ export function NotificationsCenter() {
 
       {error ? <ErrorState message={error} /> : null}
       {browserPermission === "denied" ? <ErrorState message="Browser notifications are blocked for this site. Enable them in your browser settings to receive alerts outside the app inbox." /> : null}
+      {pushError ? <ErrorState message={pushError} /> : null}
 
       <div className="grid grid-cols-3 gap-3">
         {[
@@ -485,9 +595,9 @@ export function NotificationsCenter() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Push Ready</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Browser delivery</CardTitle></CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          This inbox now stores notification records and read state in Firestore. Firebase Cloud Messaging can reuse these records for browser push delivery when device tokens and templates are added.
+          Enable alerts on each phone or computer where you want to receive CRM notifications. The device must allow notifications, and installed PWAs can receive them while the app is closed.
         </CardContent>
       </Card>
     </section>

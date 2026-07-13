@@ -56,14 +56,14 @@ const manualLeadTourSteps: GuidedTourStep[] = [
   { target: leadTourTarget("contact"), title: "Contact details", body: "Start with the lead name and reachable phone, WhatsApp, or email details so follow-up is reliable." },
   { target: leadTourTarget("source"), title: "Source tracking", body: "Record where the lead came from so marketing and sales reports can show what is working." },
   { target: leadTourTarget("interest"), title: "Interest category", body: "Choose the category first. The rest of the form changes to show the fields that fit that type of interest." },
-  { target: leadTourTarget("linkedOffering"), title: "Linked offering", body: "For non-real-estate leads, link the catalog product, service, solar package, installation, or consultancy offering when known." },
+  { target: leadTourTarget("linkedOffering"), title: "Linked product/service", body: "For non-real-estate leads, link the product, service, solar package, installation, or consultancy item when known." },
   { target: leadTourTarget("realEstatePreference"), title: "Real estate preference", body: "For real-estate leads, capture transaction interest, property type, category, bedrooms, and inspection expectations." },
   { target: leadTourTarget("linkedProperty"), title: "Linked property or unit", body: "Link the exact property or unit when the lead is asking about a known listing. This context can later flow into deals." },
   { target: leadTourTarget("budget"), title: "Budget and location", body: "Capture location, currency, budget range, and payment preference so matching and qualification are easier." },
   { target: leadTourTarget("geotag"), title: "Geotag location", body: "Capture the lead's site or preferred location from the device GPS when field teams need map visibility." },
   { target: leadTourTarget("workflow"), title: "Workflow status", body: "Set status, score, follow-up date, and inspection date to keep the pipeline actionable." },
   { target: leadTourTarget("notes"), title: "Notes and referral", body: "Add referral details, tags, and notes that help the assigned user understand the conversation." },
-  { target: leadTourTarget("save"), title: "Create lead", body: "Save the lead after reviewing the details. The system records creator, branch, assignment, and linked offering context." },
+  { target: leadTourTarget("save"), title: "Create lead", body: "Save the lead after reviewing the details. The system records creator, branch, assignment, and linked product/service context." },
 ];
 
 const importLeadTourSteps: GuidedTourStep[] = [
@@ -187,9 +187,9 @@ const importFields = [
   { key: "propertyReferenceNumber", label: "Property reference" },
   { key: "unitId", label: "Unit ID" },
   { key: "unitName", label: "Unit name/number" },
-  { key: "offeringId", label: "Offering ID" },
-  { key: "offeringName", label: "Offering name" },
-  { key: "offeringReferenceNumber", label: "Offering reference / SKU" },
+  { key: "offeringId", label: "Product/service ID" },
+  { key: "offeringName", label: "Product/service name" },
+  { key: "offeringReferenceNumber", label: "Product/service reference / SKU" },
   { key: "propertyType", label: "Property type" },
   { key: "preferredPropertyCategory", label: "Property category" },
   { key: "preferredBedrooms", label: "Bedrooms" },
@@ -944,9 +944,9 @@ export function LeadCreatePage() {
                 </Field>
                 {hasInterestCategory && !isRealEstateInterest ? (
                   <div data-tour={leadTourTarget("linkedOffering")}>
-                  <Field label="Linked catalog offering">
+                  <Field label="Linked product/service">
                     <Select value={values.offeringId} onChange={(event) => updateField("offeringId", event.target.value)}>
-                      <option value="">Select offering</option>
+                      <option value="">Select product/service</option>
                       {offeringOptions.map((offering) => <option key={offering.value} value={offering.value}>{offering.label}</option>)}
                     </Select>
                   </Field>
@@ -1170,7 +1170,7 @@ export function LeadCreatePage() {
                         <th className="px-4 py-3">Name</th>
                         <th className="px-4 py-3">Phone</th>
                         <th className="px-4 py-3">Source</th>
-                        <th className="px-4 py-3">Linked offering</th>
+                        <th className="px-4 py-3">Linked product/service</th>
                         <th className="px-4 py-3">Interest</th>
                         <th className="px-4 py-3">Status</th>
                       </tr>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accessRuleForPath, navigation } from "../../src/components/layout/navigation";
-import { hasAnyPermission, hasPermission, rolePermissions } from "../../src/lib/permissions";
+import { hasAnyPermission, hasNotificationOversight, hasPermission, rolePermissions } from "../../src/lib/permissions";
 import type { Member } from "../../src/types/crm";
 
 describe("route access rules", () => {
@@ -50,6 +50,24 @@ describe("route access rules", () => {
 
     expect(hasPermission(member, "finance.approve")).toBe(true);
     expect(hasAnyPermission(member, ["offerings.create"])).toBe(true);
+  });
+
+  it("limits notification oversight to active managerial roles", () => {
+    const member = {
+      branchId: "head-office",
+      displayName: "Sales User",
+      email: "sales@example.com",
+      id: "sales-1",
+      organizationId: "org-a",
+      permissions: rolePermissions.salesExecutive,
+      role: "salesExecutive" as const,
+      status: "active" as const,
+    };
+
+    expect(hasNotificationOversight(member)).toBe(false);
+    expect(hasNotificationOversight({ ...member, role: "salesManager" })).toBe(true);
+    expect(hasNotificationOversight({ ...member, roles: ["salesExecutive", "operationsManager"] })).toBe(true);
+    expect(hasNotificationOversight({ ...member, role: "financeManager", status: "disabled" })).toBe(false);
   });
 
   it("does not grant finance navigation to sales-only roles", () => {

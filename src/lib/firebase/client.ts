@@ -3,7 +3,14 @@
 import { initializeApp, getApps } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
-import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import {
+  connectFirestoreEmulator,
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { getMessaging, isSupported } from "firebase/messaging";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
@@ -11,6 +18,7 @@ import { firebaseClientEnv, hasFirebaseClientConfig } from "@/lib/firebase/confi
 
 declare global {
   var __beaconFirebaseEmulatorsConnected: boolean | undefined;
+  var __beaconFirestore: Firestore | undefined;
 }
 
 function app() {
@@ -30,7 +38,16 @@ function app() {
 
 export const firebaseApp = app();
 export const auth = firebaseApp ? getAuth(firebaseApp) : null;
-export const db = firebaseApp ? getFirestore(firebaseApp) : null;
+export const db = firebaseApp
+  ? typeof window === "undefined"
+    ? getFirestore(firebaseApp)
+    : globalThis.__beaconFirestore ?? initializeFirestore(firebaseApp, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })
+  : null;
+if (typeof window !== "undefined" && db) {
+  globalThis.__beaconFirestore = db;
+}
 export const functions = firebaseApp ? getFunctions(firebaseApp) : null;
 export const storage = firebaseApp ? getStorage(firebaseApp) : null;
 

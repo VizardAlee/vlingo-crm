@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { User } from "firebase/auth";
 import { where, type QueryConstraint } from "firebase/firestore";
 import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
@@ -28,6 +29,41 @@ import { convertLeadToClient } from "@/services/workflows";
 import type { Member } from "@/types/crm";
 
 type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "offering";
+
+function moduleSingularTitle(config: ModuleConfig) {
+  return config.singularTitle ?? config.title.slice(0, -1);
+}
+
+type ModuleToast = (toast: { description?: string; title: string; variant?: "error" | "info" | "success" }) => void;
+
+async function copyUserTaskCalendarFeed(user: User | null | undefined, organizationId: string, toast: ModuleToast) {
+  if (!user) {
+    toast({ title: "Sign in required", description: "Sign in again before creating your calendar feed link.", variant: "error" });
+    return false;
+  }
+
+  const token = await user.getIdToken();
+  const response = await fetch("/api/calendar/tasks/link", {
+    body: JSON.stringify({ organizationId }),
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+  const payload = await response.json().catch(() => ({})) as { error?: string; url?: string };
+  if (!response.ok || !payload.url) {
+    throw new Error(payload.error || "Unable to create calendar feed link.");
+  }
+
+  await navigator.clipboard.writeText(payload.url);
+  toast({
+    title: "Calendar feed copied",
+    description: "Subscribe to this URL in Google, Apple, or Outlook Calendar. Dated assigned tasks will sync automatically.",
+    variant: "success",
+  });
+  return true;
+}
 
 function relatedTypeForCollection(collection: ModuleConfig["collection"]): RelatedEntityType | null {
   if (collection === "leads") {
@@ -533,11 +569,11 @@ function LeadOfferingPanel({
     .map((offering) => ({
       href: `/offerings/${offering.id}`,
       id: String(offering.id),
-      label: String(offering.name ?? offering.referenceNumber ?? "Offering"),
+      label: String(offering.name ?? offering.referenceNumber ?? "Product/service"),
       price: offeringCatalogPrice(offering),
       score: catalogMatchScore(record, offering),
       subtitle: [titleCase(String(offering.vertical ?? "")), titleCase(String(offering.type ?? "")), offering.category].filter(Boolean).join(" · "),
-      type: "Offering",
+      type: "Product/service",
     }));
   const matches = [...unitMatches, ...propertyMatches, ...offeringMatches]
     .filter((match) => match.score > 0 && match.id !== record.unitId && match.id !== record.propertyId && match.id !== record.offeringId)
@@ -547,13 +583,13 @@ function LeadOfferingPanel({
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader><CardTitle>Linked Offering</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Linked Product/Service</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm">
           {propertyLabel || unitLabel || offeringLabel ? (
             <>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground">Catalog offering</span>
-                {record.offeringId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/offerings/${record.offeringId}`}>{offeringLabel || "View offering"}</Link> : <span className="font-medium">{offeringLabel || "Not linked"}</span>}
+                <span className="text-muted-foreground">Product/service</span>
+                {record.offeringId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/offerings/${record.offeringId}`}>{offeringLabel || "View product/service"}</Link> : <span className="font-medium">{offeringLabel || "Not linked"}</span>}
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-muted-foreground">Property</span>
@@ -565,12 +601,12 @@ function LeadOfferingPanel({
               </div>
             </>
           ) : (
-            <div className="rounded-md border border-dashed p-4 text-muted-foreground">No catalog offering, property, or unit has been linked to this lead yet.</div>
+            <div className="rounded-md border border-dashed p-4 text-muted-foreground">No product/service, property, or unit has been linked to this lead yet.</div>
           )}
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Matching Offerings</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Matching Products/Services</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm">
           {matches.length ? matches.map((match) => (
             <Link className="rounded-md border p-3 hover:bg-muted" href={match.href} key={`${match.type}-${match.id}`}>
@@ -1370,6 +1406,8 @@ function LeadJourneyPanel({
   const [followUpDueAt, setFollowUpDueAt] = useState("");
   const [followUpPriority, setFollowUpPriority] = useState("medium");
   const [saving, setSaving] = useState<"stage" | "interaction" | "email" | "task" | null>(null);
+  const [calendarPrompt, setCalendarPrompt] = useState<{ dueAt: string; taskId: string; title: string } | null>(null);
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -1602,6 +1640,11 @@ function LeadJourneyPanel({
 
       await updateOrgRecord("leads", id, { nextFollowUpAt: followUpDueAt || "" }, context);
       await writeAuditLog(context, "task.create", "tasks", taskId, { relatedEntityId: id, title: followUpTitle.trim() });
+      if (followUpDueAt) {
+        setCalendarPrompt({ dueAt: followUpDueAt, taskId, title: followUpTitle.trim() });
+      } else {
+        setCalendarPrompt(null);
+      }
       setFollowUpTitle("");
       setFollowUpDueAt("");
       setSuccess("Follow-up task created.");
@@ -1610,6 +1653,21 @@ function LeadJourneyPanel({
       setError(nextError instanceof Error ? nextError.message : "Unable to create follow-up task.");
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function syncCalendarFromPrompt() {
+    setCalendarSyncing(true);
+    try {
+      const copied = await copyUserTaskCalendarFeed(user, activeOrganizationId, toast);
+      if (copied) {
+        setCalendarPrompt(null);
+      }
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to create calendar feed link.";
+      toast({ title: "Unable to sync calendar", description: message, variant: "error" });
+    } finally {
+      setCalendarSyncing(false);
     }
   }
 
@@ -1688,6 +1746,26 @@ function LeadJourneyPanel({
         <div className="flex items-center gap-2 rounded-md border border-success/20 bg-success/10 p-3 text-sm font-medium text-success">
           <CheckCircle2 className="h-4 w-4" />
           {success}
+        </div>
+      ) : null}
+      {calendarPrompt ? (
+        <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-semibold text-foreground">Sync this follow-up with your calendar?</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {calendarPrompt.title} is dated {formatDate(calendarPrompt.dueAt)}. Copy your private calendar feed and subscribe once in Google, Apple, or Outlook Calendar.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:flex">
+              <Button disabled={calendarSyncing} onClick={() => void syncCalendarFromPrompt()} type="button" variant="secondary">
+                <CalendarClock className="h-4 w-4" />
+                {calendarSyncing ? "Preparing" : "Sync with calendar"}
+              </Button>
+              <ButtonLink href={`/tasks/${calendarPrompt.taskId}`} variant="outline">View task</ButtonLink>
+              <Button onClick={() => setCalendarPrompt(null)} type="button" variant="ghost">Later</Button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -2160,6 +2238,7 @@ export function ModuleListPage({
       : "Search, filter, sort, export, and manage organization-scoped records."
   );
   const pageTitle = title ?? (config.collection === "propertyUnits" ? "Unit Inventory" : config.title);
+  const singularTitle = moduleSingularTitle(config);
   const compactContactView = config.collection === "leads" || config.collection === "clients"
     ? {
         getHref: (row: Record<string, unknown>) => `${config.route}/${String(row.id)}`,
@@ -2170,33 +2249,9 @@ export function ModuleListPage({
   const canBulkEmail = (config.collection === "leads" || config.collection === "clients") && hasPermission(member, "activities.create");
 
   async function copyTaskCalendarFeed() {
-    if (!user) {
-      toast({ title: "Sign in required", description: "Sign in again before creating your calendar feed link.", variant: "error" });
-      return;
-    }
-
     setCalendarFeedLoading(true);
     try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/calendar/tasks/link", {
-        body: JSON.stringify({ organizationId: activeOrganizationId }),
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
-      const payload = await response.json().catch(() => ({})) as { error?: string; url?: string };
-      if (!response.ok || !payload.url) {
-        throw new Error(payload.error || "Unable to create calendar feed link.");
-      }
-
-      await navigator.clipboard.writeText(payload.url);
-      toast({
-        title: "Calendar feed copied",
-        description: "Subscribe to this URL in Google, Apple, or Outlook Calendar to sync your dated CRM tasks.",
-        variant: "success",
-      });
+      await copyUserTaskCalendarFeed(user, activeOrganizationId, toast);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to create calendar feed link.";
       toast({ title: "Unable to copy calendar feed", description: message, variant: "error" });
@@ -2229,7 +2284,7 @@ export function ModuleListPage({
           {hasPermission(member, config.createPermission as never) ? (
             <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={createHref ?? `${config.route}/new`}>
               <Plus className="h-4 w-4" />
-              New {config.title.slice(0, -1)}
+              New {singularTitle}
             </ButtonLink>
           ) : null}
         </div>
@@ -2239,7 +2294,7 @@ export function ModuleListPage({
         <BulkEmailPanel collection={config.collection} onClose={() => setBulkEmailOpen(false)} organizationId={activeOrganizationId} records={records} />
       ) : null}
       {error ? <ErrorState message={error} /> : loading ? <LoadingState label={`Loading ${config.title.toLowerCase()}`} /> : (
-        <CrmTable compactContactView={compactContactView} columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${config.title.slice(0, -1)}`} emptyTitle={config.emptyTitle} exportFilename={`${config.collection}.csv`} />
+        <CrmTable compactContactView={compactContactView} columns={columnsFor(config.collection)} data={records} emptyActionHref={`${config.route}/new`} emptyActionLabel={`Create ${singularTitle}`} emptyTitle={config.emptyTitle} exportFilename={`${config.collection}.csv`} />
       )}
     </section>
   );
@@ -2248,6 +2303,7 @@ export function ModuleListPage({
 export function ModuleCreatePage({ config }: { config: ModuleConfig }) {
   const { member } = useAuth();
   const searchParams = useSearchParams();
+  const singularTitle = moduleSingularTitle(config);
   if (!hasPermission(member, config.createPermission as never)) {
     return <PermissionDenied />;
   }
@@ -2257,10 +2313,10 @@ export function ModuleCreatePage({ config }: { config: ModuleConfig }) {
   return (
     <section className="grid min-w-0 gap-5">
       <div className="rounded-md bg-white p-4 shadow-sm md:bg-transparent md:p-0 md:shadow-none">
-        <h1 className="text-xl font-semibold md:text-2xl">Create {config.title.slice(0, -1)}</h1>
+        <h1 className="text-xl font-semibold md:text-2xl">Create {singularTitle}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Validated form data writes through the organization-scoped Firestore repository.</p>
         <div className="mt-3">
-          <AiGuideLink question={`Guide me step by step to create a ${config.title.slice(0, -1)} in Vlingo Systems CRM. Explain what information I need before saving.`} />
+          <AiGuideLink question={`Guide me step by step to create a ${singularTitle} in Vlingo Systems CRM. Explain what information I need before saving.`} />
         </div>
       </div>
       <ModuleForm config={config} initialValues={initialValues} />
@@ -2460,6 +2516,25 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     }
   }
 
+  async function handleSyncTaskCalendar() {
+    if (!record?.dueAt) {
+      toast({ title: "Task needs a due date", description: "Add a due date before syncing this task to your calendar feed.", variant: "error" });
+      return;
+    }
+
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await copyUserTaskCalendarFeed(user, activeOrganizationId, toast);
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to create calendar feed link.";
+      setActionError(message);
+      toast({ title: "Unable to sync calendar", description: message, variant: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   return (
     <section className="grid min-w-0 gap-5">
       <div className="flex flex-col gap-3 rounded-md bg-white p-4 shadow-sm md:flex-row md:items-start md:justify-between md:bg-transparent md:p-0 md:shadow-none">
@@ -2468,7 +2543,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
           <p className="mt-1 text-sm text-muted-foreground">{String(record.referenceNumber ?? id)} · {status}</p>
         </div>
         <div className="grid gap-2 md:flex">
-          <AiGuideLink className="h-11 w-full md:h-10 md:w-auto" question={`What should I do next on this ${config.title.slice(0, -1)} record in Vlingo Systems CRM? Explain the best workflow and related actions.`} />
+          <AiGuideLink className="h-11 w-full md:h-10 md:w-auto" question={`What should I do next on this ${moduleSingularTitle(config)} record in Vlingo Systems CRM? Explain the best workflow and related actions.`} />
           {config.collection === "leads" && hasPermission(member, "clients.create") && status !== "converted" && status !== "lost" ? (
             <Button className="h-11 w-full md:h-10 md:w-auto" disabled={actionLoading} onClick={handleConvertLead} type="button" variant="secondary">
               <Repeat2 className="h-4 w-4" />
@@ -2476,6 +2551,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
             </Button>
           ) : null}
           {hasPermission(member, config.editPermission as never) ? <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href={`${config.route}/${id}/edit`} variant="outline">Edit record</ButtonLink> : null}
+          {config.collection === "tasks" ? (
+            <Button className="h-11 w-full md:h-10 md:w-auto" disabled={actionLoading} onClick={() => void handleSyncTaskCalendar()} type="button" variant="secondary">
+              <CalendarClock className="h-4 w-4" />
+              Sync calendar
+            </Button>
+          ) : null}
           {canDeleteLead ? (
             <Button className="h-11 w-full md:h-10 md:w-auto" disabled={actionLoading} onClick={handleDeleteLead} type="button" variant="danger">
               <Trash2 className="h-4 w-4" />
@@ -2636,6 +2717,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
 export function ModuleEditPage({ config, id }: { config: ModuleConfig; id: string }) {
   const { activeOrganizationId, member } = useAuth();
+  const singularTitle = moduleSingularTitle(config);
   const [record, setRecord] = useState<Record<string, string | number | string[] | undefined> | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -2660,10 +2742,10 @@ export function ModuleEditPage({ config, id }: { config: ModuleConfig; id: strin
   return (
     <section className="grid min-w-0 gap-5">
       <div className="rounded-md bg-white p-4 shadow-sm md:bg-transparent md:p-0 md:shadow-none">
-        <h1 className="text-xl font-semibold md:text-2xl">Edit {config.title.slice(0, -1)}</h1>
+        <h1 className="text-xl font-semibold md:text-2xl">Edit {singularTitle}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Organization and audit fields are preserved by the repository and security rules.</p>
         <div className="mt-3">
-          <AiGuideLink question={`Guide me step by step to edit a ${config.title.slice(0, -1)} in Vlingo Systems CRM. Explain what fields I should review before saving.`} />
+          <AiGuideLink question={`Guide me step by step to edit a ${singularTitle} in Vlingo Systems CRM. Explain what fields I should review before saving.`} />
         </div>
       </div>
       <ModuleForm config={config} existing={record} id={id} />

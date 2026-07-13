@@ -250,7 +250,7 @@ export const propertySchema = z.object({
 });
 
 export const offeringSchema = z.object({
-  name: z.string().min(2, "Offering name is required."),
+  name: z.string().min(2, "Product/service name is required."),
   vertical: z.enum(["realEstate", "solar", "buildingMaterials", "generalServices", "custom"]),
   type: z.enum(["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"]),
   category: z.string().min(2, "Category is required."),

@@ -30,6 +30,7 @@ export interface ModuleConfig {
   listPermission: string;
   prefix: string;
   route: string;
+  singularTitle?: string;
   title: string;
 }
 
@@ -99,9 +100,9 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "preferredBudgetCurrency", label: "Budget currency", type: "text" },
       { name: "interestCategory", label: "Interest category", options: businessVerticals, type: "select" },
       { name: "transactionInterest", label: "Transaction interest", options: ["buy", "rent", "lease", "invest"], required: true, type: "select" },
-      { helpText: "Optional: link the primary property this lead is asking about.", name: "propertyId", label: "Linked property", optionSource: "properties", section: "Linked offering", type: "select" },
-      { helpText: "Optional if the interest is for a specific unit.", name: "unitId", label: "Linked unit", optionSource: "propertyUnits", section: "Linked offering", type: "select" },
-      { helpText: "Use this for solar, building materials, consultancy, installation packages, or any non-property product/service.", name: "offeringId", label: "Linked catalog offering", optionSource: "offerings", section: "Linked offering", type: "select" },
+      { helpText: "Optional: link the primary property this lead is asking about.", name: "propertyId", label: "Linked property", optionSource: "properties", section: "Linked product/service", type: "select" },
+      { helpText: "Optional if the interest is for a specific unit.", name: "unitId", label: "Linked unit", optionSource: "propertyUnits", section: "Linked product/service", type: "select" },
+      { helpText: "Use this for solar, building materials, consultancy, installation packages, or any non-property product/service.", name: "offeringId", label: "Linked product/service", optionSource: "offerings", section: "Linked product/service", type: "select" },
       { name: "source", label: "Source", options: leadSources, required: true, type: "select" },
       { name: "sourcePlatform", label: "Source platform", type: "text" },
       { name: "campaignName", label: "Campaign name", type: "text" },
@@ -164,7 +165,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { helpText: "Optional until the buyer, tenant, or investor has a client record.", name: "clientId", label: "Client", optionSource: "clients", section: "Linked records", type: "select" },
       { name: "propertyId", label: "Property", optionSource: "properties", section: "Linked records", type: "select" },
       { helpText: "Optional if the deal is for the full property.", name: "unitId", label: "Unit", optionSource: "propertyUnits", section: "Linked records", type: "select" },
-      { helpText: "Use this for non-real-estate products/services or to connect a deal to the broader catalog.", name: "offeringId", label: "Catalog offering", optionSource: "offerings", section: "Linked records", type: "select" },
+      { helpText: "Use this for non-real-estate products/services or to connect a deal to the broader catalog.", name: "offeringId", label: "Product/service", optionSource: "offerings", section: "Linked records", type: "select" },
 
       { name: "offerAmount", label: "Offer amount", section: "Commercial terms", type: "number" },
       { name: "agreedAmount", label: "Agreed amount", section: "Commercial terms", type: "number" },
@@ -300,18 +301,19 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     collection: "offerings",
     createPermission: "offerings.create",
     editPermission: "offerings.update",
-    emptyTitle: "No offerings have been added yet.",
+    emptyTitle: "No products/services have been added yet.",
     listPermission: "offerings.read",
     prefix: "OFR",
     route: "/offerings",
-    title: "Offerings",
+    singularTitle: "Product/Service",
+    title: "Products/Services",
     fields: [
-      { name: "name", label: "Offering name", placeholder: "Example: 5kVA Solar Installation Package", required: true, section: "Offering basics", type: "text" },
-      { name: "vertical", label: "Business vertical", options: businessVerticals, required: true, section: "Offering basics", type: "select" },
-      { name: "type", label: "Offering type", options: offeringTypes, required: true, section: "Offering basics", type: "select" },
-      { name: "category", label: "Category", placeholder: "Solar package, cement, land, consulting...", required: true, section: "Offering basics", type: "text" },
-      { name: "status", label: "Status", options: offeringStatuses, required: true, section: "Offering basics", type: "select" },
-      { colSpan: "full", name: "description", label: "Description", section: "Offering basics", type: "textarea" },
+      { name: "name", label: "Product/service name", placeholder: "Example: 5kVA Solar Installation Package", required: true, section: "Product/service basics", type: "text" },
+      { name: "vertical", label: "Business vertical", options: businessVerticals, required: true, section: "Product/service basics", type: "select" },
+      { name: "type", label: "Product/service type", options: offeringTypes, required: true, section: "Product/service basics", type: "select" },
+      { name: "category", label: "Category", placeholder: "Solar package, cement, land, consulting...", required: true, section: "Product/service basics", type: "text" },
+      { name: "status", label: "Status", options: offeringStatuses, required: true, section: "Product/service basics", type: "select" },
+      { colSpan: "full", name: "description", label: "Description", section: "Product/service basics", type: "textarea" },
 
       { name: "sku", label: "SKU / item code", section: "Commercials and stock", type: "text" },
       { name: "unitOfMeasure", label: "Unit of measure", options: unitOfMeasureOptions, section: "Commercials and stock", type: "select" },
@@ -503,7 +505,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Lead", accessorKey: "fullName" },
       { header: "Phone", cell: ({ row }) => <WhatsAppPhoneLink displayNumber={String(row.original.phoneNumber ?? "")} phoneNumber={String(row.original.whatsappNumber ?? row.original.phoneNumber ?? "")} /> },
       { header: "Source", cell: ({ row }) => String(row.original.source ?? "") },
-      { header: "Offering", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
+      { header: "Product/service", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
       { header: "Interest", cell: ({ row }) => titleCase(String(row.original.transactionInterest ?? "")) },
       inputByColumn,
       statusColumn,
@@ -533,7 +535,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
         ),
       },
       { header: "Client/lead", cell: ({ row }) => String(row.original.clientName ?? row.original.leadName ?? "Not linked") },
-      { header: "Offering", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
+      { header: "Product/service", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
       { header: "Value", cell: ({ row }) => formatCurrency(Number(row.original.agreedAmount ?? row.original.offerAmount ?? row.original.depositAmount ?? row.original.reservationAmount ?? 0)) },
       { header: "Owner", cell: ({ row }) => String(row.original.dealOwnerName ?? row.original.dealOwnerEmail ?? "Unassigned") },
       inputByColumn,
@@ -609,10 +611,10 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
   if (moduleKey === "offerings") {
     return [
       {
-        header: "Offering",
+        header: "Product/service",
         cell: ({ row }) => (
           <Link className="grid gap-0.5 font-semibold text-primary" href={`/offerings/${row.original.id}`}>
-            <span>{String(row.original.name ?? "Offering")}</span>
+            <span>{String(row.original.name ?? "Product/service")}</span>
             <span className="text-xs font-medium text-muted-foreground">{String(row.original.referenceNumber ?? "Draft")}</span>
           </Link>
         ),

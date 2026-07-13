@@ -65,7 +65,7 @@ export default function DashboardPage() {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
           {canCreateLead ? <ButtonLink className="h-11 md:h-10" href="/leads/new" variant="secondary">Capture lead</ButtonLink> : null}
-          {canCreateOffering ? <ButtonLink className="h-11 md:h-10" href="/offerings/new" variant="outline">Add offering</ButtonLink> : null}
+          {canCreateOffering ? <ButtonLink className="h-11 md:h-10" href="/offerings/new" variant="outline">Add product/service</ButtonLink> : null}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">

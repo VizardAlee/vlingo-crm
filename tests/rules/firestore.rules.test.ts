@@ -1,5 +1,5 @@
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
@@ -535,6 +535,52 @@ describe("Beacon Firestore rules", () => {
       readBy: "sales-1",
       title: "Changed title",
       updatedBy: "sales-1",
+    }));
+  });
+
+  it("allows active users to manage only their own push subscriptions", async () => {
+    await seedMember("sales-1", "org-a", [], "salesExecutive");
+    await seedMember("sales-2", "org-a", [], "salesExecutive");
+    const ownerDb = testEnv.authenticatedContext("sales-1").firestore();
+    const otherDb = testEnv.authenticatedContext("sales-2").firestore();
+    const subscriptionRef = doc(ownerDb, "organizations/org-a/pushSubscriptions/device-1");
+    const record = {
+      branchId: "head-office",
+      createdBy: "sales-1",
+      isDeleted: false,
+      organizationId: "org-a",
+      status: "active",
+      token: "a-valid-registration-token-for-device-1",
+      updatedBy: "sales-1",
+      userAgent: "Test browser",
+      userId: "sales-1",
+    };
+
+    await assertSucceeds(setDoc(subscriptionRef, record));
+    await assertSucceeds(getDoc(subscriptionRef));
+    await assertFails(getDoc(doc(otherDb, "organizations/org-a/pushSubscriptions/device-1")));
+    await assertFails(deleteDoc(doc(otherDb, "organizations/org-a/pushSubscriptions/device-1")));
+    await assertFails(setDoc(doc(otherDb, "organizations/org-a/pushSubscriptions/device-2"), {
+      ...record,
+      createdBy: "sales-2",
+      updatedBy: "sales-2",
+    }));
+    await assertSucceeds(deleteDoc(subscriptionRef));
+  });
+
+  it("blocks malformed push subscription records", async () => {
+    await seedMember("sales-1", "org-a", [], "salesExecutive");
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertFails(setDoc(doc(db, "organizations/org-a/pushSubscriptions/device-1"), {
+      branchId: "head-office",
+      createdBy: "sales-1",
+      isDeleted: false,
+      organizationId: "org-a",
+      status: "active",
+      token: "short",
+      updatedBy: "sales-1",
+      userId: "sales-1",
     }));
   });
 

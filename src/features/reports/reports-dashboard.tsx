@@ -144,7 +144,7 @@ export function ReportsDashboard() {
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
           <h1 className="text-xl font-semibold md:text-2xl">Reports</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Operational reporting from live leads, deals, offerings, properties, units, and tasks.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Operational reporting from live leads, deals, products/services, properties, units, and tasks.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
           <Button onClick={loadReports} type="button" variant="outline">

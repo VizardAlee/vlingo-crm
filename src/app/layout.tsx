@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PwaRegistrar } from "@/components/pwa/pwa-registrar";
 import { ToastProvider } from "@/components/ui/toast";
@@ -33,6 +33,12 @@ export const metadata: Metadata = {
     "mobile-web-app-capable": "yes",
     "msapplication-TileColor": "#155f16",
   },
+};
+
+export const viewport: Viewport = {
+  colorScheme: "light",
+  themeColor: "#155f16",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

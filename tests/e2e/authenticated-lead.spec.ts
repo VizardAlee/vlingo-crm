@@ -30,6 +30,7 @@ test.describe("@authenticated lead to deal workflow", () => {
     await page.getByLabel("Full name").fill(leadName);
     await page.getByLabel("Phone number").fill("+2348012345678");
     await page.getByLabel("WhatsApp number").fill("+2348012345678");
+    await page.getByLabel("Interest category").selectOption("realEstate");
     await page.getByLabel("Property type").selectOption("Apartment");
     await page.getByLabel("Linked property").selectOption("e2e-property");
     await page.getByLabel("Linked unit").selectOption("e2e-unit");
@@ -38,7 +39,7 @@ test.describe("@authenticated lead to deal workflow", () => {
     await page.getByLabel("Status").selectOption("qualified");
     await page.getByRole("button", { name: /create lead/i }).click();
 
-    await expect(page.getByText("Lead created.")).toBeVisible();
+    await expect(page.getByRole("main").getByText("Lead created.")).toBeVisible();
 
     await page.goto("/leads", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("cell", { name: leadName })).toBeVisible();

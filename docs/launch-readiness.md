@@ -77,6 +77,14 @@ AI_GUIDE_RESPONSE_CHARACTER_LIMIT="3500"
 
 AI Guide quota is stored in Firestore under internal usage records, so logout, browser refresh, app restart, or redeploy should not reset a user's daily allowance before the UTC day changes.
 
+9. Configure browser push delivery:
+
+- In Firebase Console, open Project settings > Cloud Messaging > Web Push certificates and generate or import a Web Push certificate.
+- Add its public key to the hosting environment as `NEXT_PUBLIC_FIREBASE_VAPID_KEY`. This key is public and must be available during the Next.js build.
+- Enable the Firebase Cloud Messaging API for the project.
+- Deploy Firestore rules and Functions so users can store their own device registration and `deliverNotificationPush` can send newly created CRM notifications.
+- On each supported device, sign in, open Notifications, and select **Enable alerts**. Notification permission and device registration are independent; the CRM reports a registration error if permission is granted but FCM setup is incomplete.
+
 For local development, Admin Firestore access uses Google Application Default Credentials when `FIREBASE_ADMIN_CLIENT_EMAIL` and `FIREBASE_ADMIN_PRIVATE_KEY` are not configured. If AI Guide reports `invalid_rapt` or `invalid_grant`, refresh local credentials and restart the dev server:
 
 ```bash

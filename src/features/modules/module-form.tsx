@@ -38,6 +38,10 @@ const schemaByCollection: Record<string, ZodType> = {
   tasks: taskSchema,
 };
 
+function moduleSingularTitle(config: ModuleConfig) {
+  return config.singularTitle ?? config.title.slice(0, -1);
+}
+
 type FormValues = Record<string, string | number | string[] | undefined>;
 type SelectOption = { label: string; value: string };
 type StakeholderKind = "developer" | "management" | "owner";
@@ -991,7 +995,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
       toast({
         title: id ? "Record updated" : "Record created",
-        description: `${config.title.slice(0, -1)} ${id ? "updated" : "created"} successfully.`,
+        description: `${moduleSingularTitle(config)} ${id ? "updated" : "created"} successfully.`,
         variant: "success",
       });
       router.push(config.route);
@@ -1047,7 +1051,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return managerOptions;
     }
 
-    return field.options?.map((option) => ({ label: option, value: option })) ?? [];
+    return field.options?.map((option) => ({ label: option === "offering" ? "Product/service" : option, value: option })) ?? [];
   }
 
   async function createStakeholder() {

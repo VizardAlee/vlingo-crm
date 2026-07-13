@@ -5,6 +5,10 @@ export function fieldTourTarget(collection: string, fieldName: string) {
   return `module-${collection}-${fieldName}`;
 }
 
+function moduleSingularTitle(config: ModuleConfig) {
+  return config.singularTitle ?? config.title.slice(0, -1);
+}
+
 export function uniqueTourSteps(steps: GuidedTourStep[]) {
   const seenTargets = new Set<string>();
   return steps.filter((step) => {
@@ -38,7 +42,7 @@ const dealFieldGuideText: Record<string, string> = {
   lostReason: "If the deal is lost or dormant, record the reason so reporting and sales learning stay useful.",
   notes: "Add internal deal notes, context, risks, next steps, or decisions that do not fit a structured field.",
   offerAmount: "Record the proposed amount before final agreement. This is useful during negotiation.",
-  offeringId: "Link the catalog offering for solar, building materials, consultancy, installation, or other product/service deals.",
+  offeringId: "Link the product/service for solar, building materials, consultancy, installation, or other product/service deals.",
   offeringQuantity: "Enter the number of units, packages, services, or project items being quoted.",
   offeringUnitPrice: "Enter the price per unit or service item. The quote subtotal is calculated from quantity and unit price.",
   paymentPlan: "Describe installment terms, payment milestones, or any agreed schedule for collection.",
@@ -72,7 +76,7 @@ export function formTourSteps(config: ModuleConfig, visibleFields: ModuleConfig[
     .filter((field) => field.required)
     .slice(0, 3)
     .map((field) => ({
-      body: field.helpText ?? `${field.label} is required before this ${config.title.slice(0, -1).toLowerCase()} can be saved.`,
+      body: field.helpText ?? `${field.label} is required before this ${moduleSingularTitle(config).toLowerCase()} can be saved.`,
       target: fieldTourTarget(config.collection, field.name),
       title: field.label,
     }));

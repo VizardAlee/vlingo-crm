@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/features/auth/auth-provider";
 import { subscribeToUnreadUserNotifications } from "@/services/notifications";
+import { registerPushSubscription } from "@/services/push-notifications";
 import type { AppNotification } from "@/types/crm";
 
 const shownPrefix = "vlingo:browser-notifications:shown";
@@ -43,6 +44,22 @@ export function BrowserNotificationListener() {
   const storageKey = user?.uid ? shownStorageKey(activeOrganizationId, user.uid) : "";
 
   useEffect(() => {
+    if (!user?.uid || !member?.branchId || member.status !== "active" || !notificationSupported() || Notification.permission !== "granted") {
+      return;
+    }
+
+    void registerPushSubscription({
+      branchId: member.branchId,
+      organizationId: activeOrganizationId,
+      userId: user.uid,
+    }).then((result) => {
+      if (result.status === "unavailable") {
+        console.warn("Background notification registration failed.", result.message);
+      }
+    });
+  }, [activeOrganizationId, member?.branchId, member?.status, user?.uid]);
+
+  useEffect(() => {
     if (!user?.uid || member?.status !== "active" || !notificationSupported() || Notification.permission !== "granted") {
       return;
     }
@@ -69,7 +86,7 @@ export function BrowserNotificationListener() {
           const notification = new Notification(item.title, {
             body: notificationBody(item),
             data: { href: item.href },
-            icon: "/branding/vlingo-logo.jpeg",
+            icon: "/icons/icon-192x192.png",
             tag: item.dedupeKey || item.id,
           });
           notification.onclick = () => {

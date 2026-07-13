@@ -29,7 +29,7 @@ import { AuthProvider, useAuth } from "@/features/auth/auth-provider";
 
 const featureRows = [
   { icon: Users, title: "Lead capture", text: "Real estate, building materials, solar, and service enquiries." },
-  { icon: Handshake, title: "Deal pipeline", text: "Linked owners, offerings, activities, approvals, and finance." },
+  { icon: Handshake, title: "Deal pipeline", text: "Linked owners, products/services, activities, approvals, and finance." },
   { icon: Landmark, title: "Finance control", text: "Receipts, commissions, expenses, verification, and audit trails." },
 ];
 
@@ -96,7 +96,7 @@ function LoginContent() {
             </div>
             <h1 className="text-4xl font-semibold leading-tight xl:text-5xl">Run sales, operations, finance, and field work from one command center.</h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-white/72">
-              Sign in to manage leads, clients, deals, offerings, projects, tasks, receipts, documents, and role-controlled branch activity.
+              Sign in to manage leads, clients, deals, products/services, projects, tasks, receipts, documents, and role-controlled branch activity.
             </p>
             <div className="mt-7 grid gap-3">
               {featureRows.map((item) => (
@@ -123,7 +123,7 @@ function LoginContent() {
               {[
                 { icon: Building2, label: "Properties", value: "34" },
                 { icon: SunMedium, label: "Solar projects", value: "18" },
-                { icon: Package, label: "Offerings", value: "76" },
+                { icon: Package, label: "Products/Services", value: "76" },
                 { icon: ClipboardCheck, label: "Tasks due", value: "14" },
               ].map((item) => (
                 <div className="bg-[#10180e]/90 p-5" key={item.label}>

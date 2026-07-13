@@ -15,7 +15,7 @@ export const guideTopics: GuideTopic[] = [
       "A deal is the commercial opportunity that can produce revenue, such as a property sale, rental, solar installation, material sale, or consultancy project.",
       "Activities and tasks keep follow-up visible so the team knows what happened and what should happen next.",
       "Finance connects payments, receipts, expenses, and commissions to the real business records instead of tracking money separately.",
-      "Good CRM use means every customer interaction is recorded once, assigned to the right person, linked to the right offering, and moved through the right next step.",
+      "Good CRM use means every customer interaction is recorded once, assigned to the right person, linked to the right product/service, and moved through the right next step.",
     ],
   },
   {
@@ -26,7 +26,7 @@ export const guideTopics: GuideTopic[] = [
       "Choose the branch and default assignee before entering lead details.",
       "Select the interest category first so the form only shows relevant fields.",
       "For real-estate leads, add property preferences, linked property or unit, budget, and inspection details.",
-      "For solar, materials, or services, link the relevant catalog offering where possible.",
+      "For solar, materials, or services, link the relevant product/service where possible.",
       "Use Map location to capture the lead's site or preferred location when field follow-up is needed.",
       "Save the lead, then use the lead detail page for follow-up, email, tasks, conversion, or opening a deal.",
     ],
@@ -37,7 +37,7 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Go to Deals, then choose New Deal, or open a lead and use Open Deal.",
       "Choose the deal category and deal type; the form will show only fields that fit that deal.",
-      "Link the lead, client, property, unit, or catalog offering so finance and history stay connected.",
+      "Link the lead, client, property, unit, or product/service so finance and history stay connected.",
       "Set the owner, stage, expected close date, amount, probability, proposal status, and fulfillment status.",
       "Save the deal, then update the stage as the sale, rental, installation, material order, or service progresses.",
       "Use Finance to record payments, receipts, commissions, and approvals tied to that deal.",
@@ -89,12 +89,12 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["property", "unit", "offering", "catalog", "solar", "materials", "services"],
-    title: "Manage properties, units, and offerings",
+    keywords: ["property", "unit", "offering", "catalog", "product", "service", "solar", "materials", "services"],
+    title: "Manage properties, units, and products/services",
     steps: [
       "Use Properties and Units for real-estate inventory.",
-      "Use Offerings for catalog items such as solar equipment, installation packages, materials, consultancy, maintenance, and services.",
-      "Link leads and deals to properties, units, or offerings so users do not re-enter the same information.",
+      "Use Products/Services for catalog items such as solar equipment, installation packages, materials, consultancy, maintenance, and services.",
+      "Link leads and deals to properties, units, or products/services so users do not re-enter the same information.",
       "Keep prices, status, category, stock, and service details current so sales and finance flows stay accurate.",
     ],
   },
@@ -131,7 +131,7 @@ Main routes and modules:
 - Clients: manage client records, communication, list/card views, and WhatsApp links.
 - Deals: finance-facing sales pipeline for property sales, rentals, solar, materials, services, consultancy, installation, and custom work.
 - Properties and Units: real-estate inventory and unit management.
-- Offerings: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
+- Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
 - Rentals: tenancy and rent tracking.
 - Finance: payments, receipt numbers, verification, expenses, commissions, approvals, and printable receipts.
 - Documents: attach and manage business documents.
@@ -158,7 +158,7 @@ export function fallbackGuideAnswer(question: string) {
   const selected = topic ?? {
     title: "Use the CRM effectively",
     steps: [
-      "Start from the sidebar and choose the module that matches the work: Leads, Clients, Deals, Finance, Properties, Offerings, Tasks, Documents, or Settings.",
+      "Start from the sidebar and choose the module that matches the work: Leads, Clients, Deals, Finance, Properties, Products/Services, Tasks, Documents, or Settings.",
       "Use Create/New actions for new records and open existing records for detail, edit, email, activity, or finance actions.",
       "Check your role and branch if a section or record is not visible.",
       "Use Guide me buttons on forms when you need field-by-field help.",

@@ -40,7 +40,7 @@ const relatedConfigs: RelatedConfig[] = [
   { collection: "rentalTenancies", label: "Tenancy", permissions: ["rentals.read"], type: "tenancy" },
   { collection: "developmentProjects", label: "Development project", permissions: ["development.read"], type: "development" },
   { collection: "marketingCampaigns", label: "Marketing campaign", permissions: ["marketing.read"], type: "marketing" },
-  { collection: "offerings", label: "Offering", permissions: ["offerings.read"], type: "offering" },
+  { collection: "offerings", label: "Product/service", permissions: ["offerings.read"], type: "offering" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", permissions: ["properties.read"], type: "owner" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", permissions: ["properties.read"], type: "developer" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", permissions: ["properties.read"], type: "management" },
@@ -53,7 +53,7 @@ function documentTourTarget(name: string) {
 const documentTourSteps: GuidedTourStep[] = [
   { target: documentTourTarget("title"), title: "Document title", body: "Give the file a clear title so the team can recognize it in lists and related records." },
   { target: documentTourTarget("category"), title: "Category", body: "Choose the document category so files stay organized by purpose." },
-  { target: documentTourTarget("relatedType"), title: "Related type", body: "Choose what this document belongs to, such as a lead, client, deal, property, unit, tenancy, task, or offering." },
+  { target: documentTourTarget("relatedType"), title: "Related type", body: "Choose what this document belongs to, such as a lead, client, deal, property, unit, tenancy, task, or product/service." },
   { target: documentTourTarget("relatedRecord"), title: "Related record", body: "Select the exact record so the document appears on the correct detail page and workflow." },
   { target: documentTourTarget("file"), title: "File", body: "Choose the file from your computer. The upload keeps branch and user metadata." },
   { target: documentTourTarget("upload"), title: "Upload", body: "Upload after checking the title, category, related record, and file." },
@@ -102,7 +102,7 @@ function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
 
   if (type === "offering") {
     const detail = [record.vertical, record.category, record.referenceNumber].filter(Boolean).join(" · ");
-    return detail ? `${String(record.name ?? "Offering")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
+    return detail ? `${String(record.name ?? "Product/service")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
   }
 
   const detail = [record.phoneNumber, record.email, record.referenceNumber].filter(Boolean).join(" · ");

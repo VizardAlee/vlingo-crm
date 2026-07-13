@@ -2,6 +2,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import nodemailer from "nodemailer";
 
@@ -9,6 +11,7 @@ initializeApp();
 
 const db = getFirestore();
 const auth = getAuth();
+const messaging = getMessaging();
 const callableOptions = { cors: true, invoker: "public" as const };
 const mailSettingsSecretOptions = { ...callableOptions, secrets: ["MAIL_SETTINGS_ENCRYPTION_KEY"] };
 const appBaseUrl = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
@@ -1377,3 +1380,73 @@ export const writeProtectedAuditLog = onCall(callableOptions, async (request) =>
 
   return { ok: true };
 });
+
+const stalePushTokenCodes = new Set([
+  "messaging/invalid-argument",
+  "messaging/invalid-registration-token",
+  "messaging/registration-token-not-registered",
+]);
+
+function pushText(value: unknown, fallback: string, maximumLength: number) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return (text || fallback).slice(0, maximumLength);
+}
+
+function pushHref(value: unknown) {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
+    ? value
+    : "/notifications";
+}
+
+export const deliverNotificationPush = onDocumentCreated(
+  "organizations/{organizationId}/notifications/{notificationId}",
+  async (event) => {
+    const notification = event.data?.data();
+    const organizationId = event.params.organizationId;
+    const notificationId = event.params.notificationId;
+    const recipientId = typeof notification?.recipientId === "string" ? notification.recipientId : "";
+    if (!notification || !recipientId || notification.isDeleted === true) {
+      return;
+    }
+
+    const subscriptionSnapshot = await db.collection(`organizations/${organizationId}/pushSubscriptions`)
+      .where("userId", "==", recipientId)
+      .where("status", "==", "active")
+      .get();
+    const subscriptions = subscriptionSnapshot.docs.filter((item) => {
+      const data = item.data();
+      return data.isDeleted === false && typeof data.token === "string" && data.token.length > 20;
+    });
+    if (!subscriptions.length) {
+      return;
+    }
+
+    const data = {
+      body: pushText(notification.body, "You have a new CRM notification.", 240),
+      dedupeKey: pushText(notification.dedupeKey, notificationId, 180),
+      href: pushHref(notification.href),
+      notificationId,
+      organizationId,
+      title: pushText(notification.title, "Vlingo CRM", 100),
+    };
+
+    for (let index = 0; index < subscriptions.length; index += 500) {
+      const batch = subscriptions.slice(index, index + 500);
+      const response = await messaging.sendEachForMulticast({
+        data,
+        tokens: batch.map((item) => String(item.data().token)),
+        webpush: {
+          headers: { Urgency: notification.tone === "danger" ? "high" : "normal" },
+        },
+      });
+
+      const staleSubscriptions = response.responses.flatMap((result, resultIndex) => {
+        if (!result.success && result.error?.code && stalePushTokenCodes.has(result.error.code)) {
+          return [batch[resultIndex].ref.delete()];
+        }
+        return [];
+      });
+      await Promise.all(staleSubscriptions);
+    }
+  },
+);

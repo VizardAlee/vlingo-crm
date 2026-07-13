@@ -192,6 +192,37 @@ service cloud.firestore {
         ]);
     }
 
+    function validOwnPushSubscription(orgId) {
+      return organizationMatches(orgId) &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.branchId is string &&
+        canWriteRequestBranch(orgId) &&
+        request.resource.data.token is string &&
+        request.resource.data.token.size() > 20 &&
+        request.resource.data.status == "active" &&
+        request.resource.data.isDeleted == false;
+    }
+
+    function canUpdateOwnPushSubscription(orgId) {
+      return organizationUnchanged(orgId) &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        validOwnPushSubscription(orgId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "branchId",
+          "createdAt",
+          "createdBy",
+          "isDeleted",
+          "organizationId",
+          "status",
+          "token",
+          "updatedAt",
+          "updatedBy",
+          "userAgent",
+          "userId"
+        ]);
+    }
+
     function canSoftDeleteLead(orgId) {
       return organizationUnchanged(orgId) &&
         hasRole(orgId, ["superAdmin"]) &&
@@ -346,6 +377,13 @@ service cloud.firestore {
           request.resource.data.recipientId == request.auth.uid;
         allow update: if canUpdateOwnNotification(orgId);
         allow delete: if false;
+      }
+
+      match /pushSubscriptions/{subscriptionId} {
+        allow read: if isActiveMember(orgId) && resource.data.userId == request.auth.uid;
+        allow create: if isActiveMember(orgId) && validOwnPushSubscription(orgId);
+        allow update: if isActiveMember(orgId) && canUpdateOwnPushSubscription(orgId);
+        allow delete: if isActiveMember(orgId) && resource.data.userId == request.auth.uid;
       }
 
       match /mailSettings/{userId} {

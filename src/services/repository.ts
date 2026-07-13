@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -10,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   type DocumentData,
@@ -40,6 +40,32 @@ function assertDb() {
 
 function serialize(value: DocumentData) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
+const offlineWritableCollections = new Set<OrgCollection>([
+  "activities",
+  "clients",
+  "leads",
+  "marketingCampaigns",
+  "tasks",
+]);
+
+function isOffline() {
+  return typeof navigator !== "undefined" && !navigator.onLine;
+}
+
+function assertOfflineWriteSupported(collectionName: OrgCollection) {
+  if (isOffline() && !offlineWritableCollections.has(collectionName)) {
+    throw new Error("This action requires an internet connection because it affects finance, inventory, files, or another protected workflow.");
+  }
+}
+
+function queueOfflineWrite(operation: Promise<void>, label: string) {
+  window.dispatchEvent(new CustomEvent("vlingo:offline-write-queued", { detail: { label } }));
+  void operation.catch((error) => {
+    console.error(`[Offline write failed] ${label}`, error);
+    window.dispatchEvent(new CustomEvent("vlingo:offline-write-failed", { detail: { label } }));
+  });
 }
 
 function logQueryError(context: string, error: unknown) {
@@ -100,6 +126,7 @@ export async function createOrgRecord<T extends Record<string, unknown>>(
   prefix: string,
 ) {
   const firestore = assertDb();
+  assertOfflineWriteSupported(collectionName);
   const payload = serialize({
     ...data,
     organizationId: context.organizationId,
@@ -117,7 +144,13 @@ export async function createOrgRecord<T extends Record<string, unknown>>(
   }) as WithFieldValue<DocumentData>;
 
   try {
-    const ref = await addDoc(collection(firestore, orgCollectionPath(context.organizationId, collectionName)), payload);
+    const ref = doc(collection(firestore, orgCollectionPath(context.organizationId, collectionName)));
+    const operation = setDoc(ref, payload);
+    if (isOffline()) {
+      queueOfflineWrite(operation, `create:${collectionName}:${ref.id}`);
+      return ref.id;
+    }
+    await operation;
     return ref.id;
   } catch (error) {
     throw enrichFirestoreError(error, { action: "create", collectionName, organizationId: context.organizationId });
@@ -131,8 +164,9 @@ export async function updateOrgRecord<T extends Record<string, unknown>>(
   context: WriteContext,
 ) {
   const firestore = assertDb();
+  assertOfflineWriteSupported(collectionName);
   try {
-    await updateDoc(doc(firestore, orgCollectionPath(context.organizationId, collectionName), id), serialize({
+    const operation = updateDoc(doc(firestore, orgCollectionPath(context.organizationId, collectionName), id), serialize({
       ...data,
       organizationId: context.organizationId,
       updatedAt: serverTimestamp(),
@@ -140,6 +174,11 @@ export async function updateOrgRecord<T extends Record<string, unknown>>(
       updatedByEmail: context.userEmail,
       updatedByName: context.userName,
     }));
+    if (isOffline()) {
+      queueOfflineWrite(operation, `update:${collectionName}:${id}`);
+      return;
+    }
+    await operation;
   } catch (error) {
     throw enrichFirestoreError(error, { action: "update", collectionName, organizationId: context.organizationId, path: `${orgCollectionPath(context.organizationId, collectionName)}/${id}` });
   }
@@ -147,6 +186,9 @@ export async function updateOrgRecord<T extends Record<string, unknown>>(
 
 export async function softDeleteOrgRecord(collectionName: OrgCollection, id: string, context: WriteContext) {
   const firestore = assertDb();
+  if (isOffline()) {
+    throw new Error("Deleting records requires an internet connection so the server can verify your permission.");
+  }
   try {
     await updateDoc(doc(firestore, orgCollectionPath(context.organizationId, collectionName), id), {
       deletedAt: serverTimestamp(),

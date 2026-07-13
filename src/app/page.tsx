@@ -24,7 +24,7 @@ import { ButtonLink } from "@/components/ui/button";
 
 const workflows = [
   { icon: Users, label: "Capture", text: "Leads, sources, interests, follow-ups, and assignments." },
-  { icon: Building2, label: "Match", text: "Properties, units, offerings, inventory, and service categories." },
+  { icon: Building2, label: "Match", text: "Properties, units, products/services, inventory, and service categories." },
   { icon: Handshake, label: "Close", text: "Deals, negotiations, inspections, approvals, and pipeline stages." },
   { icon: Landmark, label: "Account", text: "Payments, receipts, expenses, commissions, and finance checks." },
 ];
