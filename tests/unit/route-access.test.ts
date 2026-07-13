@@ -15,6 +15,7 @@ describe("route access rules", () => {
     expect(accessRuleForPath("/settings/users")?.permissions).toEqual(["users.manage"]);
     expect(accessRuleForPath("/settings/roles")?.permissions).toEqual(["roles.manage"]);
     expect(accessRuleForPath("/settings/audit-logs")?.permissions).toEqual(["auditLogs.read"]);
+    expect(accessRuleForPath("/settings/calendar")?.permissions).toEqual(["tasks.read", "tasks.create"]);
   });
 
   it("protects expanded business module routes with matching permissions", () => {

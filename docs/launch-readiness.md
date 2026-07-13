@@ -85,6 +85,32 @@ AI Guide quota is stored in Firestore under internal usage records, so logout, b
 - Deploy Firestore rules and Functions so users can store their own device registration and `deliverNotificationPush` can send newly created CRM notifications.
 - On each supported device, sign in, open Notifications, and select **Enable alerts**. Notification permission and device registration are independent; the CRM reports a registration error if permission is granted but FCM setup is incomplete.
 
+10. Configure direct Google Calendar synchronization:
+
+- Enable the Google Calendar API in the same Google Cloud project used for OAuth.
+- Configure the OAuth consent screen and create an OAuth 2.0 **Web application** client.
+- Add these authorized redirect URIs exactly:
+  - `http://localhost:3000/api/integrations/google-calendar/callback`
+  - `https://vlingo-crm.svoltnigeria.com/api/integrations/google-calendar/callback`
+- Configure the Next.js/App Hosting runtime variables:
+
+```bash
+GOOGLE_CALENDAR_CLIENT_ID="...apps.googleusercontent.com"
+GOOGLE_CALENDAR_CLIENT_SECRET="..."
+GOOGLE_CALENDAR_REDIRECT_URI="https://vlingo-crm.svoltnigeria.com/api/integrations/google-calendar/callback"
+GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY="replace-with-a-random-secret-at-least-32-characters"
+```
+
+- Configure the matching Firebase Functions secrets. The encryption key must be identical in App Hosting and Functions so the task trigger can decrypt credentials created by the OAuth callback:
+
+```bash
+firebase functions:secrets:set GOOGLE_CALENDAR_CLIENT_ID
+firebase functions:secrets:set GOOGLE_CALENDAR_CLIENT_SECRET
+firebase functions:secrets:set GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY
+```
+
+- Deploy `syncTaskGoogleCalendar` after the secrets are available. Users can then open **Google Calendar** in the CRM sidebar, select **Connect Google**, approve access, and receive a dedicated `Vlingo CRM Tasks` calendar. Existing assigned dated tasks are imported at connection time; later task changes sync through the Firestore trigger.
+
 For local development, Admin Firestore access uses Google Application Default Credentials when `FIREBASE_ADMIN_CLIENT_EMAIL` and `FIREBASE_ADMIN_PRIVATE_KEY` are not configured. If AI Guide reports `invalid_rapt` or `invalid_grant`, refresh local credentials and restart the dev server:
 
 ```bash
@@ -94,13 +120,13 @@ npm run dev
 
 For deployed hosting, prefer service-account credentials through `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, and `FIREBASE_ADMIN_PRIVATE_KEY`, or ensure the app runtime service account has Cloud Datastore User access.
 
-10. Create the first admin:
+11. Create the first admin:
 
 ```bash
 FIRST_ADMIN_UID="firebase-auth-uid" FIRST_ADMIN_EMAIL="admin@example.com" npm run create:first-admin
 ```
 
-11. Sync role permissions after role changes:
+12. Sync role permissions after role changes:
 
 ```bash
 npm run sync:roles

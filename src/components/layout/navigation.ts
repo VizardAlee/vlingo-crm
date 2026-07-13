@@ -4,6 +4,7 @@ import {
   Bell,
   Bot,
   Building2,
+  CalendarDays,
   ClipboardCheck,
   FileText,
   FolderKanban,
@@ -156,6 +157,7 @@ export const routeAccessRules: RouteAccessRule[] = [
   { pattern: /^\/finance(\/.*)?$/, permissions: ["reports.viewFinancial"] },
 
   { exact: "/settings/organization", permissions: ["users.manage", "roles.manage"] },
+  { exact: "/settings/calendar", permissions: ["tasks.read", "tasks.create"] },
   { exact: "/settings/email", permissions: emailSettingsAccessPermissions },
   { exact: "/settings/branches", permissions: ["users.manage"] },
   { exact: "/settings/users", permissions: ["users.manage"] },
@@ -198,6 +200,7 @@ export const navigation: NavSection[] = [
     label: "Operations",
     items: [
       { href: "/tasks", icon: ListTodo, label: "Tasks", permissions: ["tasks.read"] },
+      { href: "/settings/calendar", icon: CalendarDays, label: "Google Calendar", permissions: ["tasks.read", "tasks.create"] },
       { href: "/documents", icon: FileText, label: "Documents", permissions: documentAccessPermissions },
       { href: "/reports", icon: BarChart3, label: "Reports", permissions: ["reports.viewFinancial", "dashboard.viewExecutive"] },
     ],

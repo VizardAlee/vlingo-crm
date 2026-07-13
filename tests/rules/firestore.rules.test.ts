@@ -584,6 +584,29 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
+  it("keeps Google Calendar credentials server-only", async () => {
+    await seedMember("sales-1", "org-a", ["tasks.read", "tasks.create"], "salesExecutive");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/calendarConnections/sales-1"), {
+        calendarId: "private-calendar-id",
+        encryptedRefreshToken: "encrypted-token",
+        googleEmail: "sales-1@example.com",
+        organizationId: "org-a",
+        status: "active",
+        userId: "sales-1",
+      });
+    });
+    const db = testEnv.authenticatedContext("sales-1").firestore();
+
+    await assertFails(getDoc(doc(db, "organizations/org-a/calendarConnections/sales-1")));
+    await assertFails(setDoc(doc(db, "organizations/org-a/calendarConnections/sales-1"), {
+      encryptedRefreshToken: "replacement",
+      organizationId: "org-a",
+      userId: "sales-1",
+    }));
+    await assertFails(deleteDoc(doc(db, "organizations/org-a/calendarConnections/sales-1")));
+  });
+
   it("requires document-related permissions for document records", async () => {
     await seedMember("agent-1", "org-a", [], "agent");
     await seedMember("sales-1", "org-a", ["leads.readAssigned"], "salesExecutive");

@@ -390,6 +390,10 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      match /calendarConnections/{userId} {
+        allow read, write: if false;
+      }
+
       match /tasks/{taskId} {
         allow read: if canReadRecordBranch(orgId) &&
           hasPermission(orgId, "tasks.read") &&

@@ -3,9 +3,10 @@ import { initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { getMessaging } from "firebase-admin/messaging";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import nodemailer from "nodemailer";
+import { syncTaskToGoogleCalendar } from "./google-calendar.js";
 
 initializeApp();
 
@@ -14,6 +15,7 @@ const auth = getAuth();
 const messaging = getMessaging();
 const callableOptions = { cors: true, invoker: "public" as const };
 const mailSettingsSecretOptions = { ...callableOptions, secrets: ["MAIL_SETTINGS_ENCRYPTION_KEY"] };
+const googleCalendarSecrets = ["GOOGLE_CALENDAR_CLIENT_ID", "GOOGLE_CALENDAR_CLIENT_SECRET", "GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY"];
 const appBaseUrl = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 const emailSettingsAccessPermissions = [
@@ -1447,6 +1449,29 @@ export const deliverNotificationPush = onDocumentCreated(
         return [];
       });
       await Promise.all(staleSubscriptions);
+    }
+  },
+);
+
+export const syncTaskGoogleCalendar = onDocumentWritten(
+  {
+    document: "organizations/{organizationId}/tasks/{taskId}",
+    secrets: googleCalendarSecrets,
+  },
+  async (event) => {
+    try {
+      await syncTaskToGoogleCalendar(
+        event.params.organizationId,
+        event.params.taskId,
+        event.data?.before.exists ? event.data.before.data() : undefined,
+        event.data?.after.exists ? event.data.after.data() : undefined,
+      );
+    } catch (error) {
+      console.error("[Google Calendar task sync failed]", {
+        error,
+        organizationId: event.params.organizationId,
+        taskId: event.params.taskId,
+      });
     }
   },
 );

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { User } from "firebase/auth";
 import { where, type QueryConstraint } from "firebase/firestore";
 import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
@@ -36,32 +35,12 @@ function moduleSingularTitle(config: ModuleConfig) {
 
 type ModuleToast = (toast: { description?: string; title: string; variant?: "error" | "info" | "success" }) => void;
 
-async function copyUserTaskCalendarFeed(user: User | null | undefined, organizationId: string, toast: ModuleToast) {
+async function openGoogleCalendarSettings(user: { uid: string } | null | undefined, toast: ModuleToast) {
   if (!user) {
-    toast({ title: "Sign in required", description: "Sign in again before creating your calendar feed link.", variant: "error" });
+    toast({ title: "Sign in required", description: "Sign in again before connecting Google Calendar.", variant: "error" });
     return false;
   }
-
-  const token = await user.getIdToken();
-  const response = await fetch("/api/calendar/tasks/link", {
-    body: JSON.stringify({ organizationId }),
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
-  const payload = await response.json().catch(() => ({})) as { error?: string; url?: string };
-  if (!response.ok || !payload.url) {
-    throw new Error(payload.error || "Unable to create calendar feed link.");
-  }
-
-  await navigator.clipboard.writeText(payload.url);
-  toast({
-    title: "Calendar feed copied",
-    description: "Subscribe to this URL in Google, Apple, or Outlook Calendar. Dated assigned tasks will sync automatically.",
-    variant: "success",
-  });
+  window.location.assign("/settings/calendar");
   return true;
 }
 
@@ -1659,12 +1638,12 @@ function LeadJourneyPanel({
   async function syncCalendarFromPrompt() {
     setCalendarSyncing(true);
     try {
-      const copied = await copyUserTaskCalendarFeed(user, activeOrganizationId, toast);
+      const copied = await openGoogleCalendarSettings(user, toast);
       if (copied) {
         setCalendarPrompt(null);
       }
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Unable to create calendar feed link.";
+      const message = nextError instanceof Error ? nextError.message : "Unable to open Google Calendar settings.";
       toast({ title: "Unable to sync calendar", description: message, variant: "error" });
     } finally {
       setCalendarSyncing(false);
@@ -1754,7 +1733,7 @@ function LeadJourneyPanel({
             <div>
               <p className="font-semibold text-foreground">Sync this follow-up with your calendar?</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {calendarPrompt.title} is dated {formatDate(calendarPrompt.dueAt)}. Copy your private calendar feed and subscribe once in Google, Apple, or Outlook Calendar.
+                {calendarPrompt.title} is dated {formatDate(calendarPrompt.dueAt)}. Connect Google once and assigned dated tasks will sync automatically.
               </p>
             </div>
             <div className="grid gap-2 sm:flex">
@@ -2252,10 +2231,10 @@ export function ModuleListPage({
   async function copyTaskCalendarFeed() {
     setCalendarFeedLoading(true);
     try {
-      await copyUserTaskCalendarFeed(user, activeOrganizationId, toast);
+      await openGoogleCalendarSettings(user, toast);
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Unable to create calendar feed link.";
-      toast({ title: "Unable to copy calendar feed", description: message, variant: "error" });
+      const message = nextError instanceof Error ? nextError.message : "Unable to open Google Calendar settings.";
+      toast({ title: "Unable to open Google Calendar", description: message, variant: "error" });
     } finally {
       setCalendarFeedLoading(false);
     }
@@ -2273,7 +2252,7 @@ export function ModuleListPage({
           {config.collection === "tasks" ? (
             <Button className="h-11 w-full md:h-10 md:w-auto" disabled={calendarFeedLoading} onClick={() => void copyTaskCalendarFeed()} type="button" variant="outline">
               <CalendarClock className="h-4 w-4" />
-              {calendarFeedLoading ? "Preparing" : "Copy calendar feed"}
+              {calendarFeedLoading ? "Opening" : "Google Calendar"}
             </Button>
           ) : null}
           {canBulkEmail ? (
@@ -2529,16 +2508,16 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
   async function handleSyncTaskCalendar() {
     if (!record?.dueAt) {
-      toast({ title: "Task needs a due date", description: "Add a due date before syncing this task to your calendar feed.", variant: "error" });
+      toast({ title: "Task needs a due date", description: "Add a due date before syncing this task to Google Calendar.", variant: "error" });
       return;
     }
 
     setActionLoading(true);
     setActionError(null);
     try {
-      await copyUserTaskCalendarFeed(user, activeOrganizationId, toast);
+      await openGoogleCalendarSettings(user, toast);
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Unable to create calendar feed link.";
+      const message = nextError instanceof Error ? nextError.message : "Unable to open Google Calendar settings.";
       setActionError(message);
       toast({ title: "Unable to sync calendar", description: message, variant: "error" });
     } finally {
