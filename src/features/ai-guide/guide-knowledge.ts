@@ -83,6 +83,7 @@ export const guideTopics: GuideTopic[] = [
     title: "Create or import a lead",
     steps: [
       "Go to Leads, then choose Create Lead.",
+      "Use Quick capture for the lead's essential contact, category, source, immediate interest, follow-up, and notes; switch to Full details only when richer qualification information is available.",
       "Choose the branch and default assignee before entering lead details.",
       "Select the interest category first so the form only shows relevant fields.",
       "For real-estate leads, add property preferences, linked property or unit, budget, and inspection details.",

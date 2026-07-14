@@ -11,6 +11,7 @@ import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/stat
 import { accessRuleForPath, navigation, notificationAccessPermissions } from "@/components/layout/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { BrowserNotificationListener } from "@/features/notifications/browser-notification-listener";
+import { WhatsNew } from "@/features/updates/whats-new";
 import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { listUserNotifications } from "@/services/notifications";
@@ -351,6 +352,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ) : null}
               </ButtonLink>
             ) : null}
+            {user && member?.status === "active" ? <WhatsNew organizationId={activeOrganizationId} userId={user.uid} /> : null}
             <Button aria-label="Sign out" className="md:hidden" onClick={signOutUser} size="icon" variant="ghost">
               <LogOut className="h-4 w-4" />
             </Button>

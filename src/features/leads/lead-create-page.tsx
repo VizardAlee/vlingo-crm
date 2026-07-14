@@ -2,7 +2,7 @@
 
 import { readSheet } from "read-excel-file/browser";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { CheckCircle2, Crosshair, Download, FileSpreadsheet, MapPin, Save, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, Crosshair, Download, FileSpreadsheet, MapPin, Save, Settings2, Trash2, Upload, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,13 @@ const manualLeadTourSteps: GuidedTourStep[] = [
   { target: leadTourTarget("workflow"), title: "Workflow status", body: "Set status, score, follow-up date, and inspection date to keep the pipeline actionable." },
   { target: leadTourTarget("notes"), title: "Notes and referral", body: "Add referral details, tags, and notes that help the assigned user understand the conversation." },
   { target: leadTourTarget("save"), title: "Create lead", body: "Save the lead after reviewing the details. The system records creator, branch, assignment, and linked product/service context." },
+];
+
+const quickLeadTourSteps: GuidedTourStep[] = [
+  { target: leadTourTarget("contact"), title: "Essential contact", body: "Capture the lead's name, reachable phone number, interest category, and source." },
+  { target: leadTourTarget("interest"), title: "Immediate interest", body: "Add the known property, unit, product/service, need, or transaction interest without completing a long profile." },
+  { target: leadTourTarget("notes"), title: "Next action", body: "Record a follow-up date and the key details another team member needs for the next conversation." },
+  { target: leadTourTarget("save"), title: "Save lead", body: "Save the essential record now. More qualification details can be added from the lead page later." },
 ];
 
 const importLeadTourSteps: GuidedTourStep[] = [
@@ -538,6 +545,8 @@ export function LeadCreatePage() {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [mode, setMode] = useState<"manual" | "import">("manual");
+  const [captureMode, setCaptureMode] = useState<"quick" | "full">("quick");
+  const [showAssignment, setShowAssignment] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [offerings, setOfferings] = useState<Offering[]>([]);
@@ -593,6 +602,8 @@ export function LeadCreatePage() {
   const validPreviewRows = preview.filter((row) => row.errors.length === 0);
   const hasInterestCategory = Boolean(values.interestCategory);
   const isRealEstateInterest = values.interestCategory === "realEstate";
+  const selectedBranchName = branchOptions.find((branch) => branch.id === branchId)?.name ?? "Current branch";
+  const selectedAssigneeName = assignableMembers.find((item) => item.id === values.assignedTo)?.displayName ?? member?.displayName ?? "Current user";
 
   useEffect(() => {
     if (success) {
@@ -767,7 +778,10 @@ export function LeadCreatePage() {
     setSuccess(null);
     setSaving(true);
     try {
-      const parsed = leadSchema.safeParse(enrichLeadLinkage(formToLeadPayload(values), properties, propertyUnits, offerings));
+      const submittedValues = captureMode === "quick" && !values.whatsappNumber
+        ? { ...values, whatsappNumber: values.phoneNumber }
+        : values;
+      const parsed = leadSchema.safeParse(enrichLeadLinkage(formToLeadPayload(submittedValues), properties, propertyUnits, offerings));
       if (!parsed.success) {
         setError(parsed.error.issues.map((issue) => `${String(issue.path[0])}: ${issue.message}`).join(" · "));
         return;
@@ -864,9 +878,9 @@ export function LeadCreatePage() {
           <p className="mt-1 text-sm text-muted-foreground">Capture leads manually or import lead sheets from external platforms.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
-          <GuidedTour className="col-span-2 md:col-span-1" storageKey={`beacon-tour:leads:${mode}`} steps={mode === "manual" ? manualLeadTourSteps : importLeadTourSteps} />
-          <Button onClick={() => setMode("manual")} type="button" variant={mode === "manual" ? "primary" : "outline"}>Manual</Button>
-          <Button onClick={() => setMode("import")} type="button" variant={mode === "import" ? "primary" : "outline"}>Import</Button>
+          <GuidedTour className="col-span-2 md:col-span-1" storageKey={`beacon-tour:leads:${mode}:${captureMode}`} steps={mode === "import" ? importLeadTourSteps : captureMode === "quick" ? quickLeadTourSteps : manualLeadTourSteps} />
+          <Button onClick={() => setMode("manual")} type="button" variant={mode === "manual" ? "primary" : "outline"}>Add one</Button>
+          <Button onClick={() => setMode("import")} type="button" variant={mode === "import" ? "primary" : "outline"}>Import file</Button>
         </div>
       </div>
 
@@ -878,7 +892,7 @@ export function LeadCreatePage() {
         </div>
       ) : null}
 
-      <Card data-tour={leadTourTarget("captureSettings")}>
+      {mode === "import" || captureMode === "full" || showAssignment ? <Card data-tour={leadTourTarget("captureSettings")}>
         <CardHeader>
           <CardTitle>Capture Settings</CardTitle>
         </CardHeader>
@@ -894,15 +908,44 @@ export function LeadCreatePage() {
             </Select>
           </Field>
         </CardContent>
-      </Card>
+      </Card> : (
+        <div className="flex flex-col gap-3 rounded-md border bg-white p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="min-w-0 truncate"><span className="font-semibold">{selectedAssigneeName}</span><span className="text-muted-foreground"> · {selectedBranchName}</span></p>
+          <Button className="w-full sm:w-auto" onClick={() => setShowAssignment(true)} size="sm" type="button" variant="outline"><Settings2 className="h-4 w-4" />Change assignment</Button>
+        </div>
+      )}
 
       {mode === "manual" ? (
         <Card>
-          <CardHeader>
-            <CardTitle>Lead Information</CardTitle>
+          <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>{captureMode === "quick" ? "Quick Lead Capture" : "Lead Information"}</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">{captureMode === "quick" ? "Essential details" : "Complete qualification profile"}</p>
+            </div>
+            <div className="inline-flex w-full rounded-md border bg-muted/30 p-1 sm:w-auto">
+              <button className={`flex h-10 flex-1 items-center justify-center gap-2 rounded px-3 text-sm font-medium sm:flex-none ${captureMode === "quick" ? "bg-primary text-primary-foreground" : "hover:bg-white"}`} onClick={() => { setCaptureMode("quick"); setShowAssignment(false); }} type="button"><Zap className="h-4 w-4" />Quick</button>
+              <button className={`h-10 flex-1 rounded px-3 text-sm font-medium sm:flex-none ${captureMode === "full" ? "bg-primary text-primary-foreground" : "hover:bg-white"}`} onClick={() => setCaptureMode("full")} type="button">Full details</button>
+            </div>
           </CardHeader>
           <CardContent>
             <form className="grid gap-5" onSubmit={submitManual}>
+              {captureMode === "quick" ? (
+              <div className="grid gap-4 sm:grid-cols-2" data-tour={leadTourTarget("contact")}>
+                <Field label="Full name"><Input autoComplete="name" required value={values.fullName} onChange={(event) => updateField("fullName", event.target.value)} /></Field>
+                <Field label="Phone number"><Input autoComplete="tel" inputMode="tel" required value={values.phoneNumber} onChange={(event) => updateField("phoneNumber", event.target.value)} /></Field>
+                <Field label="Interest category">
+                  <Select required value={values.interestCategory} onChange={(event) => updateField("interestCategory", event.target.value)}>
+                    <option value="">Choose category</option>
+                    {interestCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Lead source">
+                  <Select value={values.source} onChange={(event) => updateField("source", event.target.value)}>
+                    {leadSources.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </Select>
+                </Field>
+              </div>
+              ) : (
               <div className="grid gap-4 lg:grid-cols-3" data-tour={leadTourTarget("contact")}>
                 <Field label="Full name"><Input required value={values.fullName} onChange={(event) => updateField("fullName", event.target.value)} /></Field>
                 <Field label="Phone number"><Input required value={values.phoneNumber} onChange={(event) => updateField("phoneNumber", event.target.value)} /></Field>
@@ -919,8 +962,9 @@ export function LeadCreatePage() {
                   </Select>
                 </Field>
               </div>
+              )}
 
-              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("source")}>
+              {captureMode === "full" ? <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("source")}>
                 <Field label="Source">
                   <Select value={values.source} onChange={(event) => updateField("source", event.target.value)}>
                     {leadSources.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -933,15 +977,20 @@ export function LeadCreatePage() {
                 </Field>
                 <Field label="Campaign name"><Input value={values.campaignName} onChange={(event) => updateField("campaignName", event.target.value)} /></Field>
                 <Field label="External reference"><Input value={values.sourceReference} onChange={(event) => updateField("sourceReference", event.target.value)} /></Field>
-              </div>
+              </div> : null}
 
-              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("interest")}>
-                <Field label="Interest category">
-                  <Select value={values.interestCategory} onChange={(event) => updateField("interestCategory", event.target.value)}>
+              {captureMode === "full" || hasInterestCategory ? <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("interest")}>
+                {captureMode === "full" ? <Field label="Interest category">
+                  <Select required value={values.interestCategory} onChange={(event) => updateField("interestCategory", event.target.value)}>
                     <option value="">Choose interest category</option>
                     {interestCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </Select>
-                </Field>
+                </Field> : null}
+                {captureMode === "quick" && isRealEstateInterest ? <Field label="Looking to">
+                  <Select value={values.transactionInterest} onChange={(event) => updateField("transactionInterest", event.target.value)}>
+                    {interests.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </Select>
+                </Field> : null}
                 {hasInterestCategory && !isRealEstateInterest ? (
                   <div data-tour={leadTourTarget("linkedOffering")}>
                   <Field label="Linked product/service">
@@ -954,9 +1003,9 @@ export function LeadCreatePage() {
                 ) : null}
                 {hasInterestCategory && !isRealEstateInterest ? <Field label="Need / use case"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field> : null}
                 {hasInterestCategory && !isRealEstateInterest ? <Field label="Location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
-              </div>
+              </div> : null}
 
-              {isRealEstateInterest ? (
+              {captureMode === "full" && isRealEstateInterest ? (
               <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("realEstatePreference")}>
                 <Field label="Transaction interest">
                   <Select value={values.transactionInterest} onChange={(event) => updateField("transactionInterest", event.target.value)}>
@@ -991,7 +1040,7 @@ export function LeadCreatePage() {
               </div>
               ) : null}
 
-              {hasInterestCategory ? (
+              {captureMode === "full" && hasInterestCategory ? (
               <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("budget")}>
                 {isRealEstateInterest ? <Field label="Preferred location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
                 {isRealEstateInterest ? <Field label="State"><Input value={values.preferredState} onChange={(event) => updateField("preferredState", event.target.value)} /></Field> : null}
@@ -1008,7 +1057,7 @@ export function LeadCreatePage() {
               </div>
               ) : null}
 
-              <div className="grid gap-4 rounded-md border bg-muted/30 p-4" data-tour={leadTourTarget("geotag")}>
+              {captureMode === "full" ? <div className="grid gap-4 rounded-md border bg-muted/30 p-4" data-tour={leadTourTarget("geotag")}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 text-sm font-semibold">
@@ -1057,9 +1106,9 @@ export function LeadCreatePage() {
                     </div>
                   ) : null}
                 </div>
-              </div>
+              </div> : null}
 
-              {hasInterestCategory ? (
+              {captureMode === "full" && hasInterestCategory ? (
               <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("workflow")}>
                 <Field label="Status">
                   <Select value={values.status} onChange={(event) => updateField("status", event.target.value)}>
@@ -1072,17 +1121,24 @@ export function LeadCreatePage() {
               </div>
               ) : null}
 
+              {captureMode === "quick" ? (
+              <div className="grid gap-4 sm:grid-cols-2" data-tour={leadTourTarget("notes")}>
+                <Field label="Next follow-up"><Input type="date" value={values.nextFollowUpAt} onChange={(event) => updateField("nextFollowUpAt", event.target.value)} /></Field>
+                <Field label="Notes"><Textarea className="min-h-20" placeholder="Key request, preferred contact time, or next action" value={values.notes} onChange={(event) => updateField("notes", event.target.value)} /></Field>
+              </div>
+              ) : (
               <div className="grid gap-4 lg:grid-cols-2" data-tour={leadTourTarget("notes")}>
                 <Field label="Referral name"><Input value={values.referralName} onChange={(event) => updateField("referralName", event.target.value)} /></Field>
                 <Field label="Referral phone"><Input value={values.referralPhone} onChange={(event) => updateField("referralPhone", event.target.value)} /></Field>
                 <Field label="Tags"><Input value={values.tags} onChange={(event) => updateField("tags", event.target.value)} /></Field>
                 <Field label="Notes"><Textarea value={values.notes} onChange={(event) => updateField("notes", event.target.value)} /></Field>
               </div>
+              )}
 
               <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] -mx-5 -mb-5 border-t bg-white p-4 md:static md:m-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0">
                 <Button className="h-12 w-full md:h-10 md:w-auto" data-tour={leadTourTarget("save")} disabled={saving} type="submit">
                   <Save className="h-4 w-4" />
-                  {saving ? "Saving" : "Create lead"}
+                  {saving ? "Saving" : captureMode === "quick" ? "Save lead" : "Create lead"}
                 </Button>
               </div>
             </form>
