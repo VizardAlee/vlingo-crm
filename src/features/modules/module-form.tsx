@@ -857,6 +857,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       }
     }
 
+    if (config.collection === "deals" && !parsedData.dealOwnerId) {
+      parsedData.dealOwnerId = user.uid;
+    }
+
     if (config.collection === "deals") {
       const linkedLead = leads.find((item) => item.id === parsedData.leadId);
       const linkedClient = clients.find((item) => item.id === parsedData.clientId);
@@ -933,6 +937,16 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     if (config.collection === "leads" && !parsedData.assignedTo) {
       parsedData.assignedTo = user.uid;
+    }
+
+    if (config.collection === "leads") {
+      const assignedMember = members.find((item) => item.id === parsedData.assignedTo);
+      parsedData.assignedToName = assignedMember?.displayName ?? member?.displayName ?? user.displayName ?? "";
+      parsedData.assignedToEmail = assignedMember?.email ?? member?.email ?? user.email ?? "";
+    }
+
+    if (config.collection === "clients" && !parsedData.assignedRelationshipManager) {
+      parsedData.assignedRelationshipManager = user.uid;
     }
 
     if (config.collection === "tasks" && !parsedData.assignedTo) {

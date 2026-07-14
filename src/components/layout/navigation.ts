@@ -95,6 +95,12 @@ export const aiGuideAccessPermissions: Permission[] = [
   "users.manage",
 ];
 
+export const reportsAccessPermissions: Permission[] = Array.from(new Set([
+  ...aiGuideAccessPermissions,
+  "roles.manage" as Permission,
+  "auditLogs.read" as Permission,
+]));
+
 export interface RouteAccessRule {
   exact?: string;
   pattern?: RegExp;
@@ -153,7 +159,7 @@ export const routeAccessRules: RouteAccessRule[] = [
   { pattern: /^\/activities(\/[^/]+)?$/, permissions: ["activities.read"] },
 
   { exact: "/documents", permissions: documentAccessPermissions },
-  { exact: "/reports", permissions: ["reports.viewFinancial", "dashboard.viewExecutive"] },
+  { exact: "/reports", permissions: reportsAccessPermissions },
   { pattern: /^\/finance(\/.*)?$/, permissions: ["reports.viewFinancial"] },
 
   { exact: "/settings/organization", permissions: ["users.manage", "roles.manage"] },
@@ -202,7 +208,7 @@ export const navigation: NavSection[] = [
       { href: "/tasks", icon: ListTodo, label: "Tasks", permissions: ["tasks.read"] },
       { href: "/settings/calendar", icon: CalendarDays, label: "Google Calendar", permissions: ["tasks.read", "tasks.create"] },
       { href: "/documents", icon: FileText, label: "Documents", permissions: documentAccessPermissions },
-      { href: "/reports", icon: BarChart3, label: "Reports", permissions: ["reports.viewFinancial", "dashboard.viewExecutive"] },
+      { href: "/reports", icon: BarChart3, label: "Reports", permissions: reportsAccessPermissions },
     ],
   },
   {

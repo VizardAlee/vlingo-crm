@@ -1,11 +1,12 @@
 "use client";
 
 import { Bot, Loader2, Send, Sparkles, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import { ErrorState } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
@@ -32,7 +33,7 @@ interface PersistedGuideChat {
 }
 
 const defaultGuideMessage: GuideMessage = {
-  content: "Ask me how CRM works or how to use Vlingo Systems CRM. I can explain CRM concepts and walk you through leads, deals, finance, emails, roles, branches, notifications, geotagging, and more.",
+  content: "Ask me how CRM works or how to use Vlingo Systems CRM. I can guide you through leads, deals, products/services, reports, finance, email, Google Calendar, maps, notifications, offline use, roles, branches, and more.",
   mode: "built-in",
   role: "assistant",
 };
@@ -46,6 +47,8 @@ const suggestedQuestions = [
   "How do I open a deal from a lead?",
   "How do I record a property sale payment and print a receipt?",
   "How do I send bulk emails to leads?",
+  "How do I review my performance and amount generated?",
+  "How do I connect my tasks to Google Calendar?",
   "What can a sales executive see?",
   "How do I geotag a lead location?",
 ];
@@ -109,133 +112,6 @@ function pruneOldGuideChats() {
   } catch {
     // Storage can be unavailable in private browsing or locked-down browsers.
   }
-}
-
-function renderGuideContent(content: string) {
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
-  const blocks: ReactNode[] = [];
-
-  function renderInline(text: string, keyPrefix: string) {
-    const tokens = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
-    return tokens.map((token, index) => {
-      const key = `${keyPrefix}-${index}`;
-      if (!token) {
-        return null;
-      }
-
-      if (token.startsWith("**") && token.endsWith("**")) {
-        return <strong className="font-semibold text-foreground" key={key}>{token.slice(2, -2)}</strong>;
-      }
-
-      if (token.startsWith("`") && token.endsWith("`")) {
-        return <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground" key={key}>{token.slice(1, -1)}</code>;
-      }
-
-      const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-      if (linkMatch) {
-        const href = linkMatch[2];
-        return (
-          <a className="font-medium text-primary underline-offset-2 hover:underline" href={href} key={key} rel="noreferrer" target="_blank">
-            {linkMatch[1]}
-          </a>
-        );
-      }
-
-      return token;
-    });
-  }
-
-  function pushList(items: string[], ordered: boolean, key: string) {
-    if (!items.length) {
-      return;
-    }
-
-    const className = "grid gap-1 pl-5";
-    const children = items.map((item, index) => <li key={`${key}-${index}`}>{renderInline(item, `${key}-${index}`)}</li>);
-    blocks.push(ordered ? <ol className={`${className} list-decimal`} key={key}>{children}</ol> : <ul className={`${className} list-disc`} key={key}>{children}</ul>);
-  }
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      continue;
-    }
-
-    if (trimmed.startsWith("```")) {
-      const codeLines: string[] = [];
-      index += 1;
-      while (index < lines.length && !lines[index].trim().startsWith("```")) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-      blocks.push(
-        <pre className="overflow-x-auto rounded-md border bg-muted p-3 text-xs text-foreground" key={`code-${index}`}>
-          <code>{codeLines.join("\n")}</code>
-        </pre>,
-      );
-      continue;
-    }
-
-    if (/^---+$/.test(trimmed)) {
-      blocks.push(<hr className="border-border" key={`hr-${index}`} />);
-      continue;
-    }
-
-    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
-    if (heading) {
-      const level = heading[1].length;
-      const className = level <= 2 ? "text-base font-semibold text-foreground" : "text-sm font-semibold text-foreground";
-      blocks.push(<p className={className} key={`heading-${index}`}>{renderInline(heading[2], `heading-${index}`)}</p>);
-      continue;
-    }
-
-    const orderedItems: string[] = [];
-    let cursor = index;
-    while (cursor < lines.length) {
-      const match = lines[cursor].trim().match(/^\d+\.\s+(.+)$/);
-      if (!match) {
-        break;
-      }
-      orderedItems.push(match[1]);
-      cursor += 1;
-    }
-    if (orderedItems.length) {
-      pushList(orderedItems, true, `ol-${index}`);
-      index = cursor - 1;
-      continue;
-    }
-
-    const bulletItems: string[] = [];
-    cursor = index;
-    while (cursor < lines.length) {
-      const match = lines[cursor].trim().match(/^[-*]\s+(.+)$/);
-      if (!match) {
-        break;
-      }
-      bulletItems.push(match[1]);
-      cursor += 1;
-    }
-    if (bulletItems.length) {
-      pushList(bulletItems, false, `ul-${index}`);
-      index = cursor - 1;
-      continue;
-    }
-
-    if (trimmed.startsWith(">")) {
-      blocks.push(
-        <blockquote className="border-l-4 border-primary/30 pl-3 text-muted-foreground" key={`quote-${index}`}>
-          {renderInline(trimmed.replace(/^>\s?/, ""), `quote-${index}`)}
-        </blockquote>,
-      );
-      continue;
-    }
-
-    blocks.push(<p key={`p-${index}`}>{renderInline(trimmed, `p-${index}`)}</p>);
-  }
-
-  return blocks;
 }
 
 export function AiGuidePage() {
@@ -327,7 +203,7 @@ export function AiGuidePage() {
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/ai-guide", {
-        body: JSON.stringify({ history, question: text }),
+        body: JSON.stringify({ history, organizationId: activeOrganizationId, question: text }),
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -424,7 +300,7 @@ export function AiGuidePage() {
                     message.role === "user" ? "bg-primary text-primary-foreground" : "bg-white text-muted-foreground",
                   )}>
                     {message.role === "assistant" && message.mode ? <Badge className="mb-2" tone={message.mode === "ai" ? "success" : "info"}>{message.mode === "ai" ? "AI answer" : "Built-in guide"}</Badge> : null}
-                    <div className="grid gap-1">{renderGuideContent(message.content)}</div>
+                    <MarkdownContent className="gap-1" content={message.content} />
                     {message.finishReason === "MAX_TOKENS" || message.truncated ? (
                       <p className="mt-3 rounded-md border border-info/20 bg-info/10 p-2 text-xs text-muted-foreground">
                         The answer reached its length limit. Ask “continue” or a focused follow-up and I’ll keep going from here.

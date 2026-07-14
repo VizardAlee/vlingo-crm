@@ -4,6 +4,66 @@ export interface GuideTopic {
   title: string;
 }
 
+interface GuideMemberContext {
+  branchAccess?: unknown;
+  branchId?: unknown;
+  displayName?: unknown;
+  permissions?: unknown;
+  role?: unknown;
+  roles?: unknown;
+}
+
+const guideAreaPermissions = [
+  ["Dashboard", ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"]],
+  ["Leads and Lead Locations", ["leads.readAssigned", "leads.readAll"]],
+  ["Clients", ["clients.read"]],
+  ["Deals", ["deals.read"]],
+  ["Properties", ["properties.read"]],
+  ["Units", ["units.read"]],
+  ["Products/Services", ["offerings.read"]],
+  ["Rentals", ["rentals.read"]],
+  ["Development", ["development.read"]],
+  ["Marketing", ["marketing.read"]],
+  ["Tasks and Google Calendar", ["tasks.read"]],
+  ["Activities", ["activities.read"]],
+  ["Finance", ["reports.viewFinancial"]],
+  ["User administration", ["users.manage"]],
+  ["Role administration", ["roles.manage"]],
+  ["Audit logs", ["auditLogs.read"]],
+] as const;
+
+export function buildGuideMemberContext(member: GuideMemberContext) {
+  const roles = Array.from(new Set([
+    ...(Array.isArray(member.roles) ? member.roles.filter((role): role is string => typeof role === "string") : []),
+    ...(typeof member.role === "string" ? [member.role] : []),
+  ]));
+  const permissions = Array.isArray(member.permissions)
+    ? member.permissions.filter((permission): permission is string => typeof permission === "string")
+    : [];
+  const isSuperAdmin = roles.includes("superAdmin");
+  const accessibleAreas = isSuperAdmin
+    ? guideAreaPermissions.map(([area]) => area)
+    : guideAreaPermissions
+      .filter(([, requiredPermissions]) => requiredPermissions.some((permission) => permissions.includes(permission)))
+      .map(([area]) => area);
+
+  return `
+Current signed-in user:
+- Name: ${typeof member.displayName === "string" && member.displayName.trim() ? member.displayName : "Not provided"}
+- Roles: ${roles.length ? roles.join(", ") : "No role recorded"}
+- Branch: ${typeof member.branchId === "string" && member.branchId ? member.branchId : "Not provided"}
+- Branch access: ${isSuperAdmin || member.branchAccess === "all" ? "all branches" : "assigned branch only"}
+- Accessible areas inferred from current permissions: ${accessibleAreas.length ? accessibleAreas.join(", ") : "AI Guide only"}
+- Explicit permissions: ${isSuperAdmin ? "Unrestricted super admin access" : permissions.length ? permissions.join(", ") : "None recorded"}
+
+Permission guidance rules:
+- Tailor instructions to this user's roles, permissions, ownership, and branch scope.
+- Do not tell the user to use a hidden or forbidden section as though they can access it.
+- When a required action is unavailable, name the permission or manager/admin assistance needed.
+- Do not reveal or infer records, financial values, customer details, or activity belonging to other users or branches.
+`;
+}
+
 export const guideTopics: GuideTopic[] = [
   {
     keywords: ["crm", "concept", "customer relationship", "what is crm", "why crm", "pipeline", "customer journey"],
@@ -68,13 +128,63 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["notification", "unread", "read", "alert"],
+    keywords: ["notification", "unread", "read", "alert", "browser notification", "push notification"],
     title: "Use notifications",
     steps: [
       "Open Notifications from the Workspace section.",
       "Unread notifications are highlighted and the app shows an unread indicator.",
       "Open a notification to review the linked task, lead, deal, finance, or workflow event.",
       "Mark notifications as read when handled.",
+      "Use Enable browser notifications to allow alerts on the current phone or computer; browser permission must also be allowed for the site.",
+      "Ordinary users receive their own related notifications, while authorized managers can receive branch oversight alerts.",
+    ],
+  },
+  {
+    keywords: ["calendar", "google calendar", "sync task", "dated task", "follow-up date"],
+    title: "Connect tasks to Google Calendar",
+    steps: [
+      "Go to Settings, then Google Calendar, and choose Connect Google Calendar.",
+      "Sign in to the Google account that should receive CRM tasks and approve Calendar access.",
+      "The CRM creates a dedicated Vlingo CRM Tasks calendar and initially syncs assigned tasks that have due dates.",
+      "New or updated assigned tasks with dates sync automatically while the connection is active.",
+      "From a task or follow-up prompt, use Sync calendar when a dated task needs to be connected.",
+      "Disconnect from Google Calendar settings when the CRM should stop managing that calendar.",
+    ],
+  },
+  {
+    keywords: ["report", "performance", "amount generated", "revenue report", "conversion rate", "my performance", "csv"],
+    title: "Review personal performance",
+    steps: [
+      "Go to Reports and open My performance.",
+      "Choose a quick period or enter a custom start and end date, then select Generate report.",
+      "Review assigned leads, qualified and converted leads, conversion rate, managed clients, won deals, open pipeline, tasks, and verified amount generated.",
+      "Use Lead interactions and the timeline to review calls, WhatsApp messages, emails, meetings, stage changes, and follow-up work recorded during the period.",
+      "Review the AI performance summary, then use A4 PDF to download a phone- and tablet-friendly report or CSV for spreadsheet analysis.",
+      "Verified amount generated counts attributed payments only after finance verification; pending payments are shown separately.",
+      "Use Export CSV to download the personal summary and breakdowns.",
+      "Organization overview is available only to admins and authorized executive, finance, audit, operations, or sales-management roles.",
+    ],
+  },
+  {
+    keywords: ["pwa", "install app", "offline", "home screen", "mobile app"],
+    title: "Install and use the CRM as an app",
+    steps: [
+      "Use the browser's Install or Add to Home Screen action when the Vlingo CRM install prompt is available.",
+      "Allow the service worker to finish installing before relying on cached pages.",
+      "Previously cached app pages and supported record changes can work offline; the app shows when changes are queued or need attention.",
+      "Reconnect to the internet and keep the app open until queued changes finish syncing.",
+      "Live server features such as AI answers, email, finance verification, and fresh data require an internet connection.",
+    ],
+  },
+  {
+    keywords: ["invite", "invitation", "invite link", "expired invite", "resend link", "new user"],
+    title: "Invite or re-invite a user",
+    steps: [
+      "Go to Settings, then Users; this requires user-management permission.",
+      "Enter the user's details, branch access, and one or more roles, then generate the setup link.",
+      "Copy and share the link through an approved communication channel.",
+      "If the link expires before acceptance, find the invited user and choose Resend link to generate a fresh link.",
+      "After account setup succeeds, the invited user is redirected to sign in.",
     ],
   },
   {
@@ -99,13 +209,23 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["dashboard", "report", "metric", "cards"],
-    title: "Read dashboard and reports",
+    keywords: ["dashboard", "metric", "cards", "welcome"],
+    title: "Read the dashboard",
     steps: [
       "Go to Dashboard for live operational cards based on the current user, branch, and permissions.",
       "Use branch switching if you are a super admin or have all-branch access.",
-      "Use Reports for financial and executive reporting when your role includes reporting access.",
       "If a number looks wrong, check the date/status filters and whether records are assigned to the correct branch.",
+    ],
+  },
+  {
+    keywords: ["organization", "logo", "branding", "primary color", "company name"],
+    title: "Update organization branding",
+    steps: [
+      "Go to Settings, then Organization; this requires organization administration permission.",
+      "Update the organization name and business details.",
+      "Upload a logo from the computer instead of entering a remote logo URL.",
+      "Review the detected primary color and save the organization settings.",
+      "Refresh the app if an older cached logo or color is still visible.",
     ],
   },
 ];
@@ -126,18 +246,30 @@ CRM concept:
 
 Main routes and modules:
 - Dashboard: overview of real data scoped by user permissions and branch.
-- Leads: create, import, geotag, assign, qualify, email, follow up, convert, and open deals.
+- Leads: create, import with flexible header mapping, geotag, assign, qualify, email, follow up, convert, delete when authorized, and open deals. Lead forms reveal fields based on interest category.
 - Lead Locations: map view for geotagged leads. Sales executives see assigned leads; managers see branch-scoped records; super admins can view all branches.
-- Clients: manage client records, communication, list/card views, and WhatsApp links.
-- Deals: finance-facing sales pipeline for property sales, rentals, solar, materials, services, consultancy, installation, and custom work.
+- Clients: manage client records, communication, pagination, list/card views, creator attribution, and clickable WhatsApp phone links.
+- Deals: dynamic finance-facing pipeline for property sales, rentals, solar, materials, services, consultancy, installation, and custom work. Deal forms reveal fields based on category and type, inherit useful lead/client/product data, and record owner/creator attribution.
 - Properties and Units: real-estate inventory and unit management.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
-- Rentals: tenancy and rent tracking.
+- Rentals: tenancy, rent payment, lease dates, renewal tasks, and tenant follow-up.
+- Development: property development projects, project managers, delivery details, and related operational work.
+- Marketing: campaign records connected to lead sources and sales follow-up.
 - Finance: payments, receipt numbers, verification, expenses, commissions, approvals, and printable receipts.
 - Documents: attach and manage business documents.
-- Tasks and Activities: follow-up work and audit-friendly workflow notes.
-- Notifications: persistent read/unread records.
-- Settings: organization, branches, users, roles, email SMTP settings, and audit logs.
+- Tasks and Activities: complete dated follow-up information, creator/updater identity, audit-friendly notes, and Google Calendar sync for assigned tasks.
+- Notifications: persistent read/unread records plus optional browser push alerts, scoped to the user unless they have oversight access.
+- Reports: every active user can review their own lead/client/deal/task performance and attributed verified revenue for selectable periods and export CSV. Executive/financial permissions additionally unlock Organization overview.
+- AI Guide: persistent daily conversation, follow-up questions, Markdown answers, daily quota, and a response character limit.
+- PWA and offline: installable app shell, browser notifications, cached pages, and queued supported writes; live backend actions still require connectivity.
+- Settings: organization name/logo/theme, branches, users and renewable invite links, multiple roles, Google Calendar, email SMTP, and audit logs.
+
+Cross-module workflows:
+- Lead -> linked property/unit or product/service -> client conversion -> deal -> verified finance payment -> personal performance report.
+- Selecting a lead interest category or deal category/type hides irrelevant fields and keeps forms focused.
+- Lead, client, and deal cards show who entered the record; ownership fields determine personal workflow visibility and reporting attribution.
+- Phone numbers in lead/client areas can open WhatsApp, and single or bulk email uses the organization's configured SMTP mailbox.
+- Dated assigned tasks can sync to the user's connected Google Calendar and task notifications can reach enabled browsers/PWA devices.
 
 Role behavior:
 - Super admin has no restrictions.
@@ -149,6 +281,9 @@ Answer style:
 - Give concise, practical, step-by-step instructions.
 - Mention the exact app section or route name when useful.
 - If a task requires a permission, state it.
+- Use the supplied current-user context to avoid recommending inaccessible sections or cross-branch data.
+- Distinguish personal Reports from restricted Organization overview and Finance access.
+- Never claim to have inspected live CRM records; explain navigation and workflow unless record data was explicitly supplied in the conversation.
 - If the user asks for something outside the CRM, explain what the CRM can do and where to go next.
 `;
 

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { appGuideContext, fallbackGuideAnswer } from "@/features/ai-guide/guide-knowledge";
+import { firebaseAdminRecovery } from "@/lib/firebase/admin-errors";
+import { appGuideContext, buildGuideMemberContext, fallbackGuideAnswer } from "@/features/ai-guide/guide-knowledge";
 
 export const runtime = "nodejs";
 
@@ -18,20 +19,6 @@ class AiGuideAdminFirestoreError extends Error {
     super(message);
     this.name = "AiGuideAdminFirestoreError";
   }
-}
-
-function adminFirestoreAction(message: string) {
-  if (message.includes("invalid_rapt") || message.includes("invalid_grant")) {
-    return {
-      error: "AI Guide cannot reach Firestore because your local Google Application Default Credentials need reauthentication.",
-      requiredAction: "Run: gcloud auth application-default login, then restart npm run dev. For deployed hosting, configure FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL, and FIREBASE_ADMIN_PRIVATE_KEY instead of relying on local user credentials.",
-    };
-  }
-
-  return {
-    error: "AI Guide cannot reach Firestore with the current backend credentials.",
-    requiredAction: "Grant the app runtime service account Cloud Datastore User, then restart or redeploy the app.",
-  };
 }
 
 function numericEnv(name: string, fallback: number) {
@@ -186,10 +173,9 @@ async function verifyActiveMember(request: Request, organizationId: string) {
 }
 
 export async function POST(request: Request) {
-  const organizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID ?? "beacon-corporate-realty";
   const dailyLimit = numericEnv("AI_GUIDE_DAILY_LIMIT", defaultDailyLimit);
   const characterLimit = numericEnv("AI_GUIDE_RESPONSE_CHARACTER_LIMIT", defaultResponseCharacterLimit);
-  let body: { history?: unknown; question?: unknown };
+  let body: { history?: unknown; organizationId?: unknown; question?: unknown };
 
   try {
     body = await request.json();
@@ -198,6 +184,9 @@ export async function POST(request: Request) {
   }
 
   const question = typeof body.question === "string" ? body.question.trim() : "";
+  const organizationId = typeof body.organizationId === "string" && body.organizationId.trim()
+    ? body.organizationId.trim()
+    : process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID ?? "beacon-corporate-realty";
   const history = normalizeHistory(body.history);
   if (question.length < 3) {
     return NextResponse.json({ error: "Ask a question with at least 3 characters." }, { status: 400 });
@@ -209,7 +198,10 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[AI Guide auth failed]", error);
     if (error instanceof AiGuideAdminFirestoreError) {
-      const action = adminFirestoreAction(error.message);
+      const action = firebaseAdminRecovery(error, "AI Guide") ?? {
+        error: "AI Guide cannot reach Firestore with the current backend credentials.",
+        requiredAction: "Grant the app runtime service account Cloud Datastore User, then restart or redeploy the app.",
+      };
       return NextResponse.json({
         error: action.error,
         requiredAction: action.requiredAction,
@@ -229,7 +221,10 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[AI Guide quota failed]", error);
     if (error instanceof AiGuideAdminFirestoreError) {
-      const action = adminFirestoreAction(error.message);
+      const action = firebaseAdminRecovery(error, "AI Guide") ?? {
+        error: "AI Guide cannot reach Firestore with the current backend credentials.",
+        requiredAction: "Grant the app runtime service account Cloud Datastore User, then restart or redeploy the app.",
+      };
       return NextResponse.json({
         error: action.error,
         requiredAction: action.requiredAction,
@@ -282,7 +277,7 @@ export async function POST(request: Request) {
           temperature: 0.3,
         },
         systemInstruction: {
-          parts: [{ text: `${appGuideContext}\n\nHard response limit: answer in ${characterLimit} characters or fewer. Prioritize the most useful steps first. If more detail is needed, tell the user what follow-up to ask.` }],
+          parts: [{ text: `${appGuideContext}\n${buildGuideMemberContext(verified.member)}\nHard response limit: answer in ${characterLimit} characters or fewer. Prioritize the most useful steps first. If more detail is needed, tell the user what follow-up to ask.` }],
         },
       }),
       headers: {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { accessRuleForPath, navigation } from "../../src/components/layout/navigation";
-import { hasAnyPermission, hasNotificationOversight, hasPermission, rolePermissions } from "../../src/lib/permissions";
+import { accessRuleForPath, navigation, reportsAccessPermissions } from "../../src/components/layout/navigation";
+import { hasAnyPermission, hasNotificationOversight, hasOrganizationReportAccess, hasPermission, rolePermissions } from "../../src/lib/permissions";
 import type { Member } from "../../src/types/crm";
 
 describe("route access rules", () => {
@@ -22,7 +22,7 @@ describe("route access rules", () => {
     expect(accessRuleForPath("/ai-guide")?.permissions).toEqual(expect.arrayContaining(["leads.readAssigned", "users.manage"]));
     expect(accessRuleForPath("/offerings")?.permissions).toEqual(["offerings.read"]);
     expect(accessRuleForPath("/offerings/new")?.permissions).toEqual(["offerings.create"]);
-    expect(accessRuleForPath("/reports")?.permissions).toEqual(["reports.viewFinancial", "dashboard.viewExecutive"]);
+    expect(accessRuleForPath("/reports")?.permissions).toEqual(expect.arrayContaining(["leads.readAssigned", "reports.viewFinancial"]));
     expect(accessRuleForPath("/finance")?.permissions).toEqual(["reports.viewFinancial"]);
   });
 
@@ -76,6 +76,43 @@ describe("route access rules", () => {
     const financeRule = accessRuleForPath("/finance");
     expect(financeRule).toBeDefined();
     expect(financeRule?.permissions.some((permission) => salesPermissions.includes(permission))).toBe(false);
+  });
+
+  it("limits organization overview to appropriate reporting and management roles", () => {
+    const memberFor = (role: keyof typeof rolePermissions) => ({
+      branchId: "head-office",
+      displayName: role,
+      email: `${role}@example.com`,
+      id: `${role}-1`,
+      organizationId: "org-a",
+      permissions: rolePermissions[role],
+      role,
+      status: "active" as const,
+    } as Member);
+
+    expect(hasOrganizationReportAccess(memberFor("superAdmin"))).toBe(true);
+    expect(hasOrganizationReportAccess(memberFor("managingDirector"))).toBe(true);
+    expect(hasOrganizationReportAccess(memberFor("operationsManager"))).toBe(true);
+    expect(hasOrganizationReportAccess(memberFor("salesManager"))).toBe(true);
+    expect(hasOrganizationReportAccess(memberFor("financeManager"))).toBe(true);
+    expect(hasOrganizationReportAccess(memberFor("salesExecutive"))).toBe(false);
+    expect(hasOrganizationReportAccess(memberFor("frontDeskOfficer"))).toBe(false);
+  });
+
+  it("allows every built-in role to open its own performance report", () => {
+    for (const [role, permissions] of Object.entries(rolePermissions)) {
+      const member = {
+        branchId: "head-office",
+        displayName: role,
+        email: `${role}@example.com`,
+        id: `${role}-1`,
+        organizationId: "org-a",
+        permissions,
+        role,
+        status: "active",
+      } as Member;
+      expect(hasAnyPermission(member, reportsAccessPermissions), `${role} should have personal report access`).toBe(true);
+    }
   });
 
   it("keeps role permissions aligned with operational responsibilities", () => {

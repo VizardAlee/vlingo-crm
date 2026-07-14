@@ -1278,6 +1278,8 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
     convertedLead = data;
     const stageHistory = Array.isArray(data?.stageHistory) ? data.stageHistory : [];
     transaction.set(clientRef, {
+      assignedRelationshipManager: data?.assignedTo ?? request.auth?.uid,
+      assignedTo: data?.assignedTo ?? request.auth?.uid,
       branchId: data?.branchId,
       category: "buyer",
       clientType: "individual",
@@ -1291,6 +1293,7 @@ export const convertLeadToClient = onCall(callableOptions, async (request) => {
       organizationId,
       phoneNumber: data?.phoneNumber,
       referenceNumber: `CLIENT-${Date.now()}`,
+      sourceLeadId: leadId,
       status: "active",
       tags: data?.tags ?? [],
       updatedAt: FieldValue.serverTimestamp(),

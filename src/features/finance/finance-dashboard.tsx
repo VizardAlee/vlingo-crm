@@ -31,6 +31,8 @@ type RevenueSource = {
   propertyName: string;
   reference: string;
   revenueCategory: FinanceRevenueCategory;
+  revenueOwnerId?: string;
+  revenueOwnerName?: string;
   sourceId: string;
   sourceType: FinancePaymentSourceType;
   value: string;
@@ -129,6 +131,8 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
           propertyName: [deal.offeringName, deal.unitName, deal.propertyName].filter(Boolean).join(" · "),
           reference: deal.referenceNumber ?? "",
           revenueCategory: revenueCategoryFromDeal(deal),
+          revenueOwnerId: deal.dealOwnerId,
+          revenueOwnerName: deal.dealOwnerName,
           sourceId: deal.id,
           sourceType: "deal" as const,
           value: `deal:${deal.id}`,
@@ -143,6 +147,8 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
         propertyName: [lead.offeringName, lead.unitName, lead.propertyName, lead.preferredPropertyCategory ?? lead.propertyType, lead.preferredLocation ?? lead.preferredCity].filter(Boolean).join(" · "),
         reference: lead.referenceNumber ?? "",
         revenueCategory: revenueCategoryFromLead(lead),
+        revenueOwnerId: lead.assignedTo,
+        revenueOwnerName: String((lead as unknown as Record<string, unknown>).assignedToName ?? ""),
         sourceId: lead.id,
         sourceType: "lead" as const,
         value: `lead:${lead.id}`,
@@ -459,6 +465,8 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
         propertyName: source.propertyName,
         receiptNumber,
         revenueCategory: source.revenueCategory,
+        revenueOwnerId: source.revenueOwnerId ?? "",
+        revenueOwnerName: source.revenueOwnerName ?? "",
         sourceId: source.sourceId,
         sourceReference: source.reference,
         sourceType: source.sourceType,

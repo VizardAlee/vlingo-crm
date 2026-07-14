@@ -129,6 +129,12 @@ export function hasAnyPermission(member: Member | null, permissions: Permission[
   return permissions.some((permission) => hasPermission(member, permission));
 }
 
+export function hasOrganizationReportAccess(member: Member | null) {
+  return hasAnyPermission(member, ["reports.viewFinancial", "dashboard.viewExecutive"]) || (
+    hasPermission(member, "leads.readAll") && hasPermission(member, "leads.assign")
+  );
+}
+
 export function memberRoles(member: Member | null) {
   if (!member) {
     return [] as RoleName[];

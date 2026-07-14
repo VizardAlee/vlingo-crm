@@ -175,6 +175,8 @@ export interface Lead extends EntityMetadata {
   sourceReference?: string;
   referralName?: string;
   referralPhone?: string;
+  assignedToEmail?: string;
+  assignedToName?: string;
   assignedAgentId?: string;
   score: number;
   leadTemperature?: "cold" | "warm" | "hot";
@@ -219,6 +221,7 @@ export interface Client extends EntityMetadata {
   assignedRelationshipManager?: string;
   tags: string[];
   notes?: string;
+  sourceLeadId?: string;
 }
 
 export type DealStatus =
@@ -535,6 +538,8 @@ export interface FinancePayment extends EntityMetadata {
   payerName: string;
   propertyName?: string;
   revenueCategory?: FinanceRevenueCategory;
+  revenueOwnerId?: string;
+  revenueOwnerName?: string;
   amount: number;
   at: string;
   method: RentalPaymentMethod;
