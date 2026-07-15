@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChevronsLeft, LogOut, Menu, MoreHorizontal, Plus, Search, X } from "lucide-react";
+import { Building2, ChevronsLeft, LogOut, MoreHorizontal, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -11,12 +11,13 @@ import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/stat
 import { accessRuleForPath, navigation, notificationAccessPermissions } from "@/components/layout/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { BrowserNotificationListener } from "@/features/notifications/browser-notification-listener";
+import { NotificationMenu } from "@/features/notifications/notification-menu";
 import { WhatsNew } from "@/features/updates/whats-new";
 import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { listUserNotifications } from "@/services/notifications";
 import { listBranches } from "@/services/users";
-import type { Branch } from "@/types/crm";
+import type { AppNotification, Branch } from "@/types/crm";
 
 const notificationsChangedEvent = "beacon:notifications-changed";
 
@@ -25,9 +26,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { activeBranchId, activeOrganizationId, firebaseReady, loading, member, memberLoadError, setActiveBranchId, signOutUser, user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [notificationItems, setNotificationItems] = useState<AppNotification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     canAccessAllBranches(member) ? branches : branches.filter((branch) => branch.id === member?.branchId)
   ), [branches, member]);
   const activeBranchName = visibleBranches.find((branch) => branch.id === activeBranchId)?.name ?? "Head office";
+  const canSwitchBranches = canAccessAllBranches(member) && visibleBranches.length > 1;
 
   useEffect(() => {
     const currentUserId = user?.uid;
@@ -67,11 +69,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       try {
         const notifications = await listUserNotifications(activeOrganizationId, notificationUserId);
         if (mounted) {
-          setUnreadNotificationCount(notifications.filter((item) => !item.readAt).length);
+          setNotificationItems(notifications);
         }
       } catch {
         if (mounted) {
-          setUnreadNotificationCount(0);
+          setNotificationItems([]);
+        }
+      } finally {
+        if (mounted) {
+          setNotificationsLoading(false);
         }
       }
     }
@@ -133,7 +139,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     .map((href) => flatNavigation.find((item) => item.href === href))
     .filter((item) => item !== undefined);
   const currentSection = flatNavigation.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-  const displayedUnreadNotificationCount = user && canViewNotifications ? unreadNotificationCount : 0;
 
   const sidebar = (
     <aside className={cn("flex h-full min-h-0 flex-col border-r bg-white transition-all", collapsed ? "w-20" : "w-72")}>
@@ -313,44 +318,38 @@ export function AppShell({ children }: { children: ReactNode }) {
       {mobileBottomNavigation}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="no-print z-30 shrink-0 border-b bg-white/95 backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-4 md:h-18 lg:px-6">
-            <Button aria-label="Open all sections" className="md:hidden" onClick={() => setMobileOpen(true)} size="icon" variant="ghost">
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="flex min-w-0 flex-1 items-center gap-3 md:hidden">
-              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={72} height={36} className="h-auto w-16 rounded-md object-contain object-left" priority style={{ height: "auto" }} />
+          <div className="flex h-16 items-center gap-2 px-3 md:h-18 md:gap-3 md:px-5 lg:px-6">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5 md:hidden">
+              <Image src="/branding/vlingo-logo.jpeg" alt="Vlingo Systems Nig. Ltd. logo" width={56} height={32} className="h-auto w-12 shrink-0 rounded-sm object-contain object-left" priority style={{ height: "auto" }} />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{currentSection?.label ?? "Vlingo CRM"}</p>
-                <p className="truncate text-xs text-muted-foreground">{activeBranchName}</p>
+                {!canSwitchBranches ? <p className="truncate text-xs text-muted-foreground">{activeBranchName}</p> : null}
               </div>
             </div>
             <div className="hidden min-w-0 flex-1 items-center gap-3 md:flex">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input aria-label="Global search" placeholder="Search leads, clients, properties, tasks" />
             </div>
-            <Select aria-label="Branch selector" className="hidden w-40 sm:block" value={activeBranchId} onChange={(event) => setActiveBranchId(event.target.value)}>
+            <Select aria-label="Branch selector" className="hidden w-40 md:block" value={activeBranchId} onChange={(event) => setActiveBranchId(event.target.value)}>
               {visibleBranches.length ? visibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>) : (
                 <option value={activeBranchId}>{activeBranchName}</option>
               )}
             </Select>
             {canCreateLead ? (
-              <ButtonLink className="hidden sm:inline-flex" href="/leads/new" variant="secondary">
+              <ButtonLink className="hidden lg:inline-flex" href="/leads/new" variant="secondary">
                 <Plus className="h-4 w-4" />
                 Quick create
               </ButtonLink>
             ) : null}
-            <Button aria-label="Search" className="md:hidden" onClick={() => setMobileSearchOpen((value) => !value)} size="icon" variant="ghost">
-              <Search className="h-5 w-5" />
-            </Button>
-            {canViewNotifications ? (
-              <ButtonLink aria-label={displayedUnreadNotificationCount ? `${displayedUnreadNotificationCount} unread notifications` : "Notifications"} className="relative" href="/notifications" size="icon" variant="outline">
-                <Bell className="h-4 w-4" />
-                {displayedUnreadNotificationCount ? (
-                  <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-none text-white ring-2 ring-white">
-                    {displayedUnreadNotificationCount > 9 ? "9+" : displayedUnreadNotificationCount}
-                  </span>
-                ) : null}
-              </ButtonLink>
+            {canViewNotifications && user ? (
+              <NotificationMenu
+                branchId={activeBranchId}
+                items={notificationItems}
+                loading={notificationsLoading}
+                onItemsChange={setNotificationItems}
+                organizationId={activeOrganizationId}
+                userId={user.uid}
+              />
             ) : null}
             {user && member?.status === "active" ? <WhatsNew organizationId={activeOrganizationId} userId={user.uid} /> : null}
             <Button aria-label="Sign out" className="md:hidden" onClick={signOutUser} size="icon" variant="ghost">
@@ -360,11 +359,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
-          {mobileSearchOpen ? (
-            <div className="border-t px-4 py-3 md:hidden">
+          {canSwitchBranches ? (
+            <div className="border-t bg-muted/30 px-3 py-2 md:hidden">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input aria-label="Global search" className="h-11 rounded-md pl-9" placeholder="Search workspace" />
+                <Building2 className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-primary" />
+                <Select
+                  aria-label="Switch active branch"
+                  className="h-10 w-full border-border bg-white pl-9 pr-8 text-sm font-medium shadow-sm"
+                  value={activeBranchId}
+                  onChange={(event) => setActiveBranchId(event.target.value)}
+                >
+                  {visibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                </Select>
               </div>
             </div>
           ) : null}
