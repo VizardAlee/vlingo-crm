@@ -256,8 +256,12 @@ export const offeringSchema = z.object({
   vertical: z.enum(["realEstate", "solar", "buildingMaterials", "generalServices", "custom"]),
   type: z.enum(["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"]),
   category: z.string().min(2, "Category is required."),
+  brandId: z.string().optional(),
+  brandName: z.string().optional(),
   description: z.string().optional(),
   sku: z.string().optional(),
+  barcode: z.string().optional(),
+  trackingMode: z.enum(["none", "batch", "serial"]).optional(),
   unitOfMeasure: z.string().optional(),
   sellingPrice: optionalNumber,
   costPrice: optionalNumber,
@@ -268,6 +272,10 @@ export const offeringSchema = z.object({
   tags: tagString.default([]),
   notes: z.string().optional(),
   status: z.enum(["active", "draft", "inactive", "archived"]),
+}).superRefine((value, context) => {
+  if (["material", "solarEquipment"].includes(value.type) && !value.brandId?.trim()) {
+    context.addIssue({ code: "custom", message: "Select a brand for this inventory product.", path: ["brandId"] });
+  }
 });
 
 export const unitSchema = z.object({

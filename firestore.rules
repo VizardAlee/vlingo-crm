@@ -74,6 +74,18 @@ service cloud.firestore {
         : [];
     }
 
+    function partnerBranchIds(orgId) {
+      return memberData(orgId).keys().hasAny(["partnerBranchIds"]) &&
+        memberData(orgId).partnerBranchIds is list
+        ? memberData(orgId).partnerBranchIds
+        : [memberData(orgId).branchId];
+    }
+
+    function canAccessPartnerBranch(orgId, branchId) {
+      return !isBrandPartner(orgId) ||
+        (branchId is string && partnerBranchIds(orgId).hasAny([branchId]));
+    }
+
     function canAccessInventoryBrand(orgId, brandId) {
       return hasPermission(orgId, "inventory.read") &&
         (!isBrandPartner(orgId) || (brandId is string && partnerBrandIds(orgId).hasAny([brandId])));
@@ -81,7 +93,8 @@ service cloud.firestore {
 
     function canReadInventoryRecord(orgId) {
       return canAccessInventoryBrand(orgId, resource.data.brandId) &&
-        (isBrandPartner(orgId) || canReadRecordBranch(orgId));
+        ((isBrandPartner(orgId) && canAccessPartnerBranch(orgId, resource.data.branchId)) ||
+        (!isBrandPartner(orgId) && canReadRecordBranch(orgId)));
     }
 
     function assignedOnlySalesUser(orgId) {
@@ -108,6 +121,13 @@ service cloud.firestore {
 
     function canReadDeals(orgId) {
       return hasAnyPermission(orgId, ["deals.read", "reports.viewFinancial"]);
+    }
+
+    function validInventoryOfferingBrand(orgId) {
+      return !["material", "solarEquipment"].hasAny([request.resource.data.type]) ||
+        (request.resource.data.brandId is string &&
+        exists(/databases/$(database)/documents/organizations/$(orgId)/inventoryBrands/$(request.resource.data.brandId)) &&
+        get(/databases/$(database)/documents/organizations/$(orgId)/inventoryBrands/$(request.resource.data.brandId)).data.status == "active");
     }
 
     function canCreateDeals(orgId) {
@@ -365,14 +385,13 @@ service cloud.firestore {
 
       match /offerings/{offeringId} {
         allow read: if (canReadRecordBranch(orgId) && hasPermission(orgId, "offerings.read")) || canReadInventoryRecord(orgId);
-        allow create: if hasPermission(orgId, "offerings.create") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "offerings.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow create: if hasPermission(orgId, "offerings.create") && hasMetadata(orgId) && validInventoryOfferingBrand(orgId);
+        allow update: if hasPermission(orgId, "offerings.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId) && validInventoryOfferingBrand(orgId);
         allow delete: if false;
       }
 
       match /inventoryBrands/{brandId} {
-        allow read: if canAccessInventoryBrand(orgId, resource.data.brandId) &&
-          (isBrandPartner(orgId) || canReadRecordBranch(orgId));
+        allow read: if canAccessInventoryBrand(orgId, resource.data.brandId);
         allow create: if hasPermission(orgId, "inventory.manageCatalog") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "inventory.manageCatalog") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
@@ -395,13 +414,46 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /inventoryLots/{lotId} {
+        allow read: if canReadInventoryRecord(orgId);
+        allow write: if false;
+      }
+
+      match /inventorySerials/{serialId} {
+        allow read: if canReadInventoryRecord(orgId);
+        allow write: if false;
+      }
+
+      match /inventorySuppliers/{supplierId} {
+        allow read: if !isBrandPartner(orgId) && hasPermission(orgId, "inventory.read") && canReadRecordBranch(orgId);
+        allow create: if hasAnyPermission(orgId, ["inventory.manageCatalog", "inventory.procure"]) && hasMetadata(orgId);
+        allow update: if hasAnyPermission(orgId, ["inventory.manageCatalog", "inventory.procure"]) && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow delete: if false;
+      }
+
+      match /inventoryPurchaseOrders/{purchaseOrderId} {
+        allow read: if !isBrandPartner(orgId) && hasPermission(orgId, "inventory.read") && canReadRecordBranch(orgId);
+        allow write: if false;
+      }
+
+      match /inventoryStockCounts/{countId} {
+        allow read: if !isBrandPartner(orgId) && hasPermission(orgId, "inventory.read") && canReadRecordBranch(orgId);
+        allow write: if false;
+      }
+
+      match /inventoryReservations/{reservationId} {
+        allow read: if !isBrandPartner(orgId) && hasPermission(orgId, "inventory.read") && canReadRecordBranch(orgId);
+        allow write: if false;
+      }
+
       match /inventoryComments/{commentId} {
         allow read: if canReadInventoryRecord(orgId);
         allow create: if hasPermission(orgId, "inventory.comment") &&
           organizationMatches(orgId) &&
           canAccessInventoryBrand(orgId, request.resource.data.brandId) &&
           request.resource.data.branchId is string &&
-          (isBrandPartner(orgId) || canWriteRequestBranch(orgId)) &&
+          ((isBrandPartner(orgId) && canAccessPartnerBranch(orgId, request.resource.data.branchId)) ||
+          (!isBrandPartner(orgId) && canWriteRequestBranch(orgId))) &&
           request.resource.data.createdBy == request.auth.uid &&
           request.resource.data.isDeleted == false;
         allow update, delete: if false;

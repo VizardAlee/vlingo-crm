@@ -38,6 +38,10 @@ export type Permission =
   | "inventory.transfer"
   | "inventory.viewReports"
   | "inventory.comment"
+  | "inventory.procure"
+  | "inventory.approve"
+  | "inventory.count"
+  | "inventory.reserve"
   | "tasks.create"
   | "tasks.read"
   | "tasks.update"
@@ -122,6 +126,7 @@ export interface Member {
   roles?: RoleName[];
   permissions: Permission[];
   partnerBrandIds?: string[];
+  partnerBranchIds?: string[];
   status: MembershipStatus;
   createdAt?: Date;
   createdBy?: string;
@@ -355,6 +360,8 @@ export interface Offering extends EntityMetadata {
   category: string;
   description?: string;
   sku?: string;
+  barcode?: string;
+  trackingMode?: "none" | "batch" | "serial";
   unitOfMeasure?: string;
   sellingPrice?: number;
   costPrice?: number;
@@ -400,11 +407,138 @@ export interface InventoryBalance {
   locationId: string;
   locationName: string;
   quantityOnHand: number;
+  quantityReserved?: number;
   updatedAt?: Date;
   updatedBy: string;
 }
 
+export interface InventorySupplier extends EntityMetadata {
+  id: string;
+  name: string;
+  code: string;
+  contactName?: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: string;
+  taxId?: string;
+  paymentTerms?: string;
+  brandIds: string[];
+  status: "active" | "inactive";
+}
+
+export interface InventoryPurchaseOrderLine {
+  offeringId: string;
+  offeringName: string;
+  brandId: string;
+  brandName: string;
+  sku?: string;
+  quantity: number;
+  receivedQuantity: number;
+  unitCost: number;
+}
+
+export type InventoryApprovalStatus = "draft" | "pendingApproval" | "approved" | "rejected" | "cancelled";
+
+export interface InventoryPurchaseOrder extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  supplierId: string;
+  supplierName: string;
+  lines: InventoryPurchaseOrderLine[];
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  expectedAt?: Date | string;
+  approvalStatus: InventoryApprovalStatus;
+  receivingStatus: "notReceived" | "partReceived" | "received";
+  approvedAt?: Date;
+  approvedBy?: string;
+  rejectedAt?: Date;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  notes?: string;
+}
+
+export interface InventoryLot {
+  id: string;
+  organizationId: string;
+  branchId: string;
+  brandId: string;
+  offeringId: string;
+  offeringName: string;
+  locationId: string;
+  locationName: string;
+  batchNumber: string;
+  expiryDate?: Date | string;
+  quantityOnHand: number;
+  quantityReserved?: number;
+  updatedAt?: Date;
+}
+
+export interface InventorySerial {
+  id: string;
+  organizationId: string;
+  branchId: string;
+  brandId: string;
+  offeringId: string;
+  offeringName: string;
+  locationId: string;
+  locationName: string;
+  serialNumber: string;
+  status: "available" | "reserved" | "issued" | "returned";
+  reservationId?: string;
+  updatedAt?: Date;
+}
+
+export interface InventoryStockCountLine {
+  offeringId: string;
+  offeringName: string;
+  brandId: string;
+  locationId: string;
+  locationName: string;
+  systemQuantity: number;
+  actualQuantity: number;
+  variance: number;
+  reason?: string;
+}
+
+export interface InventoryStockCount extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  name: string;
+  lines: InventoryStockCountLine[];
+  approvalStatus: InventoryApprovalStatus;
+  countStatus: "draft" | "submitted" | "posted" | "cancelled";
+  countedAt: Date | string;
+  approvedAt?: Date;
+  approvedBy?: string;
+  notes?: string;
+}
+
+export interface InventoryReservation extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  brandId: string;
+  brandName: string;
+  offeringId: string;
+  offeringName: string;
+  locationId: string;
+  locationName: string;
+  quantity: number;
+  batchNumber?: string;
+  serialNumbers?: string[];
+  relatedEntityType?: "deal" | "project" | "workOrder" | "other";
+  relatedEntityId?: string;
+  relatedEntityName?: string;
+  expiresAt?: Date | string;
+  reservationStatus: "active" | "released" | "fulfilled" | "expired";
+  fulfilledAt?: Date;
+  releasedAt?: Date;
+  notes?: string;
+}
+
 export type InventoryMovementType = "receipt" | "issue" | "adjustmentIn" | "adjustmentOut" | "transfer" | "returnIn" | "returnOut";
+export type InventoryMovementPurpose = "sale" | "project" | "internalUse" | "other";
 
 export interface InventoryMovement {
   id: string;
@@ -416,6 +550,7 @@ export interface InventoryMovement {
   offeringName: string;
   sku?: string;
   movementType: InventoryMovementType;
+  movementPurpose?: InventoryMovementPurpose;
   quantity: number;
   fromLocationId?: string;
   fromLocationName?: string;
@@ -424,6 +559,11 @@ export interface InventoryMovement {
   referenceNumber: string;
   externalReference?: string;
   notes?: string;
+  batchNumber?: string;
+  expiryDate?: Date | string;
+  serialNumbers?: string[];
+  purchaseOrderId?: string;
+  reservationId?: string;
   occurredAt: Date | string;
   createdAt?: Date;
   createdBy: string;

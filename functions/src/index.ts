@@ -72,6 +72,10 @@ const rolePermissions = {
     "inventory.transfer",
     "inventory.viewReports",
     "inventory.comment",
+    "inventory.procure",
+    "inventory.approve",
+    "inventory.count",
+    "inventory.reserve",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -85,21 +89,21 @@ const rolePermissions = {
     "roles.manage",
     "auditLogs.read",
   ],
-  managingDirector: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "properties.read", "deals.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "tasks.read", "activities.read", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
-  operationsManager: ["dashboard.viewExecutive", "leads.create", "leads.readAll", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "rentals.create", "rentals.read", "rentals.update", "development.create", "development.read", "development.update", "marketing.create", "marketing.read", "marketing.update", "offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read", "users.manage"],
-  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "offerings.read", "inventory.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  managingDirector: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "properties.read", "deals.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "inventory.approve", "tasks.read", "activities.read", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
+  operationsManager: ["dashboard.viewExecutive", "leads.create", "leads.readAll", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "rentals.create", "rentals.read", "rentals.update", "development.create", "development.read", "development.update", "marketing.create", "marketing.read", "marketing.update", "offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "inventory.procure", "inventory.approve", "inventory.count", "inventory.reserve", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read", "users.manage"],
+  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.reserve", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "offerings.read", "inventory.read", "inventory.reserve", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   propertyManager: ["properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "offerings.read", "deals.read", "rentals.create", "rentals.read", "rentals.update", "development.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
+  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "inventory.approve", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
   accountant: ["clients.read", "properties.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "activities.create", "activities.read", "finance.create", "finance.update", "reports.viewFinancial"],
   legalOfficer: ["clients.read", "properties.read", "deals.read", "rentals.read", "offerings.read", "auditLogs.read"],
-  projectManager: ["properties.read", "properties.update", "development.create", "development.read", "development.update", "offerings.read", "inventory.read", "inventory.issue", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
+  projectManager: ["properties.read", "properties.update", "development.create", "development.read", "development.update", "offerings.read", "inventory.read", "inventory.issue", "inventory.reserve", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
   marketingOfficer: ["leads.create", "leads.readAll", "properties.read", "marketing.create", "marketing.read", "marketing.update", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   customerServiceOfficer: ["leads.create", "leads.readAssigned", "clients.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   frontDeskOfficer: ["leads.create", "leads.readAssigned", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   agent: ["leads.readAssigned", "activities.create", "activities.read"],
   auditor: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "tasks.read", "activities.read", "reports.viewFinancial", "auditLogs.read"],
-  inventoryManager: ["offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
+  inventoryManager: ["offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "inventory.procure", "inventory.count", "inventory.reserve", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
   brandPartner: ["inventory.read", "inventory.viewReports", "inventory.comment"],
 } as const;
 
@@ -183,6 +187,17 @@ async function requirePartnerBrandIds(organizationId: string, roles: RoleName[],
   const snapshots = await db.getAll(...ids.map((id) => db.doc(`organizations/${organizationId}/inventoryBrands/${id}`)));
   if (snapshots.some((snapshot) => !snapshot.exists || snapshot.data()?.status !== "active")) {
     throw new HttpsError("invalid-argument", "Every partner brand must exist and be active.");
+  }
+  return ids;
+}
+
+async function requirePartnerBranchIds(organizationId: string, roles: RoleName[], value: unknown) {
+  if (!roles.includes("brandPartner")) return [];
+  const ids = Array.from(new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : []));
+  if (!ids.length) throw new HttpsError("invalid-argument", "Select at least one branch for a brand representative.");
+  const snapshots = await db.getAll(...ids.map((id) => db.doc(`organizations/${organizationId}/branches/${id}`)));
+  if (snapshots.some((snapshot) => !snapshot.exists || snapshot.data()?.status === "closed")) {
+    throw new HttpsError("invalid-argument", "Every representative branch must exist and be active.");
   }
   return ids;
 }
@@ -693,6 +708,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
     assertCanAssignRoles(actor, roles);
     assertCanGrantBranchAccess(actor, branchAccess);
     const partnerBrandIds = await requirePartnerBrandIds(organizationId, roles, request.data?.partnerBrandIds);
+    const partnerBranchIds = await requirePartnerBranchIds(organizationId, roles, request.data?.partnerBranchIds);
 
     const user = await getOrCreateUser(email, displayName);
     const memberRef = db.doc(`organizations/${organizationId}/members/${user.uid}`);
@@ -711,6 +727,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
       organizationId,
       permissions: permissionsForRoles(roles),
       partnerBrandIds,
+      partnerBranchIds,
       phoneNumber,
       role,
       roles,
@@ -730,7 +747,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
       branchId,
       entityId: user.uid,
       entityType: "member",
-      newValue: { branchAccess, branchId, displayName, email, partnerBrandIds, role, roles, setupLinkGenerated: true, status: "active" },
+      newValue: { branchAccess, branchId, displayName, email, partnerBrandIds, partnerBranchIds, role, roles, setupLinkGenerated: true, status: "active" },
       organizationId,
       previousValue: previous.exists ? previous.data() : null,
     });
@@ -1165,6 +1182,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
   assertCanAssignRoles(actor, roles);
   assertCanGrantBranchAccess(actor, branchAccess);
   const partnerBrandIds = await requirePartnerBrandIds(organizationId, roles, request.data?.partnerBrandIds);
+  const partnerBranchIds = await requirePartnerBranchIds(organizationId, roles, request.data?.partnerBranchIds);
 
   if (targetUid === request.auth.uid) {
     throw new HttpsError("failed-precondition", "You cannot change your own role or branch.");
@@ -1182,6 +1200,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
     branchAccess,
     permissions: permissionsForRoles(roles),
     partnerBrandIds,
+    partnerBranchIds,
     role,
     roles,
     updatedAt: FieldValue.serverTimestamp(),
@@ -1195,7 +1214,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
     branchId,
     entityId: targetUid,
     entityType: "member",
-    newValue: { branchAccess, branchId, partnerBrandIds, role, roles },
+    newValue: { branchAccess, branchId, partnerBrandIds, partnerBranchIds, role, roles },
     organizationId,
     previousValue: previous.data(),
   });
@@ -1502,6 +1521,7 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
   const branchId = requireString(request.data?.branchId, "branchId");
   const offeringId = requireString(request.data?.offeringId, "offeringId");
   const movementType = requireString(request.data?.movementType, "movementType");
+  const movementPurpose = ["sale", "project", "internalUse", "other"].includes(request.data?.movementPurpose) ? request.data.movementPurpose as string : "other";
   const permission = inventoryMovementPermission[movementType];
   if (!permission) throw new HttpsError("invalid-argument", "Unsupported inventory movement type.");
   const quantity = requireNumber(request.data?.quantity, "quantity");
@@ -1518,6 +1538,8 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
   if (needsFrom && !fromLocationId) throw new HttpsError("invalid-argument", "A source location is required.");
   if (needsTo && !toLocationId) throw new HttpsError("invalid-argument", "A destination location is required.");
   if (movementType === "transfer" && fromLocationId === toLocationId) throw new HttpsError("invalid-argument", "Transfer locations must be different.");
+  if (movementPurpose === "sale" && movementType !== "issue") throw new HttpsError("invalid-argument", "Sale purpose is only valid for an inventory issue.");
+  if (movementPurpose === "sale" && (typeof request.data?.externalReference !== "string" || !request.data.externalReference.trim())) throw new HttpsError("invalid-argument", "Enter the deal, invoice, or sale reference.");
 
   const offeringRef = db.doc(`organizations/${organizationId}/offerings/${offeringId}`);
   const fromLocationRef = fromLocationId ? db.doc(`organizations/${organizationId}/inventoryLocations/${fromLocationId}`) : null;
@@ -1526,15 +1548,29 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
   const toBalanceRef = toLocationId ? db.doc(`organizations/${organizationId}/inventoryBalances/${offeringId}_${toLocationId}`) : null;
   const movementRef = db.collection(`organizations/${organizationId}/inventoryMovements`).doc();
   const referenceNumber = `MOV-${Date.now().toString(36).toUpperCase()}-${movementRef.id.slice(0, 5).toUpperCase()}`;
+  const offeringBeforeTransaction = await offeringRef.get();
+  if (!offeringBeforeTransaction.exists) throw new HttpsError("not-found", "Inventory item was not found.");
+  const trackingMode = offeringBeforeTransaction.data()?.trackingMode === "serial" ? "serial" : offeringBeforeTransaction.data()?.trackingMode === "batch" ? "batch" : "none";
+  const batchNumber = typeof request.data?.batchNumber === "string" ? request.data.batchNumber.trim() : "";
+  const serialNumbers = Array.isArray(request.data?.serialNumbers) ? Array.from(new Set(request.data.serialNumbers.filter((value: unknown): value is string => typeof value === "string" && Boolean(value.trim())).map((value: string) => value.trim()))) : [];
+  if (trackingMode === "batch" && !batchNumber) throw new HttpsError("invalid-argument", "A batch number is required for this item.");
+  if (trackingMode === "serial" && (!Number.isInteger(quantity) || serialNumbers.length !== quantity)) throw new HttpsError("invalid-argument", "Enter one unique serial number for every unit.");
+  const traceId = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 32);
+  const fromLotRef = trackingMode === "batch" && fromLocationId ? db.doc(`organizations/${organizationId}/inventoryLots/${traceId(`${offeringId}|${batchNumber}|${fromLocationId}`)}`) : null;
+  const toLotRef = trackingMode === "batch" && toLocationId ? db.doc(`organizations/${organizationId}/inventoryLots/${traceId(`${offeringId}|${batchNumber}|${toLocationId}`)}`) : null;
+  const serialRefs = trackingMode === "serial" ? serialNumbers.map((serialNumber) => db.doc(`organizations/${organizationId}/inventorySerials/${traceId(`${offeringId}|${serialNumber}`)}`)) : [];
 
   await db.runTransaction(async (transaction) => {
-    const [offeringSnapshot, fromLocationSnapshot, toLocationSnapshot, fromBalanceSnapshot, toBalanceSnapshot] = await Promise.all([
+    const [offeringSnapshot, fromLocationSnapshot, toLocationSnapshot, fromBalanceSnapshot, toBalanceSnapshot, fromLotSnapshot, toLotSnapshot] = await Promise.all([
       transaction.get(offeringRef),
       fromLocationRef ? transaction.get(fromLocationRef) : null,
       toLocationRef ? transaction.get(toLocationRef) : null,
       fromBalanceRef ? transaction.get(fromBalanceRef) : null,
       toBalanceRef ? transaction.get(toBalanceRef) : null,
+      fromLotRef ? transaction.get(fromLotRef) : null,
+      toLotRef ? transaction.get(toLotRef) : null,
     ]);
+    const serialSnapshots = await Promise.all(serialRefs.map((ref) => transaction.get(ref)));
     if (!offeringSnapshot.exists) throw new HttpsError("not-found", "Inventory item was not found.");
     const offering = offeringSnapshot.data() ?? {};
     if (offering.isDeleted === true || offering.branchId !== branchId || !offering.brandId) throw new HttpsError("failed-precondition", "The item must be active, assigned to this branch, and linked to a brand.");
@@ -1542,7 +1578,8 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
     if (toLocationRef && (!toLocationSnapshot?.exists || toLocationSnapshot.data()?.branchId !== branchId)) throw new HttpsError("failed-precondition", "Destination location was not found in this branch.");
 
     const fromQuantity = Number(fromBalanceSnapshot?.data()?.quantityOnHand ?? 0);
-    if (needsFrom && fromQuantity < quantity) throw new HttpsError("failed-precondition", `Only ${fromQuantity} units are available at the source location.`);
+    const fromReserved = Number(fromBalanceSnapshot?.data()?.quantityReserved ?? 0);
+    if (needsFrom && fromQuantity - fromReserved < quantity) throw new HttpsError("failed-precondition", `Only ${fromQuantity - fromReserved} unreserved units are available at the source location.`);
     const commonBalance = {
       organizationId,
       branchId,
@@ -1559,13 +1596,34 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
       locationId: fromLocationId,
       locationName: fromLocationSnapshot.data()?.name ?? "",
       quantityOnHand: fromQuantity - quantity,
+      quantityReserved: fromReserved,
     }, { merge: true });
     if (toBalanceRef && toLocationSnapshot) transaction.set(toBalanceRef, {
       ...commonBalance,
       locationId: toLocationId,
       locationName: toLocationSnapshot.data()?.name ?? "",
       quantityOnHand: Number(toBalanceSnapshot?.data()?.quantityOnHand ?? 0) + quantity,
+      quantityReserved: Number(toBalanceSnapshot?.data()?.quantityReserved ?? 0),
     }, { merge: true });
+
+    if (trackingMode === "batch") {
+      const fromLotQuantity = Number(fromLotSnapshot?.data()?.quantityOnHand ?? 0);
+      const fromLotReserved = Number(fromLotSnapshot?.data()?.quantityReserved ?? 0);
+      if (needsFrom && fromLotQuantity - fromLotReserved < quantity) throw new HttpsError("failed-precondition", `Batch ${batchNumber} has only ${fromLotQuantity - fromLotReserved} unreserved units available.`);
+      const lotCommon = { organizationId, branchId, brandId: offering.brandId, offeringId, offeringName: offering.name ?? "Inventory item", batchNumber, expiryDate: request.data?.expiryDate ? new Date(String(request.data.expiryDate)) : null, updatedAt: FieldValue.serverTimestamp() };
+      if (fromLotRef && fromLocationSnapshot) transaction.set(fromLotRef, { ...lotCommon, locationId: fromLocationId, locationName: fromLocationSnapshot.data()?.name ?? "", quantityOnHand: fromLotQuantity - quantity, quantityReserved: fromLotReserved }, { merge: true });
+      if (toLotRef && toLocationSnapshot) transaction.set(toLotRef, { ...lotCommon, locationId: toLocationId, locationName: toLocationSnapshot.data()?.name ?? "", quantityOnHand: Number(toLotSnapshot?.data()?.quantityOnHand ?? 0) + quantity, quantityReserved: Number(toLotSnapshot?.data()?.quantityReserved ?? 0) }, { merge: true });
+    }
+    if (trackingMode === "serial") {
+      serialSnapshots.forEach((snapshot, index) => {
+        const serialNumber = serialNumbers[index];
+        if (needsFrom && (!snapshot.exists || snapshot.data()?.locationId !== fromLocationId || snapshot.data()?.status !== "available")) throw new HttpsError("failed-precondition", `Serial ${serialNumber} is not available at the source location.`);
+        if (!needsFrom && snapshot.exists && movementType !== "returnIn") throw new HttpsError("already-exists", `Serial ${serialNumber} already exists.`);
+        const targetLocationId = needsTo ? toLocationId : fromLocationId;
+        const targetLocationName = needsTo ? toLocationSnapshot?.data()?.name ?? "" : fromLocationSnapshot?.data()?.name ?? "";
+        transaction.set(serialRefs[index], { organizationId, branchId, brandId: offering.brandId, offeringId, offeringName: offering.name ?? "Inventory item", serialNumber, locationId: targetLocationId, locationName: targetLocationName, status: needsTo ? "available" : "issued", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      });
+    }
 
     const totalDelta = needsTo && !needsFrom ? quantity : needsFrom && !needsTo ? -quantity : 0;
     transaction.update(offeringRef, {
@@ -1582,6 +1640,7 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
       offeringName: offering.name ?? offering.referenceNumber ?? "Inventory item",
       sku: offering.sku ?? "",
       movementType,
+      movementPurpose,
       quantity,
       fromLocationId,
       fromLocationName: fromLocationSnapshot?.data()?.name ?? "",
@@ -1589,6 +1648,9 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
       toLocationName: toLocationSnapshot?.data()?.name ?? "",
       externalReference: typeof request.data?.externalReference === "string" ? request.data.externalReference.trim() : "",
       notes: typeof request.data?.notes === "string" ? request.data.notes.trim() : "",
+      batchNumber,
+      expiryDate: request.data?.expiryDate ? new Date(String(request.data.expiryDate)) : null,
+      serialNumbers,
       occurredAt: typeof request.data?.occurredAt === "string" && request.data.occurredAt ? new Date(request.data.occurredAt) : new Date(),
       referenceNumber,
       createdAt: FieldValue.serverTimestamp(),
@@ -1600,6 +1662,225 @@ export const recordInventoryMovement = onCall(callableOptions, async (request) =
   });
 
   return { movementId: movementRef.id, referenceNumber };
+});
+
+function inventoryReference(prefix: string, id: string) {
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}-${id.slice(0, 5).toUpperCase()}`;
+}
+
+function inventoryTraceId(value: string) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 32);
+}
+
+export const createInventoryPurchaseOrder = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const branchId = requireString(request.data?.branchId, "branchId");
+  const supplierId = requireString(request.data?.supplierId, "supplierId");
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "inventory.procure") || !canActorAccessBranch(actor, branchId)) throw new HttpsError("permission-denied", "You cannot create purchase orders for this branch.");
+  const inputLines: unknown[] = Array.isArray(request.data?.lines) ? request.data.lines : [];
+  if (!inputLines.length || inputLines.length > 50) throw new HttpsError("invalid-argument", "A purchase order requires 1 to 50 lines.");
+  const normalizedLines = inputLines.map((line: unknown) => {
+    const record = typeof line === "object" && line ? line as Record<string, unknown> : {};
+    return { offeringId: requireString(record.offeringId, "offeringId"), quantity: requireNumber(record.quantity, "quantity"), unitCost: requireNumber(record.unitCost, "unitCost") };
+  });
+  if (normalizedLines.some((line) => line.quantity <= 0 || line.unitCost < 0)) throw new HttpsError("invalid-argument", "Purchase quantities must be positive and costs cannot be negative.");
+  const [supplierSnapshot, ...offeringSnapshots] = await db.getAll(
+    db.doc(`organizations/${organizationId}/inventorySuppliers/${supplierId}`),
+    ...normalizedLines.map((line) => db.doc(`organizations/${organizationId}/offerings/${line.offeringId}`)),
+  );
+  if (!supplierSnapshot.exists || supplierSnapshot.data()?.branchId !== branchId || supplierSnapshot.data()?.status !== "active") throw new HttpsError("failed-precondition", "Select an active supplier in this branch.");
+  const lines = normalizedLines.map((line, index) => {
+    const offering = offeringSnapshots[index].data();
+    if (!offeringSnapshots[index].exists || offering?.branchId !== branchId || !offering?.brandId) throw new HttpsError("failed-precondition", "Every purchase line must reference a branded item in this branch.");
+    return { ...line, offeringName: offering.name ?? "Inventory item", brandId: offering.brandId, brandName: offering.brandName ?? "", sku: offering.sku ?? "", receivedQuantity: 0 };
+  });
+  const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitCost, 0);
+  const taxAmount = Math.max(0, Number(request.data?.taxAmount ?? 0));
+  const ref = db.collection(`organizations/${organizationId}/inventoryPurchaseOrders`).doc();
+  const referenceNumber = inventoryReference("PO", ref.id);
+  await ref.set({
+    organizationId, branchId, referenceNumber, supplierId, supplierName: supplierSnapshot.data()?.name ?? "Supplier", lines, subtotal, taxAmount, totalAmount: subtotal + taxAmount,
+    expectedAt: request.data?.expectedAt ? new Date(String(request.data.expectedAt)) : null, approvalStatus: "pendingApproval", receivingStatus: "notReceived", notes: typeof request.data?.notes === "string" ? request.data.notes.trim() : "",
+    status: "active", createdAt: FieldValue.serverTimestamp(), createdBy: actor.id, createdByEmail: actor.email, createdByName: actor.displayName, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id, isDeleted: false,
+  });
+  return { id: ref.id, referenceNumber };
+});
+
+export const decideInventoryApproval = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const entityType = requireString(request.data?.entityType, "entityType");
+  const entityId = requireString(request.data?.entityId, "entityId");
+  const decision = requireString(request.data?.decision, "decision");
+  if (!['approved', 'rejected'].includes(decision) || !['purchaseOrder', 'stockCount'].includes(entityType)) throw new HttpsError("invalid-argument", "Unsupported approval decision.");
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "inventory.approve")) throw new HttpsError("permission-denied", "You do not have inventory approval permission.");
+  const collectionName = entityType === "purchaseOrder" ? "inventoryPurchaseOrders" : "inventoryStockCounts";
+  const ref = db.doc(`organizations/${organizationId}/${collectionName}/${entityId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.data();
+    if (!snapshot.exists || !canActorAccessBranch(actor, data?.branchId)) throw new HttpsError("not-found", "Approval record was not found.");
+    if (data?.approvalStatus !== "pendingApproval") throw new HttpsError("failed-precondition", "This record is not awaiting approval.");
+    if (data?.createdBy === actor.id) throw new HttpsError("failed-precondition", "The creator cannot approve their own record.");
+    transaction.update(ref, {
+      approvalStatus: decision,
+      approvedAt: decision === "approved" ? FieldValue.serverTimestamp() : null,
+      approvedBy: decision === "approved" ? actor.id : "",
+      rejectedAt: decision === "rejected" ? FieldValue.serverTimestamp() : null,
+      rejectedBy: decision === "rejected" ? actor.id : "",
+      rejectionReason: decision === "rejected" ? requireString(request.data?.reason, "reason") : "",
+      updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id,
+    });
+  });
+  return { ok: true };
+});
+
+export const receiveInventoryPurchaseOrderLine = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const purchaseOrderId = requireString(request.data?.purchaseOrderId, "purchaseOrderId");
+  const locationId = requireString(request.data?.locationId, "locationId");
+  const lineIndex = requireNumber(request.data?.lineIndex, "lineIndex");
+  const quantity = requireNumber(request.data?.quantity, "quantity");
+  if (!Number.isInteger(lineIndex) || !Number.isInteger(quantity) || quantity <= 0) throw new HttpsError("invalid-argument", "Line and quantity must be positive whole numbers.");
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "inventory.receive")) throw new HttpsError("permission-denied", "You cannot receive inventory.");
+  const poRef = db.doc(`organizations/${organizationId}/inventoryPurchaseOrders/${purchaseOrderId}`);
+  const poBefore = await poRef.get();
+  const poData = poBefore.data();
+  const line = Array.isArray(poData?.lines) ? poData.lines[lineIndex] as DocumentData | undefined : undefined;
+  if (!poBefore.exists || !line || poData?.approvalStatus !== "approved" || !canActorAccessBranch(actor, poData.branchId)) throw new HttpsError("failed-precondition", "Approved purchase order line was not found.");
+  const offeringId = requireString(line.offeringId, "offeringId");
+  const offeringRef = db.doc(`organizations/${organizationId}/offerings/${offeringId}`);
+  const locationRef = db.doc(`organizations/${organizationId}/inventoryLocations/${locationId}`);
+  const balanceRef = db.doc(`organizations/${organizationId}/inventoryBalances/${offeringId}_${locationId}`);
+  const movementRef = db.collection(`organizations/${organizationId}/inventoryMovements`).doc();
+  const offeringBefore = await offeringRef.get();
+  const trackingMode = offeringBefore.data()?.trackingMode === "serial" ? "serial" : offeringBefore.data()?.trackingMode === "batch" ? "batch" : "none";
+  const batchNumber = typeof request.data?.batchNumber === "string" ? request.data.batchNumber.trim() : "";
+  const serialNumbers = Array.isArray(request.data?.serialNumbers) ? Array.from(new Set(request.data.serialNumbers.filter((value: unknown): value is string => typeof value === "string" && Boolean(value.trim())).map((value: string) => value.trim()))) : [];
+  if (trackingMode === "batch" && !batchNumber) throw new HttpsError("invalid-argument", "Batch number is required.");
+  if (trackingMode === "serial" && serialNumbers.length !== quantity) throw new HttpsError("invalid-argument", "Enter one serial number for every received unit.");
+  const lotRef = trackingMode === "batch" ? db.doc(`organizations/${organizationId}/inventoryLots/${inventoryTraceId(`${offeringId}|${batchNumber}|${locationId}`)}`) : null;
+  const serialRefs = serialNumbers.map((serial) => db.doc(`organizations/${organizationId}/inventorySerials/${inventoryTraceId(`${offeringId}|${serial}`)}`));
+  await db.runTransaction(async (transaction) => {
+    const [poSnapshot, offeringSnapshot, locationSnapshot, balanceSnapshot, lotSnapshot] = await Promise.all([transaction.get(poRef), transaction.get(offeringRef), transaction.get(locationRef), transaction.get(balanceRef), lotRef ? transaction.get(lotRef) : null]);
+    const serialSnapshots = await Promise.all(serialRefs.map((ref) => transaction.get(ref)));
+    const currentPo = poSnapshot.data() ?? {};
+    const lines = Array.isArray(currentPo.lines) ? [...currentPo.lines] as DocumentData[] : [];
+    const currentLine = lines[lineIndex];
+    if (currentPo.approvalStatus !== "approved" || !currentLine) throw new HttpsError("failed-precondition", "Purchase order is no longer receivable.");
+    const outstanding = Number(currentLine.quantity ?? 0) - Number(currentLine.receivedQuantity ?? 0);
+    if (quantity > outstanding) throw new HttpsError("failed-precondition", `Only ${outstanding} units remain on this line.`);
+    const offering = offeringSnapshot.data() ?? {};
+    const location = locationSnapshot.data() ?? {};
+    if (!offeringSnapshot.exists || !locationSnapshot.exists || location.branchId !== currentPo.branchId) throw new HttpsError("failed-precondition", "Item or receiving location is invalid.");
+    if (serialSnapshots.some((snapshot) => snapshot.exists)) throw new HttpsError("already-exists", "One or more serial numbers already exist.");
+    const common = { organizationId, branchId: currentPo.branchId, brandId: offering.brandId, brandName: offering.brandName ?? "", offeringId, offeringName: offering.name ?? "Inventory item", sku: offering.sku ?? "", locationId, locationName: location.name ?? "", updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id };
+    transaction.set(balanceRef, { ...common, quantityOnHand: Number(balanceSnapshot.data()?.quantityOnHand ?? 0) + quantity, quantityReserved: Number(balanceSnapshot.data()?.quantityReserved ?? 0) }, { merge: true });
+    transaction.update(offeringRef, { stockQuantity: FieldValue.increment(quantity), updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id });
+    if (lotRef) transaction.set(lotRef, { ...common, batchNumber, expiryDate: request.data?.expiryDate ? new Date(String(request.data.expiryDate)) : null, quantityOnHand: Number(lotSnapshot?.data()?.quantityOnHand ?? 0) + quantity, quantityReserved: Number(lotSnapshot?.data()?.quantityReserved ?? 0) }, { merge: true });
+    serialRefs.forEach((ref, index) => transaction.set(ref, { ...common, serialNumber: serialNumbers[index], status: "available" }));
+    transaction.set(movementRef, { ...common, movementType: "receipt", quantity, batchNumber, serialNumbers, purchaseOrderId, referenceNumber: inventoryReference("MOV", movementRef.id), externalReference: currentPo.referenceNumber, occurredAt: new Date(), createdAt: FieldValue.serverTimestamp(), createdBy: actor.id, createdByEmail: actor.email, createdByName: actor.displayName, isDeleted: false });
+    currentLine.receivedQuantity = Number(currentLine.receivedQuantity ?? 0) + quantity;
+    lines[lineIndex] = currentLine;
+    const allReceived = lines.every((item) => Number(item.receivedQuantity ?? 0) >= Number(item.quantity ?? 0));
+    const anyReceived = lines.some((item) => Number(item.receivedQuantity ?? 0) > 0);
+    transaction.update(poRef, { lines, receivingStatus: allReceived ? "received" : anyReceived ? "partReceived" : "notReceived", updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id });
+  });
+  return { ok: true, movementId: movementRef.id };
+});
+
+export const createInventoryStockCount = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const branchId = requireString(request.data?.branchId, "branchId");
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "inventory.count") || !canActorAccessBranch(actor, branchId)) throw new HttpsError("permission-denied", "You cannot submit stock counts for this branch.");
+  const inputLines: unknown[] = Array.isArray(request.data?.lines) ? request.data.lines : [];
+  if (!inputLines.length || inputLines.length > 100) throw new HttpsError("invalid-argument", "A count requires 1 to 100 lines.");
+  const normalized = inputLines.map((line: unknown) => { const value = typeof line === "object" && line ? line as Record<string, unknown> : {}; return { offeringId: requireString(value.offeringId, "offeringId"), locationId: requireString(value.locationId, "locationId"), actualQuantity: requireNumber(value.actualQuantity, "actualQuantity"), reason: typeof value.reason === "string" ? value.reason.trim() : "" }; });
+  if (normalized.some((line) => line.actualQuantity < 0)) throw new HttpsError("invalid-argument", "Actual quantities cannot be negative.");
+  const snapshots = await db.getAll(...normalized.flatMap((line) => [db.doc(`organizations/${organizationId}/offerings/${line.offeringId}`), db.doc(`organizations/${organizationId}/inventoryLocations/${line.locationId}`), db.doc(`organizations/${organizationId}/inventoryBalances/${line.offeringId}_${line.locationId}`)]));
+  const lines = normalized.map((line, index) => {
+    const offering = snapshots[index * 3].data() ?? {}; const location = snapshots[index * 3 + 1].data() ?? {}; const balance = snapshots[index * 3 + 2].data() ?? {};
+    if (offering.branchId !== branchId || location.branchId !== branchId) throw new HttpsError("failed-precondition", "Every count line must belong to this branch.");
+    if (offering.trackingMode === "batch" || offering.trackingMode === "serial") throw new HttpsError("failed-precondition", `${offering.name ?? "This item"} is traceability-controlled. Reconcile it through batch or serial inventory movements.`);
+    const systemQuantity = Number(balance.quantityOnHand ?? 0);
+    return { ...line, offeringName: offering.name ?? "Inventory item", brandId: offering.brandId ?? "", locationName: location.name ?? "", systemQuantity, variance: line.actualQuantity - systemQuantity };
+  });
+  const ref = db.collection(`organizations/${organizationId}/inventoryStockCounts`).doc();
+  await ref.set({ organizationId, branchId, referenceNumber: inventoryReference("COUNT", ref.id), name: requireString(request.data?.name, "name"), lines, approvalStatus: "pendingApproval", countStatus: "submitted", countedAt: new Date(), notes: typeof request.data?.notes === "string" ? request.data.notes.trim() : "", status: "active", createdAt: FieldValue.serverTimestamp(), createdBy: actor.id, createdByEmail: actor.email, createdByName: actor.displayName, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id, isDeleted: false });
+  return { id: ref.id };
+});
+
+export const postInventoryStockCount = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId"); const countId = requireString(request.data?.countId, "countId");
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "inventory.approve")) throw new HttpsError("permission-denied", "You cannot post stock counts.");
+  const countRef = db.doc(`organizations/${organizationId}/inventoryStockCounts/${countId}`); const before = await countRef.get(); const data = before.data();
+  if (!before.exists || data?.approvalStatus !== "approved" || data?.countStatus !== "submitted" || !canActorAccessBranch(actor, data.branchId)) throw new HttpsError("failed-precondition", "This count is not ready to post.");
+  const lines = Array.isArray(data.lines) ? data.lines as DocumentData[] : [];
+  const balanceRefs = lines.map((line) => db.doc(`organizations/${organizationId}/inventoryBalances/${line.offeringId}_${line.locationId}`));
+  const offeringRefs = lines.map((line) => db.doc(`organizations/${organizationId}/offerings/${line.offeringId}`));
+  await db.runTransaction(async (transaction) => {
+    const countSnapshot = await transaction.get(countRef); const balanceSnapshots = await Promise.all(balanceRefs.map((ref) => transaction.get(ref)));
+    if (countSnapshot.data()?.countStatus !== "submitted") throw new HttpsError("failed-precondition", "Count was already posted.");
+    lines.forEach((line, index) => {
+      const current = Number(balanceSnapshots[index].data()?.quantityOnHand ?? 0); const variance = Number(line.actualQuantity) - current; const reserved = Number(balanceSnapshots[index].data()?.quantityReserved ?? 0);
+      if (Number(line.actualQuantity) < reserved) throw new HttpsError("failed-precondition", `${line.offeringName} actual stock is below its reserved quantity.`);
+      transaction.set(balanceRefs[index], { quantityOnHand: Number(line.actualQuantity), quantityReserved: reserved, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id }, { merge: true });
+      if (variance !== 0) {
+        transaction.update(offeringRefs[index], { stockQuantity: FieldValue.increment(variance), updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id });
+        const movementRef = db.collection(`organizations/${organizationId}/inventoryMovements`).doc(); transaction.set(movementRef, { organizationId, branchId: data.branchId, brandId: line.brandId, brandName: "", offeringId: line.offeringId, offeringName: line.offeringName, movementType: variance > 0 ? "adjustmentIn" : "adjustmentOut", quantity: Math.abs(variance), fromLocationId: variance < 0 ? line.locationId : "", fromLocationName: variance < 0 ? line.locationName : "", toLocationId: variance > 0 ? line.locationId : "", toLocationName: variance > 0 ? line.locationName : "", referenceNumber: inventoryReference("MOV", movementRef.id), externalReference: data.referenceNumber, notes: line.reason ?? "Stock count variance", occurredAt: new Date(), createdAt: FieldValue.serverTimestamp(), createdBy: actor.id, createdByName: actor.displayName, isDeleted: false });
+      }
+    });
+    transaction.update(countRef, { countStatus: "posted", postedAt: FieldValue.serverTimestamp(), postedBy: actor.id, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id });
+  });
+  return { ok: true };
+});
+
+export const createInventoryReservation = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId"); const branchId = requireString(request.data?.branchId, "branchId"); const offeringId = requireString(request.data?.offeringId, "offeringId"); const locationId = requireString(request.data?.locationId, "locationId"); const quantity = requireNumber(request.data?.quantity, "quantity");
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new HttpsError("invalid-argument", "Reservation quantity must be a positive whole number.");
+  const actor = await getActiveMember(request.auth.uid, organizationId); if (!hasActorPermission(actor, "inventory.reserve") || !canActorAccessBranch(actor, branchId)) throw new HttpsError("permission-denied", "You cannot reserve stock for this branch.");
+  const offeringRef = db.doc(`organizations/${organizationId}/offerings/${offeringId}`); const locationRef = db.doc(`organizations/${organizationId}/inventoryLocations/${locationId}`); const balanceRef = db.doc(`organizations/${organizationId}/inventoryBalances/${offeringId}_${locationId}`); const reservationRef = db.collection(`organizations/${organizationId}/inventoryReservations`).doc();
+  const offeringBefore = await offeringRef.get(); const trackingMode = offeringBefore.data()?.trackingMode === "serial" ? "serial" : offeringBefore.data()?.trackingMode === "batch" ? "batch" : "none"; const batchNumber = typeof request.data?.batchNumber === "string" ? request.data.batchNumber.trim() : ""; const serialNumbers = Array.isArray(request.data?.serialNumbers) ? Array.from(new Set(request.data.serialNumbers.filter((value: unknown): value is string => typeof value === "string" && Boolean(value.trim())).map((value: string) => value.trim()))) : [];
+  if (trackingMode === "batch" && !batchNumber) throw new HttpsError("invalid-argument", "Batch number is required for this reservation."); if (trackingMode === "serial" && serialNumbers.length !== quantity) throw new HttpsError("invalid-argument", "Enter one serial number for every reserved unit.");
+  const lotRef = trackingMode === "batch" ? db.doc(`organizations/${organizationId}/inventoryLots/${inventoryTraceId(`${offeringId}|${batchNumber}|${locationId}`)}`) : null; const serialRefs = serialNumbers.map((serial) => db.doc(`organizations/${organizationId}/inventorySerials/${inventoryTraceId(`${offeringId}|${serial}`)}`));
+  await db.runTransaction(async (transaction) => {
+    const [offeringSnapshot, locationSnapshot, balanceSnapshot, lotSnapshot] = await Promise.all([transaction.get(offeringRef), transaction.get(locationRef), transaction.get(balanceRef), lotRef ? transaction.get(lotRef) : null]); const serialSnapshots = await Promise.all(serialRefs.map((ref) => transaction.get(ref))); const offering = offeringSnapshot.data() ?? {}; const location = locationSnapshot.data() ?? {}; const onHand = Number(balanceSnapshot.data()?.quantityOnHand ?? 0); const reserved = Number(balanceSnapshot.data()?.quantityReserved ?? 0);
+    if (offering.branchId !== branchId || location.branchId !== branchId || onHand - reserved < quantity) throw new HttpsError("failed-precondition", `Only ${Math.max(0, onHand - reserved)} units are available to reserve.`);
+    if (lotRef) { const lotOnHand = Number(lotSnapshot?.data()?.quantityOnHand ?? 0); const lotReserved = Number(lotSnapshot?.data()?.quantityReserved ?? 0); if (lotOnHand - lotReserved < quantity) throw new HttpsError("failed-precondition", `Batch ${batchNumber} does not have enough available stock.`); transaction.set(lotRef, { quantityReserved: lotReserved + quantity, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); }
+    serialSnapshots.forEach((snapshot, index) => { if (!snapshot.exists || snapshot.data()?.locationId !== locationId || snapshot.data()?.status !== "available") throw new HttpsError("failed-precondition", `Serial ${serialNumbers[index]} is not available.`); transaction.update(serialRefs[index], { status: "reserved", reservationId: reservationRef.id, updatedAt: FieldValue.serverTimestamp() }); });
+    transaction.set(balanceRef, { quantityReserved: reserved + quantity, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id }, { merge: true });
+    transaction.set(reservationRef, { organizationId, branchId, referenceNumber: inventoryReference("RES", reservationRef.id), brandId: offering.brandId, brandName: offering.brandName ?? "", offeringId, offeringName: offering.name ?? "Inventory item", locationId, locationName: location.name ?? "", quantity, batchNumber, serialNumbers, relatedEntityType: request.data?.relatedEntityType ?? "other", relatedEntityId: typeof request.data?.relatedEntityId === "string" ? request.data.relatedEntityId.trim() : "", relatedEntityName: typeof request.data?.relatedEntityName === "string" ? request.data.relatedEntityName.trim() : "", expiresAt: request.data?.expiresAt ? new Date(String(request.data.expiresAt)) : null, notes: typeof request.data?.notes === "string" ? request.data.notes.trim() : "", reservationStatus: "active", status: "active", createdAt: FieldValue.serverTimestamp(), createdBy: actor.id, createdByName: actor.displayName, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id, isDeleted: false });
+  });
+  return { id: reservationRef.id };
+});
+
+export const closeInventoryReservation = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId"); const reservationId = requireString(request.data?.reservationId, "reservationId"); const action = requireString(request.data?.action, "action");
+  if (!['release', 'fulfill'].includes(action)) throw new HttpsError("invalid-argument", "Action must be release or fulfill.");
+  const actor = await getActiveMember(request.auth.uid, organizationId); if (!hasActorPermission(actor, "inventory.reserve")) throw new HttpsError("permission-denied", "You cannot close reservations.");
+  const reservationRef = db.doc(`organizations/${organizationId}/inventoryReservations/${reservationId}`); const before = await reservationRef.get(); const data = before.data(); if (!before.exists || data?.reservationStatus !== "active" || !canActorAccessBranch(actor, data.branchId)) throw new HttpsError("failed-precondition", "Active reservation was not found.");
+  const balanceRef = db.doc(`organizations/${organizationId}/inventoryBalances/${data.offeringId}_${data.locationId}`); const offeringRef = db.doc(`organizations/${organizationId}/offerings/${data.offeringId}`); const movementRef = db.collection(`organizations/${organizationId}/inventoryMovements`).doc();
+  const lotRef = data.batchNumber ? db.doc(`organizations/${organizationId}/inventoryLots/${inventoryTraceId(`${data.offeringId}|${data.batchNumber}|${data.locationId}`)}`) : null; const reservationSerialNumbers = Array.isArray(data.serialNumbers) ? data.serialNumbers as string[] : []; const serialRefs = reservationSerialNumbers.map((serial) => db.doc(`organizations/${organizationId}/inventorySerials/${inventoryTraceId(`${data.offeringId}|${serial}`)}`));
+  await db.runTransaction(async (transaction) => {
+    const [reservationSnapshot, balanceSnapshot, lotSnapshot] = await Promise.all([transaction.get(reservationRef), transaction.get(balanceRef), lotRef ? transaction.get(lotRef) : null]); const serialSnapshots = await Promise.all(serialRefs.map((ref) => transaction.get(ref))); const reservation = reservationSnapshot.data() ?? {}; if (reservation.reservationStatus !== "active") throw new HttpsError("failed-precondition", "Reservation was already closed."); const quantity = Number(reservation.quantity); const onHand = Number(balanceSnapshot.data()?.quantityOnHand ?? 0); const reserved = Number(balanceSnapshot.data()?.quantityReserved ?? 0); if (reserved < quantity || (action === "fulfill" && onHand < quantity)) throw new HttpsError("failed-precondition", "Reservation balance is inconsistent.");
+    if (lotRef) { const lotReserved = Number(lotSnapshot?.data()?.quantityReserved ?? 0); const lotOnHand = Number(lotSnapshot?.data()?.quantityOnHand ?? 0); if (lotReserved < quantity) throw new HttpsError("failed-precondition", "Reserved batch balance is inconsistent."); transaction.set(lotRef, { quantityReserved: lotReserved - quantity, quantityOnHand: action === "fulfill" ? lotOnHand - quantity : lotOnHand, updatedAt: FieldValue.serverTimestamp() }, { merge: true }); }
+    serialSnapshots.forEach((snapshot, index) => { if (!snapshot.exists || snapshot.data()?.reservationId !== reservationId) throw new HttpsError("failed-precondition", `Serial reservation is inconsistent for ${reservationSerialNumbers[index]}.`); transaction.update(serialRefs[index], { status: action === "fulfill" ? "issued" : "available", reservationId: "", updatedAt: FieldValue.serverTimestamp() }); });
+    transaction.set(balanceRef, { quantityReserved: reserved - quantity, quantityOnHand: action === "fulfill" ? onHand - quantity : onHand, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id }, { merge: true });
+    if (action === "fulfill") { transaction.update(offeringRef, { stockQuantity: FieldValue.increment(-quantity), updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id }); transaction.set(movementRef, { organizationId, branchId: reservation.branchId, brandId: reservation.brandId, brandName: reservation.brandName, offeringId: reservation.offeringId, offeringName: reservation.offeringName, movementType: "issue", movementPurpose: reservation.relatedEntityType === "deal" ? "sale" : reservation.relatedEntityType === "project" || reservation.relatedEntityType === "workOrder" ? "project" : "other", quantity, batchNumber: reservation.batchNumber ?? "", serialNumbers: reservation.serialNumbers ?? [], fromLocationId: reservation.locationId, fromLocationName: reservation.locationName, reservationId, referenceNumber: inventoryReference("MOV", movementRef.id), externalReference: reservation.relatedEntityId || reservation.referenceNumber, occurredAt: new Date(), createdAt: FieldValue.serverTimestamp(), createdBy: actor.id, createdByName: actor.displayName, isDeleted: false }); }
+    transaction.update(reservationRef, { reservationStatus: action === "fulfill" ? "fulfilled" : "released", fulfilledAt: action === "fulfill" ? FieldValue.serverTimestamp() : null, releasedAt: action === "release" ? FieldValue.serverTimestamp() : null, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.id });
+  });
+  return { ok: true };
 });
 
 export const syncTaskGoogleCalendar = onDocumentWritten(

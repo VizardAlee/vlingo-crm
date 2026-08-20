@@ -1,5 +1,5 @@
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
@@ -136,6 +136,33 @@ describe("Beacon Firestore rules", () => {
     await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/item-revo_warehouse")));
   });
 
+  it("scopes brand representatives to multiple assigned branches", async () => {
+    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"], partnerBranchIds: ["head-office", "abuja"] });
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      for (const branchId of ["head-office", "abuja", "kano"]) {
+        await setDoc(doc(adminDb, `organizations/org-a/inventoryBalances/sorotec-${branchId}`), { brandId: "sorotec", branchId, offeringId: "item-sorotec", organizationId: "org-a", quantityOnHand: 5 });
+      }
+    });
+    const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
+    await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/sorotec-head-office")));
+    await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/sorotec-abuja")));
+    await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/sorotec-kano")));
+    await assertSucceeds(getDocs(query(collection(partnerDb, "organizations/org-a/inventoryBalances"), where("brandId", "==", "sorotec"), where("branchId", "==", "abuja"))));
+    await assertFails(getDocs(query(collection(partnerDb, "organizations/org-a/inventoryBalances"), where("brandId", "==", "sorotec"))));
+  });
+
+  it("requires inventory products to reference an active brand", async () => {
+    await seedMember("inventory-1", "org-a", ["offerings.create"], "inventoryManager");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "organizations/org-a/inventoryBrands/sorotec"), { brandId: "sorotec", branchId: "head-office", organizationId: "org-a", status: "active" });
+    });
+    const inventoryDb = testEnv.authenticatedContext("inventory-1").firestore();
+    const base = { branchId: "head-office", createdBy: "inventory-1", isDeleted: false, name: "Inverter", organizationId: "org-a", status: "active", type: "solarEquipment", updatedBy: "inventory-1" };
+    await assertFails(setDoc(doc(inventoryDb, "organizations/org-a/offerings/unbranded"), base));
+    await assertSucceeds(setDoc(doc(inventoryDb, "organizations/org-a/offerings/branded"), { ...base, brandId: "sorotec", brandName: "Sorotec" }));
+  });
+
   it("allows scoped partner comments but blocks direct stock writes", async () => {
     await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
     const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
@@ -161,6 +188,31 @@ describe("Beacon Firestore rules", () => {
       organizationId: "org-a",
       quantity: 10,
     }));
+  });
+
+  it("keeps procurement, counts, and reservations internal while allowing partner trace reports", async () => {
+    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
+    await seedMember("inventory-1", "org-a", ["inventory.read", "inventory.procure", "inventory.count", "inventory.reserve"], "inventoryManager");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      await setDoc(doc(adminDb, "organizations/org-a/inventoryPurchaseOrders/po-1"), { approvalStatus: "approved", branchId: "head-office", brandId: "sorotec", isDeleted: false, organizationId: "org-a" });
+      await setDoc(doc(adminDb, "organizations/org-a/inventoryStockCounts/count-1"), { approvalStatus: "pendingApproval", branchId: "head-office", brandId: "sorotec", isDeleted: false, organizationId: "org-a" });
+      await setDoc(doc(adminDb, "organizations/org-a/inventoryReservations/res-1"), { branchId: "head-office", brandId: "sorotec", isDeleted: false, organizationId: "org-a", reservationStatus: "active" });
+      await setDoc(doc(adminDb, "organizations/org-a/inventoryLots/lot-1"), { batchNumber: "BATCH-1", branchId: "head-office", brandId: "sorotec", organizationId: "org-a", quantityOnHand: 5 });
+      await setDoc(doc(adminDb, "organizations/org-a/inventorySerials/serial-1"), { branchId: "head-office", brandId: "sorotec", organizationId: "org-a", serialNumber: "SN-1", status: "available" });
+    });
+    const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
+    await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryPurchaseOrders/po-1")));
+    await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryStockCounts/count-1")));
+    await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryReservations/res-1")));
+    await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventoryLots/lot-1")));
+    await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventorySerials/serial-1")));
+
+    const inventoryDb = testEnv.authenticatedContext("inventory-1").firestore();
+    await assertSucceeds(getDoc(doc(inventoryDb, "organizations/org-a/inventoryPurchaseOrders/po-1")));
+    await assertSucceeds(getDoc(doc(inventoryDb, "organizations/org-a/inventoryStockCounts/count-1")));
+    await assertSucceeds(getDoc(doc(inventoryDb, "organizations/org-a/inventoryReservations/res-1")));
+    await assertFails(setDoc(doc(inventoryDb, "organizations/org-a/inventoryReservations/res-direct"), { branchId: "head-office", brandId: "sorotec", isDeleted: false, organizationId: "org-a" }));
   });
 
   it("allows a sales executive to read assigned leads", async () => {

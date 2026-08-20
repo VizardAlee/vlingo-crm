@@ -15,6 +15,7 @@ export interface InviteUserInput {
   organizationId: string;
   phoneNumber?: string;
   partnerBrandIds?: string[];
+  partnerBranchIds?: string[];
   role?: RoleName;
   roles: RoleName[];
 }
@@ -24,6 +25,7 @@ export interface UpdateMemberInput {
   branchAccess?: BranchAccess;
   organizationId: string;
   partnerBrandIds?: string[];
+  partnerBranchIds?: string[];
   role?: RoleName;
   roles: RoleName[];
   uid: string;

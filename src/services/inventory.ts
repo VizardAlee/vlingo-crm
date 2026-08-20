@@ -6,19 +6,23 @@ import { db, functions } from "@/lib/firebase/client";
 import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
 import { createOrgRecord, type WriteContext } from "@/services/repository";
 import { orgCollectionPath } from "@/services/firestore-paths";
-import type { InventoryBalance, InventoryBrand, InventoryComment, InventoryLocation, InventoryMovement, InventoryMovementType, Member, Offering } from "@/types/crm";
+import type { InventoryBalance, InventoryBrand, InventoryComment, InventoryLocation, InventoryLot, InventoryMovement, InventoryMovementPurpose, InventoryMovementType, InventoryPurchaseOrder, InventoryReservation, InventorySerial, InventoryStockCount, InventorySupplier, Member, Offering } from "@/types/crm";
 
 export interface RecordInventoryMovementInput {
   organizationId: string;
   branchId: string;
   offeringId: string;
   movementType: InventoryMovementType;
+  movementPurpose?: InventoryMovementPurpose;
   quantity: number;
   fromLocationId?: string;
   toLocationId?: string;
   externalReference?: string;
   notes?: string;
   occurredAt?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  serialNumbers?: string[];
 }
 
 function assertDb() {
@@ -34,17 +38,24 @@ function partnerBrandIds(member: Member | null) {
   return member?.role === "brandPartner" || member?.roles?.includes("brandPartner") ? member.partnerBrandIds ?? [] : null;
 }
 
-async function scopedCollection<T extends { id: string }>(organizationId: string, collectionName: "inventoryBalances" | "inventoryBrands" | "inventoryComments" | "inventoryLocations" | "inventoryMovements" | "offerings", member: Member | null, constraints: QueryConstraint[] = []) {
+function partnerBranchIds(member: Member | null) {
+  if (member?.role !== "brandPartner" && !member?.roles?.includes("brandPartner")) return null;
+  return member.partnerBranchIds?.length ? member.partnerBranchIds : member.branchId ? [member.branchId] : [];
+}
+
+async function scopedCollection<T extends { id: string }>(organizationId: string, collectionName: "inventoryBalances" | "inventoryBrands" | "inventoryComments" | "inventoryLocations" | "inventoryLots" | "inventoryMovements" | "inventoryPurchaseOrders" | "inventoryReservations" | "inventorySerials" | "inventoryStockCounts" | "inventorySuppliers" | "offerings", member: Member | null, constraints: QueryConstraint[] = []) {
   const firestore = assertDb();
   const brandIds = partnerBrandIds(member);
+  const branchIds = partnerBranchIds(member);
   if (brandIds && !brandIds.length) return [];
+  if (branchIds && !branchIds.length) return [];
 
   try {
     const branchConstraints = !brandIds && member && member.branchAccess !== "all" && member.role !== "superAdmin" && !member.roles?.includes("superAdmin")
       ? [where("branchId", "==", member.branchId)]
       : [];
-    const snapshots = brandIds
-      ? await Promise.all(brandIds.map((brandId) => getDocs(query(collection(firestore, orgCollectionPath(organizationId, collectionName)), where("brandId", "==", brandId), ...constraints))))
+    const snapshots = brandIds && branchIds
+      ? await Promise.all(brandIds.flatMap((brandId) => branchIds.map((branchId) => getDocs(query(collection(firestore, orgCollectionPath(organizationId, collectionName)), where("brandId", "==", brandId), where("branchId", "==", branchId), ...constraints)))))
       : [await getDocs(query(collection(firestore, orgCollectionPath(organizationId, collectionName)), ...branchConstraints, ...constraints))];
     const records = snapshots.flatMap((snapshot) => snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as T));
     return Array.from(new Map(records.map((item) => [item.id, item])).values());
@@ -60,7 +71,9 @@ export async function listInventoryBrands(organizationId: string, member: Member
     const snapshots = await Promise.all(scoped.map((id) => getDocs(query(collection(firestore, orgCollectionPath(organizationId, "inventoryBrands")), where("brandId", "==", id)))));
     return snapshots.flatMap((snapshot) => snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as InventoryBrand));
   }
-  return scopedCollection<InventoryBrand>(organizationId, "inventoryBrands", member).then((items) => items.sort((a, b) => a.name.localeCompare(b.name)));
+  const firestore = assertDb();
+  const snapshot = await getDocs(collection(firestore, orgCollectionPath(organizationId, "inventoryBrands")));
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as InventoryBrand).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function listInventoryLocations(organizationId: string, member: Member | null) {
@@ -98,6 +111,67 @@ export function createInventoryBrand(data: Pick<InventoryBrand, "name" | "code" 
 
 export function createInventoryLocation(data: Pick<InventoryLocation, "name" | "code" | "address" | "locationType" | "status">, context: WriteContext) {
   return createOrgRecord("inventoryLocations", data, context, "LOC");
+}
+
+export function createInventorySupplier(data: Pick<InventorySupplier, "name" | "code" | "contactName" | "email" | "phoneNumber" | "address" | "taxId" | "paymentTerms" | "brandIds" | "status">, context: WriteContext) {
+  return createOrgRecord("inventorySuppliers", data, context, "SUP");
+}
+
+export function listInventorySuppliers(organizationId: string, member: Member | null) {
+  return scopedCollection<InventorySupplier>(organizationId, "inventorySuppliers", member).then((records) => records.sort((a, b) => a.name.localeCompare(b.name)));
+}
+
+export function listInventoryPurchaseOrders(organizationId: string, member: Member | null) {
+  return scopedCollection<InventoryPurchaseOrder>(organizationId, "inventoryPurchaseOrders", member, [where("isDeleted", "==", false)]);
+}
+
+export function listInventoryLots(organizationId: string, member: Member | null) {
+  return scopedCollection<InventoryLot>(organizationId, "inventoryLots", member);
+}
+
+export function listInventorySerials(organizationId: string, member: Member | null) {
+  return scopedCollection<InventorySerial>(organizationId, "inventorySerials", member);
+}
+
+export function listInventoryStockCounts(organizationId: string, member: Member | null) {
+  return scopedCollection<InventoryStockCount>(organizationId, "inventoryStockCounts", member, [where("isDeleted", "==", false)]);
+}
+
+export function listInventoryReservations(organizationId: string, member: Member | null) {
+  return scopedCollection<InventoryReservation>(organizationId, "inventoryReservations", member, [where("isDeleted", "==", false)]);
+}
+
+async function inventoryCallable<TInput, TResult>(name: string, input: TInput) {
+  if (!functions) throw new Error("Firebase Functions are not configured.");
+  return (await httpsCallable<TInput, TResult>(functions, name)(input)).data;
+}
+
+export function createPurchaseOrder(input: { organizationId: string; branchId: string; supplierId: string; lines: Array<{ offeringId: string; quantity: number; unitCost: number }>; taxAmount?: number; expectedAt?: string; notes?: string }) {
+  return inventoryCallable<typeof input, { id: string; referenceNumber: string }>("createInventoryPurchaseOrder", input);
+}
+
+export function decideInventoryApproval(input: { organizationId: string; entityType: "purchaseOrder" | "stockCount"; entityId: string; decision: "approved" | "rejected"; reason?: string }) {
+  return inventoryCallable<typeof input, { ok: boolean }>("decideInventoryApproval", input);
+}
+
+export function receivePurchaseOrderLine(input: { organizationId: string; purchaseOrderId: string; lineIndex: number; locationId: string; quantity: number; batchNumber?: string; expiryDate?: string; serialNumbers?: string[] }) {
+  return inventoryCallable<typeof input, { ok: boolean; movementId: string }>("receiveInventoryPurchaseOrderLine", input);
+}
+
+export function createStockCount(input: { organizationId: string; branchId: string; name: string; notes?: string; lines: Array<{ offeringId: string; locationId: string; actualQuantity: number; reason?: string }> }) {
+  return inventoryCallable<typeof input, { id: string }>("createInventoryStockCount", input);
+}
+
+export function postStockCount(input: { organizationId: string; countId: string }) {
+  return inventoryCallable<typeof input, { ok: boolean }>("postInventoryStockCount", input);
+}
+
+export function createStockReservation(input: { organizationId: string; branchId: string; offeringId: string; locationId: string; quantity: number; batchNumber?: string; serialNumbers?: string[]; relatedEntityType?: "deal" | "project" | "workOrder" | "other"; relatedEntityId?: string; relatedEntityName?: string; expiresAt?: string; notes?: string }) {
+  return inventoryCallable<typeof input, { id: string }>("createInventoryReservation", input);
+}
+
+export function closeStockReservation(input: { organizationId: string; reservationId: string; action: "release" | "fulfill" }) {
+  return inventoryCallable<typeof input, { ok: boolean }>("closeInventoryReservation", input);
 }
 
 export async function addInventoryComment(input: { organizationId: string; branchId: string; brandId: string; message: string; reportPeriod?: string; userId: string; userEmail?: string; userName?: string }) {

@@ -10,6 +10,35 @@ Inventory is transaction-led. Products remain in the Products/Services catalog, 
 - Transfers reduce one location and increase another in one server transaction.
 - Direct client writes to balances and movements are denied by Firestore rules.
 - Negative location balances are rejected by the server.
+- Reservations reduce available stock without changing physical on-hand stock.
+- Purchase orders and stock-count variances require a second user with approval permission.
+- Batch- and serial-tracked items maintain trace records through receipt, transfer, reservation, and issue.
+
+## Enterprise workflows
+
+### Suppliers and purchase orders
+
+Create suppliers under Inventory > Procurement. Purchase orders support multiple catalog lines, tax, expected delivery dates, and partial receipts. New orders enter `pendingApproval`; their creator cannot approve them. After approval, each line can be received into a stock location. Receiving updates the purchase line, balance, product total, trace register, and movement ledger atomically.
+
+### Batch and serial traceability
+
+Set each catalog item's Traceability field to `none`, `batch`, or `serial`, and optionally record a barcode/GTIN. Batch movements require a batch number and may include an expiry date. Serial movements require exactly one unique serial number per unit. Camera scanning uses the browser Barcode Detector API when available; USB/Bluetooth scanners and manual entry work in all supported browsers.
+
+### Stock counts
+
+Counts snapshot the current system quantity when submitted. An approver reviews the captured variance; after approval, posting the count updates the location balances and creates immutable adjustment movements for non-zero variances. Counts cannot reduce physical stock below already-reserved quantities. Batch- and serial-controlled items are reconciled with traceable inventory movements so their lot or serial register cannot diverge from the balance ledger.
+
+### Reservations
+
+Reservations hold stock for a deal, project, work order, or other purpose. Available stock is `on hand - reserved`. Releasing a reservation restores availability without a stock movement. Fulfilling it reduces both on-hand and reserved quantities and creates an issue movement. Batch and serial reservations also lock their trace records.
+
+### Approval separation
+
+The creator of a purchase order or stock count cannot approve it. `inventoryManager` can procure, count, reserve, and operate stock but cannot approve. Operations managers, finance managers, managing directors, and super admins can approve according to their assigned permissions.
+
+### In-app guidance
+
+The Inventory page includes a permission-aware **Guide me** tour. Internal users are shown only the workflow tabs their role can access, while brand partners receive guidance for their scoped report, movement history, comments, and CSV export. The AI Guide covers balances, procurement and partial receiving, movements, stock counts, reservations, traceability, approvals, and partner invitations. Its recommendations use the signed-in member's permissions and branch scope.
 
 ## Initial setup
 
@@ -26,9 +55,10 @@ Inventory is transaction-led. Products remain in the Products/Services catalog, 
 1. Open Settings > Users and start an invitation.
 2. Select the `Brand partner` role. It is intentionally exclusive and cannot be combined with an internal role.
 3. Select one or more brands. The invitation is rejected if no active brand is selected.
-4. Generate and share the setup link.
+4. Select one or more representative branches. The same representative can cover multiple brands and multiple branches.
+5. Generate and share the setup link. Existing users can also be converted to a brand representative by editing their role, brand access, and branch access under Settings > Users.
 
-The partner sees only the Inventory area. Reports, item balances, movements, exported CSV data, and comments are restricted to the member's `partnerBrandIds`. This restriction is enforced in both application queries and Firestore rules.
+The partner sees only the Inventory area. Reports, item balances, movements, recorded product-sale issues, exported CSV data, and comments are restricted to the intersection of the member's `partnerBrandIds` and `partnerBranchIds`. This restriction is enforced in both application queries and Firestore rules. A sale appears on the representative dashboard when an inventory issue is recorded with purpose `sale`, or when a deal-linked reservation is fulfilled.
 
 ## Collections
 
@@ -37,6 +67,12 @@ The partner sees only the Inventory area. Reports, item balances, movements, exp
 - `inventoryBalances`: calculated item/location quantities; server-written only.
 - `inventoryMovements`: immutable audit ledger; server-written only.
 - `inventoryComments`: brand-scoped report discussion.
+- `inventorySuppliers`: supplier master data.
+- `inventoryPurchaseOrders`: multi-line procurement, approvals, and receipt progress.
+- `inventoryLots`: batch quantities and expiry dates by location.
+- `inventorySerials`: unique serial status and location register.
+- `inventoryStockCounts`: count snapshots, variances, approvals, and posting state.
+- `inventoryReservations`: committed stock and fulfillment state.
 - `offerings`: product catalog, extended with `brandId` and `brandName`.
 
 ## Deployment

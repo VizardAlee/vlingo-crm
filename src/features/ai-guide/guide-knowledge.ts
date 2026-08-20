@@ -9,6 +9,7 @@ interface GuideMemberContext {
   branchId?: unknown;
   displayName?: unknown;
   permissions?: unknown;
+  partnerBranchIds?: unknown;
   role?: unknown;
   roles?: unknown;
 }
@@ -21,6 +22,7 @@ const guideAreaPermissions = [
   ["Properties", ["properties.read"]],
   ["Units", ["units.read"]],
   ["Products/Services", ["offerings.read"]],
+  ["Inventory", ["inventory.read"]],
   ["Rentals", ["rentals.read"]],
   ["Development", ["development.read"]],
   ["Marketing", ["marketing.read"]],
@@ -53,6 +55,7 @@ Current signed-in user:
 - Roles: ${roles.length ? roles.join(", ") : "No role recorded"}
 - Branch: ${typeof member.branchId === "string" && member.branchId ? member.branchId : "Not provided"}
 - Branch access: ${isSuperAdmin || member.branchAccess === "all" ? "all branches" : "assigned branch only"}
+- Brand representative branches: ${Array.isArray(member.partnerBranchIds) && member.partnerBranchIds.length ? member.partnerBranchIds.filter((value): value is string => typeof value === "string").join(", ") : "Not applicable or home branch only"}
 - Accessible areas inferred from current permissions: ${accessibleAreas.length ? accessibleAreas.join(", ") : "AI Guide only"}
 - Explicit permissions: ${isSuperAdmin ? "Unrestricted super admin access" : permissions.length ? permissions.join(", ") : "None recorded"}
 
@@ -102,6 +105,84 @@ export const guideTopics: GuideTopic[] = [
       "Set the owner, stage, expected close date, amount, probability, proposal status, and fulfillment status.",
       "Save the deal, then update the stage as the sale, rental, installation, material order, or service progresses.",
       "Use Finance to record payments, receipts, commissions, and approvals tied to that deal.",
+    ],
+  },
+  {
+    keywords: ["how inventory works", "inventory system", "inventory overview", "inventory report", "stock report", "stock balance", "available stock", "reserved stock", "low stock", "inventory csv"],
+    title: "Review inventory balances and reports",
+    steps: [
+      "Go to Inventory and open Overview to see on-hand, reserved, and available quantities, stock value, low-stock items, and balances by location.",
+      "Available stock is on hand minus reserved stock; use the available figure when promising stock to a customer or project.",
+      "Use Export CSV to download the currently permitted inventory report.",
+      "Internal users see records allowed by their branch access. Brand partners see only inventory belonging to their assigned brands.",
+      "Open Comments to discuss a brand report without changing inventory quantities.",
+    ],
+  },
+  {
+    keywords: ["purchase order", "purchase stock", "procurement", "supplier", "receive purchase", "partial receipt"],
+    title: "Procure and receive inventory",
+    steps: [
+      "Go to Inventory, then Procurement; creating suppliers and purchase orders requires inventory.procure permission.",
+      "Create or select an active supplier, then add one or more catalogue items with quantities, unit costs, expected date, tax, and notes.",
+      "Submit the purchase order for approval. Its creator cannot approve it, so another user with inventory.approve permission must approve or reject it from Approvals.",
+      "After approval, receive each line into a stock location. Partial receipts are allowed and the order remains Part received until every line is complete.",
+      "For batch items, enter the batch number and optional expiry date. For serial items, enter one unique serial number for every unit received.",
+      "Receiving updates the purchase order, location balance, trace register, product total, and movement ledger together.",
+    ],
+  },
+  {
+    keywords: ["stock movement", "transfer stock", "issue stock", "record product sale", "inventory sale", "inventory receipt", "inventory adjustment", "return stock", "barcode"],
+    title: "Record a stock movement",
+    steps: [
+      "Go to Inventory, then Movements. The movement form appears only when your role has the permission required for the selected action.",
+      "Scan the item's barcode or select the product, then choose Receipt, Issue, Transfer, Adjustment, Customer return, or Supplier return. For a sale, choose Issue and set its purpose to Sale.",
+      "Enter the quantity and required source or destination location. Add the supplier, purchase order, job, or sale reference when applicable.",
+      "For traceability-controlled items, provide the required batch number or exactly one serial number per unit.",
+      "Submit the movement. The system verifies available stock and updates all affected balances atomically before adding the ledger entry.",
+    ],
+  },
+  {
+    keywords: ["stock count", "cycle count", "physical count", "inventory variance", "post variance"],
+    title: "Perform and approve a stock count",
+    steps: [
+      "Go to Inventory, then Counts; submitting a count requires inventory.count permission.",
+      "Name the count and enter the item, location, actual physical quantity, and variance reason for each line.",
+      "Submit the count for review. A different user with inventory.approve permission must approve or reject it.",
+      "After approval, an approver posts the count. Non-zero differences create adjustment movements and update the balances.",
+      "A count cannot reduce stock below its reserved quantity. Batch- and serial-controlled products must be reconciled through traceable movements so their registers stay consistent.",
+    ],
+  },
+  {
+    keywords: ["reserve inventory", "reserve stock", "stock reservation", "fulfill reservation", "release reservation"],
+    title: "Reserve stock for work or a sale",
+    steps: [
+      "Go to Inventory, then Reservations; this requires inventory.reserve permission.",
+      "Choose the item, location, quantity, and purpose, then link the deal, project, work order, or other record when possible.",
+      "For a batch item, choose its batch number. For a serial item, enter the exact serial numbers to lock.",
+      "Submit the reservation. Reserved stock remains on hand but is removed from the available quantity.",
+      "Use Release when the stock is no longer needed. Use Fulfill when it leaves inventory; fulfillment reduces on-hand and reserved quantities and records an issue movement.",
+    ],
+  },
+  {
+    keywords: ["batch tracking", "lot tracking", "serial tracking", "traceability", "expiry date", "serial number"],
+    title: "Use batch and serial traceability",
+    steps: [
+      "Set the item's Traceability field in Products/Services to None, Batch, or Serial and add its barcode or GTIN when available.",
+      "Batch-controlled transactions require a batch number and can record an expiry date; quantities are maintained for each batch and location.",
+      "Serial-controlled transactions require one unique serial number per unit and maintain each unit's location and status.",
+      "Open Inventory, then Traceability to scan or search by item, batch, serial number, or location.",
+      "Use traceable receipts, transfers, issues, returns, and reservations so the trace register and balance ledger stay synchronized.",
+    ],
+  },
+  {
+    keywords: ["brand partner", "brand rep", "brand representative", "partner inventory", "guest inventory", "partner report", "invite partner"],
+    title: "Give a brand partner access to inventory reports",
+    steps: [
+      "Create the inventory brands first under Inventory Setup.",
+      "Go to Settings, then Users; create or invite the guest with the Brand partner role, then select one or more permitted brands and representative branches.",
+      "After signing in, the partner can open Inventory to view only balances, movements, recorded sale issues, trace records, and reports belonging to their assigned brands and branches.",
+      "The partner can export the scoped report and use Comments to collaborate on the selected brand and report period.",
+      "Brand partners cannot access suppliers, purchase orders, stock counts, reservations, approvals, setup, or stock-changing actions.",
     ],
   },
   {
@@ -232,7 +313,7 @@ export const guideTopics: GuideTopic[] = [
 ];
 
 export const appGuideContext = `
-Vlingo Systems CRM is an internal business operations CRM for real estate, solar, building materials, services, consultancy, installations, projects, rentals, finance, documents, notifications, and team administration.
+Vlingo Systems CRM is an internal business operations CRM for real estate, solar, building materials, services, consultancy, installations, projects, inventory, rentals, finance, documents, notifications, and team administration.
 
 CRM concept:
 - CRM means Customer Relationship Management.
@@ -253,6 +334,7 @@ Main routes and modules:
 - Deals: dynamic finance-facing pipeline for property sales, rentals, solar, materials, services, consultancy, installation, and custom work. Deal forms reveal fields based on category and type, inherit useful lead/client/product data, and record owner/creator attribution.
 - Properties and Units: real-estate inventory and unit management.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
+- Inventory: branch-aware stock balances, movement ledger, supplier master, purchase orders and partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, CSV reports, and brand-partner collaboration.
 - Rentals: tenancy, rent payment, lease dates, renewal tasks, and tenant follow-up.
 - Development: property development projects, project managers, delivery details, and related operational work.
 - Marketing: campaign records connected to lead sources and sales follow-up.
@@ -271,11 +353,15 @@ Cross-module workflows:
 - Lead, client, and deal cards show who entered the record; ownership fields determine personal workflow visibility and reporting attribution.
 - Phone numbers in lead/client areas can open WhatsApp, and single or bulk email uses the organization's configured SMTP mailbox.
 - Dated assigned tasks can sync to the user's connected Google Calendar and task notifications can reach enabled browsers/PWA devices.
+- Product/service catalogue items marked as inventory feed branch/location balances. Procurement receipts, controlled movements, counts, and reservation fulfillment update stock through server-side transactions.
+- Inventory availability is on-hand quantity minus reserved quantity. Batch and serial records must stay synchronized with the balance and movement ledgers.
 
 Role behavior:
 - Super admin has no restrictions.
 - Managers are scoped to branches unless granted all-branch access.
 - Sales executives only see their own assigned leads/workflows unless assigned by a manager.
+- Inventory managers can procure, count, reserve, receive, issue, transfer, and adjust stock but do not have approval permission. Users with inventory.approve permission approve purchase orders and stock counts, and creators cannot approve their own submissions.
+- Brand partners are read-only inventory guests scoped to assigned brands. They can export their report and comment, but cannot see internal procurement, counts, reservations, approvals, or other brands.
 - Links should be hidden when a role lacks access.
 
 Answer style:

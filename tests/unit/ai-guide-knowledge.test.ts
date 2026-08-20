@@ -10,6 +10,29 @@ describe("AI Guide knowledge", () => {
     expect(answer).toContain("Export CSV");
   });
 
+  it("guides users through enterprise inventory workflows", () => {
+    const procurement = fallbackGuideAnswer("How do I create and receive a purchase order?");
+    const reservation = fallbackGuideAnswer("How do I reserve stock for a project?");
+    const partner = fallbackGuideAnswer("What can a brand partner see in inventory?");
+
+    expect(procurement).toContain("Procure and receive inventory");
+    expect(procurement).toContain("creator cannot approve");
+    expect(procurement).toContain("Partial receipts");
+    expect(reservation).toContain("Reserve stock for work or a sale");
+    expect(reservation).toContain("on hand but is removed from the available quantity");
+    expect(partner).toContain("Give a brand partner access");
+    expect(partner).toContain("assigned brands");
+    expect(partner).toContain("cannot access suppliers");
+  });
+
+  it("exposes Inventory in AI context only with inventory access", () => {
+    const inventoryContext = buildGuideMemberContext({ permissions: ["inventory.read"], role: "brandPartner" });
+    const salesContext = buildGuideMemberContext({ permissions: ["leads.readAssigned"], role: "salesExecutive" });
+
+    expect(inventoryContext).toContain("Accessible areas inferred from current permissions: Inventory");
+    expect(salesContext).not.toContain("Accessible areas inferred from current permissions: Inventory");
+  });
+
   it("limits the user context to areas supported by explicit permissions", () => {
     const context = buildGuideMemberContext({
       branchAccess: "assigned",

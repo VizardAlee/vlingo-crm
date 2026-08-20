@@ -121,6 +121,14 @@ describe("route access rules", () => {
     expect(rolePermissions.brandPartner).not.toEqual(expect.arrayContaining(["offerings.read", "reports.viewFinancial"]));
   });
 
+  it("separates enterprise inventory duties", () => {
+    expect(rolePermissions.inventoryManager).toEqual(expect.arrayContaining(["inventory.procure", "inventory.count", "inventory.reserve"]));
+    expect(rolePermissions.inventoryManager).not.toContain("inventory.approve");
+    expect(rolePermissions.operationsManager).toEqual(expect.arrayContaining(["inventory.procure", "inventory.count", "inventory.reserve", "inventory.approve"]));
+    expect(rolePermissions.financeManager).toContain("inventory.approve");
+    expect(rolePermissions.brandPartner).not.toEqual(expect.arrayContaining(["inventory.procure", "inventory.count", "inventory.reserve", "inventory.approve"]));
+  });
+
   it("keeps role permissions aligned with operational responsibilities", () => {
     expect(rolePermissions.salesExecutive).toEqual(expect.arrayContaining(["deals.update", "offerings.read"]));
     expect(rolePermissions.salesExecutive).not.toEqual(expect.arrayContaining(["clients.update", "finance.create", "users.manage"]));

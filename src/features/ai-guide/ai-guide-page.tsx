@@ -33,7 +33,7 @@ interface PersistedGuideChat {
 }
 
 const defaultGuideMessage: GuideMessage = {
-  content: "Ask me how CRM works or how to use Vlingo Systems CRM. I can guide you through leads, deals, products/services, reports, finance, email, Google Calendar, maps, notifications, offline use, roles, branches, and more.",
+  content: "Ask me how CRM works or how to use Vlingo Systems CRM. I can guide you through leads, deals, inventory, procurement, stock counts, reservations, products/services, reports, finance, email, Google Calendar, maps, notifications, offline use, roles, branches, and more.",
   mode: "built-in",
   role: "assistant",
 };
@@ -45,6 +45,9 @@ const suggestedQuestions = [
   "What is CRM and how should our team use it?",
   "How do I create a lead and link it to a property?",
   "How do I open a deal from a lead?",
+  "How do I create and receive a purchase order?",
+  "How do stock reservations and available quantities work?",
+  "What can a brand partner see in Inventory?",
   "How do I record a property sale payment and print a receipt?",
   "How do I send bulk emails to leads?",
   "How do I review my performance and amount generated?",

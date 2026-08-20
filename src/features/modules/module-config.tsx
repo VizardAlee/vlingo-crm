@@ -317,6 +317,8 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { colSpan: "full", name: "description", label: "Description", section: "Product/service basics", type: "textarea" },
 
       { name: "sku", label: "SKU / item code", section: "Commercials and stock", type: "text" },
+      { name: "barcode", label: "Barcode / GTIN", section: "Commercials and stock", type: "text" },
+      { name: "trackingMode", label: "Traceability", options: ["none", "batch", "serial"], section: "Commercials and stock", type: "select" },
       { name: "unitOfMeasure", label: "Unit of measure", options: unitOfMeasureOptions, section: "Commercials and stock", type: "select" },
       { name: "sellingPrice", label: "Selling price", section: "Commercials and stock", type: "number" },
       { name: "costPrice", label: "Cost price", section: "Commercials and stock", type: "number" },
