@@ -64,6 +64,14 @@ const rolePermissions = {
     "offerings.create",
     "offerings.read",
     "offerings.update",
+    "inventory.read",
+    "inventory.manageCatalog",
+    "inventory.receive",
+    "inventory.issue",
+    "inventory.adjust",
+    "inventory.transfer",
+    "inventory.viewReports",
+    "inventory.comment",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -77,20 +85,22 @@ const rolePermissions = {
     "roles.manage",
     "auditLogs.read",
   ],
-  managingDirector: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "properties.read", "deals.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "tasks.read", "activities.read", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
-  operationsManager: ["dashboard.viewExecutive", "leads.create", "leads.readAll", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "rentals.create", "rentals.read", "rentals.update", "development.create", "development.read", "development.update", "marketing.create", "marketing.read", "marketing.update", "offerings.create", "offerings.read", "offerings.update", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read", "users.manage"],
-  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  managingDirector: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "properties.read", "deals.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "tasks.read", "activities.read", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
+  operationsManager: ["dashboard.viewExecutive", "leads.create", "leads.readAll", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "rentals.create", "rentals.read", "rentals.update", "development.create", "development.read", "development.update", "marketing.create", "marketing.read", "marketing.update", "offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read", "users.manage"],
+  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "offerings.read", "inventory.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   propertyManager: ["properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "offerings.read", "deals.read", "rentals.create", "rentals.read", "rentals.update", "development.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
-  accountant: ["clients.read", "properties.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "activities.create", "activities.read", "finance.create", "finance.update", "reports.viewFinancial"],
+  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
+  accountant: ["clients.read", "properties.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "activities.create", "activities.read", "finance.create", "finance.update", "reports.viewFinancial"],
   legalOfficer: ["clients.read", "properties.read", "deals.read", "rentals.read", "offerings.read", "auditLogs.read"],
-  projectManager: ["properties.read", "properties.update", "development.create", "development.read", "development.update", "offerings.read", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
+  projectManager: ["properties.read", "properties.update", "development.create", "development.read", "development.update", "offerings.read", "inventory.read", "inventory.issue", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
   marketingOfficer: ["leads.create", "leads.readAll", "properties.read", "marketing.create", "marketing.read", "marketing.update", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   customerServiceOfficer: ["leads.create", "leads.readAssigned", "clients.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   frontDeskOfficer: ["leads.create", "leads.readAssigned", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   agent: ["leads.readAssigned", "activities.create", "activities.read"],
-  auditor: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "tasks.read", "activities.read", "reports.viewFinancial", "auditLogs.read"],
+  auditor: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "tasks.read", "activities.read", "reports.viewFinancial", "auditLogs.read"],
+  inventoryManager: ["offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
+  brandPartner: ["inventory.read", "inventory.viewReports", "inventory.comment"],
 } as const;
 
 type RoleName = keyof typeof rolePermissions;
@@ -160,6 +170,21 @@ function requireRoles(value: unknown, fallback: unknown) {
   }
 
   return roles;
+}
+
+async function requirePartnerBrandIds(organizationId: string, roles: RoleName[], value: unknown) {
+  const isPartner = roles.includes("brandPartner");
+  if (isPartner && roles.length !== 1) {
+    throw new HttpsError("invalid-argument", "Brand partner cannot be combined with an internal role.");
+  }
+  if (!isPartner) return [];
+  const ids = Array.from(new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : []));
+  if (!ids.length) throw new HttpsError("invalid-argument", "Select at least one brand for a brand partner.");
+  const snapshots = await db.getAll(...ids.map((id) => db.doc(`organizations/${organizationId}/inventoryBrands/${id}`)));
+  if (snapshots.some((snapshot) => !snapshot.exists || snapshot.data()?.status !== "active")) {
+    throw new HttpsError("invalid-argument", "Every partner brand must exist and be active.");
+  }
+  return ids;
 }
 
 function requireBranchAccess(value: unknown) {
@@ -667,6 +692,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
     const actor = await getActor(request.auth.uid, organizationId);
     assertCanAssignRoles(actor, roles);
     assertCanGrantBranchAccess(actor, branchAccess);
+    const partnerBrandIds = await requirePartnerBrandIds(organizationId, roles, request.data?.partnerBrandIds);
 
     const user = await getOrCreateUser(email, displayName);
     const memberRef = db.doc(`organizations/${organizationId}/members/${user.uid}`);
@@ -684,6 +710,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
       email,
       organizationId,
       permissions: permissionsForRoles(roles),
+      partnerBrandIds,
       phoneNumber,
       role,
       roles,
@@ -703,7 +730,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
       branchId,
       entityId: user.uid,
       entityType: "member",
-      newValue: { branchAccess, branchId, displayName, email, role, roles, setupLinkGenerated: true, status: "active" },
+      newValue: { branchAccess, branchId, displayName, email, partnerBrandIds, role, roles, setupLinkGenerated: true, status: "active" },
       organizationId,
       previousValue: previous.exists ? previous.data() : null,
     });
@@ -1137,6 +1164,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
   const actor = await getActor(request.auth.uid, organizationId);
   assertCanAssignRoles(actor, roles);
   assertCanGrantBranchAccess(actor, branchAccess);
+  const partnerBrandIds = await requirePartnerBrandIds(organizationId, roles, request.data?.partnerBrandIds);
 
   if (targetUid === request.auth.uid) {
     throw new HttpsError("failed-precondition", "You cannot change your own role or branch.");
@@ -1153,6 +1181,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
     branchId,
     branchAccess,
     permissions: permissionsForRoles(roles),
+    partnerBrandIds,
     role,
     roles,
     updatedAt: FieldValue.serverTimestamp(),
@@ -1166,7 +1195,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
     branchId,
     entityId: targetUid,
     entityType: "member",
-    newValue: { branchAccess, branchId, role, roles },
+    newValue: { branchAccess, branchId, partnerBrandIds, role, roles },
     organizationId,
     previousValue: previous.data(),
   });
@@ -1455,6 +1484,123 @@ export const deliverNotificationPush = onDocumentCreated(
     }
   },
 );
+
+const inventoryMovementPermission: Record<string, string> = {
+  receipt: "inventory.receive",
+  issue: "inventory.issue",
+  adjustmentIn: "inventory.adjust",
+  adjustmentOut: "inventory.adjust",
+  transfer: "inventory.transfer",
+  returnIn: "inventory.receive",
+  returnOut: "inventory.issue",
+};
+
+export const recordInventoryMovement = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const branchId = requireString(request.data?.branchId, "branchId");
+  const offeringId = requireString(request.data?.offeringId, "offeringId");
+  const movementType = requireString(request.data?.movementType, "movementType");
+  const permission = inventoryMovementPermission[movementType];
+  if (!permission) throw new HttpsError("invalid-argument", "Unsupported inventory movement type.");
+  const quantity = requireNumber(request.data?.quantity, "quantity");
+  if (quantity <= 0) throw new HttpsError("invalid-argument", "Quantity must be greater than zero.");
+
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, permission)) throw new HttpsError("permission-denied", "You do not have permission to record this stock movement.");
+  if (!canActorAccessBranch(actor, branchId)) throw new HttpsError("permission-denied", "You do not have access to this branch.");
+
+  const fromLocationId = typeof request.data?.fromLocationId === "string" ? request.data.fromLocationId.trim() : "";
+  const toLocationId = typeof request.data?.toLocationId === "string" ? request.data.toLocationId.trim() : "";
+  const needsFrom = ["issue", "adjustmentOut", "transfer", "returnOut"].includes(movementType);
+  const needsTo = ["receipt", "adjustmentIn", "transfer", "returnIn"].includes(movementType);
+  if (needsFrom && !fromLocationId) throw new HttpsError("invalid-argument", "A source location is required.");
+  if (needsTo && !toLocationId) throw new HttpsError("invalid-argument", "A destination location is required.");
+  if (movementType === "transfer" && fromLocationId === toLocationId) throw new HttpsError("invalid-argument", "Transfer locations must be different.");
+
+  const offeringRef = db.doc(`organizations/${organizationId}/offerings/${offeringId}`);
+  const fromLocationRef = fromLocationId ? db.doc(`organizations/${organizationId}/inventoryLocations/${fromLocationId}`) : null;
+  const toLocationRef = toLocationId ? db.doc(`organizations/${organizationId}/inventoryLocations/${toLocationId}`) : null;
+  const fromBalanceRef = fromLocationId ? db.doc(`organizations/${organizationId}/inventoryBalances/${offeringId}_${fromLocationId}`) : null;
+  const toBalanceRef = toLocationId ? db.doc(`organizations/${organizationId}/inventoryBalances/${offeringId}_${toLocationId}`) : null;
+  const movementRef = db.collection(`organizations/${organizationId}/inventoryMovements`).doc();
+  const referenceNumber = `MOV-${Date.now().toString(36).toUpperCase()}-${movementRef.id.slice(0, 5).toUpperCase()}`;
+
+  await db.runTransaction(async (transaction) => {
+    const [offeringSnapshot, fromLocationSnapshot, toLocationSnapshot, fromBalanceSnapshot, toBalanceSnapshot] = await Promise.all([
+      transaction.get(offeringRef),
+      fromLocationRef ? transaction.get(fromLocationRef) : null,
+      toLocationRef ? transaction.get(toLocationRef) : null,
+      fromBalanceRef ? transaction.get(fromBalanceRef) : null,
+      toBalanceRef ? transaction.get(toBalanceRef) : null,
+    ]);
+    if (!offeringSnapshot.exists) throw new HttpsError("not-found", "Inventory item was not found.");
+    const offering = offeringSnapshot.data() ?? {};
+    if (offering.isDeleted === true || offering.branchId !== branchId || !offering.brandId) throw new HttpsError("failed-precondition", "The item must be active, assigned to this branch, and linked to a brand.");
+    if (fromLocationRef && (!fromLocationSnapshot?.exists || fromLocationSnapshot.data()?.branchId !== branchId)) throw new HttpsError("failed-precondition", "Source location was not found in this branch.");
+    if (toLocationRef && (!toLocationSnapshot?.exists || toLocationSnapshot.data()?.branchId !== branchId)) throw new HttpsError("failed-precondition", "Destination location was not found in this branch.");
+
+    const fromQuantity = Number(fromBalanceSnapshot?.data()?.quantityOnHand ?? 0);
+    if (needsFrom && fromQuantity < quantity) throw new HttpsError("failed-precondition", `Only ${fromQuantity} units are available at the source location.`);
+    const commonBalance = {
+      organizationId,
+      branchId,
+      brandId: offering.brandId,
+      brandName: offering.brandName ?? "",
+      offeringId,
+      offeringName: offering.name ?? offering.referenceNumber ?? "Inventory item",
+      sku: offering.sku ?? "",
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+    };
+    if (fromBalanceRef && fromLocationSnapshot) transaction.set(fromBalanceRef, {
+      ...commonBalance,
+      locationId: fromLocationId,
+      locationName: fromLocationSnapshot.data()?.name ?? "",
+      quantityOnHand: fromQuantity - quantity,
+    }, { merge: true });
+    if (toBalanceRef && toLocationSnapshot) transaction.set(toBalanceRef, {
+      ...commonBalance,
+      locationId: toLocationId,
+      locationName: toLocationSnapshot.data()?.name ?? "",
+      quantityOnHand: Number(toBalanceSnapshot?.data()?.quantityOnHand ?? 0) + quantity,
+    }, { merge: true });
+
+    const totalDelta = needsTo && !needsFrom ? quantity : needsFrom && !needsTo ? -quantity : 0;
+    transaction.update(offeringRef, {
+      stockQuantity: FieldValue.increment(totalDelta),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+    });
+    transaction.set(movementRef, {
+      organizationId,
+      branchId,
+      brandId: offering.brandId,
+      brandName: offering.brandName ?? "",
+      offeringId,
+      offeringName: offering.name ?? offering.referenceNumber ?? "Inventory item",
+      sku: offering.sku ?? "",
+      movementType,
+      quantity,
+      fromLocationId,
+      fromLocationName: fromLocationSnapshot?.data()?.name ?? "",
+      toLocationId,
+      toLocationName: toLocationSnapshot?.data()?.name ?? "",
+      externalReference: typeof request.data?.externalReference === "string" ? request.data.externalReference.trim() : "",
+      notes: typeof request.data?.notes === "string" ? request.data.notes.trim() : "",
+      occurredAt: typeof request.data?.occurredAt === "string" && request.data.occurredAt ? new Date(request.data.occurredAt) : new Date(),
+      referenceNumber,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: actor.id,
+      createdByEmail: actor.email,
+      createdByName: actor.displayName,
+      isDeleted: false,
+    });
+  });
+
+  return { movementId: movementRef.id, referenceNumber };
+});
 
 export const syncTaskGoogleCalendar = onDocumentWritten(
   {

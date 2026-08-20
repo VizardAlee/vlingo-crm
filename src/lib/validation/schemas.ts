@@ -196,6 +196,8 @@ export const dealSchema = z.object({
 export const propertySchema = z.object({
   name: z.string().min(2, "Property name is required."),
   category: z.string().min(2, "Category is required."),
+  brandId: z.string().optional(),
+  brandName: z.string().optional(),
   transactionTypes: tagString,
   description: z.string().optional(),
   address: z.string().min(5, "Address is required."),

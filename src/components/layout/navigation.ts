@@ -21,6 +21,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  Warehouse,
 } from "lucide-react";
 import type { Permission } from "@/types/crm";
 
@@ -137,6 +138,7 @@ export const routeAccessRules: RouteAccessRule[] = [
   { exact: "/offerings/new", permissions: ["offerings.create"] },
   { pattern: /^\/offerings\/[^/]+\/edit$/, permissions: ["offerings.update"] },
   { pattern: /^\/offerings(\/[^/]+)?$/, permissions: ["offerings.read"] },
+  { pattern: /^\/inventory(\/.*)?$/, permissions: ["inventory.read"] },
 
   { exact: "/rentals/new", permissions: ["rentals.create"] },
   { pattern: /^\/rentals\/[^/]+\/edit$/, permissions: ["rentals.update"] },
@@ -200,6 +202,7 @@ export const navigation: NavSection[] = [
       { href: "/properties", icon: Building2, label: "Properties", permissions: ["properties.read"] },
       { href: "/units", icon: Home, label: "Units", permissions: ["units.read"] },
       { href: "/offerings", icon: Package, label: "Products/Services", permissions: ["offerings.read"] },
+      { href: "/inventory", icon: Warehouse, label: "Inventory", permissions: ["inventory.read"] },
     ],
   },
   {

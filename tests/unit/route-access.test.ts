@@ -111,8 +111,14 @@ describe("route access rules", () => {
         role,
         status: "active",
       } as Member;
-      expect(hasAnyPermission(member, reportsAccessPermissions), `${role} should have personal report access`).toBe(true);
+      expect(hasAnyPermission(member, reportsAccessPermissions), `${role} report access`).toBe(role !== "brandPartner");
     }
+  });
+
+  it("routes brand partners only to the scoped inventory report", () => {
+    expect(accessRuleForPath("/inventory")?.permissions).toEqual(["inventory.read"]);
+    expect(rolePermissions.brandPartner).toEqual(["inventory.read", "inventory.viewReports", "inventory.comment"]);
+    expect(rolePermissions.brandPartner).not.toEqual(expect.arrayContaining(["offerings.read", "reports.viewFinancial"]));
   });
 
   it("keeps role permissions aligned with operational responsibilities", () => {

@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { canAccessAllBranches, hasPermission, memberRoles, rolePermissions } from "@/lib/permissions";
+import { listInventoryBrands } from "@/services/inventory";
 import { formatDate, statusTone, titleCase } from "@/lib/utils";
 import {
   disableOrganizationMember,
@@ -22,7 +23,7 @@ import {
   updateOrganizationMember,
   type InviteUserInput,
 } from "@/services/users";
-import type { Branch, BranchAccess, Member, RoleName } from "@/types/crm";
+import type { Branch, BranchAccess, InventoryBrand, Member, RoleName } from "@/types/crm";
 
 const roles = Object.keys(rolePermissions) as RoleName[];
 
@@ -33,6 +34,7 @@ const defaultInvite = {
   email: "",
   phoneNumber: "",
   roles: ["salesExecutive"] as RoleName[],
+  partnerBrandIds: [] as string[],
 };
 
 function userTourTarget(name: string) {
@@ -77,6 +79,8 @@ function normalizeAssignableRoleSelection(rolesValue: RoleName[], fallback: Role
 }
 
 function toggleRole(rolesValue: RoleName[], role: RoleName) {
+  if (role === "brandPartner") return [role];
+  if (rolesValue.includes("brandPartner")) return [role];
   return rolesValue.includes(role) ? rolesValue.filter((item) => item !== role) : [...rolesValue, role];
 }
 
@@ -112,13 +116,34 @@ function RoleSelector({
   );
 }
 
+function BrandSelector({ brands, disabled, onChange, value }: { brands: InventoryBrand[]; disabled?: boolean; onChange: (ids: string[]) => void; value: string[] }) {
+  return (
+    <div className="grid max-h-40 gap-2 overflow-auto rounded-md border bg-white p-3 sm:grid-cols-2">
+      {brands.map((brand) => (
+        <label className="flex cursor-pointer items-center gap-2 text-sm" key={brand.id}>
+          <Input
+            checked={value.includes(brand.id)}
+            className="h-4 w-4"
+            disabled={disabled}
+            onChange={() => onChange(value.includes(brand.id) ? value.filter((id) => id !== brand.id) : [...value, brand.id])}
+            type="checkbox"
+          />
+          <span>{brand.name}</span>
+        </label>
+      ))}
+      {!brands.length ? <p className="text-sm text-muted-foreground">Create an inventory brand before inviting a brand partner.</p> : null}
+    </div>
+  );
+}
+
 export function UsersManagement() {
   const { activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [brands, setBrands] = useState<InventoryBrand[]>([]);
   const [invite, setInvite] = useState(defaultInvite);
-  const [editing, setEditing] = useState<Record<string, { branchId: string; branchAccess: BranchAccess; roles: RoleName[] }>>({});
+  const [editing, setEditing] = useState<Record<string, { branchId: string; branchAccess: BranchAccess; roles: RoleName[]; partnerBrandIds: string[] }>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,9 +158,10 @@ export function UsersManagement() {
     setError(null);
     setLoading(true);
     try {
-      const [nextBranches, nextMembers] = await Promise.all([listBranches(activeOrganizationId), listMembers(activeOrganizationId)]);
+      const [nextBranches, nextMembers, nextBrands] = await Promise.all([listBranches(activeOrganizationId), listMembers(activeOrganizationId), listInventoryBrands(activeOrganizationId, member)]);
       setBranches(nextBranches);
       setMembers(nextMembers);
+      setBrands(nextBrands);
       setInvite((value) => ({ ...value, branchId: nextBranches[0]?.id ?? value.branchId }));
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to load users.";
@@ -144,7 +170,7 @@ export function UsersManagement() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, toast]);
+  }, [activeOrganizationId, member, toast]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -371,6 +397,14 @@ export function UsersManagement() {
               </Field>
               </div>
             </div>
+            {invite.roles.includes("brandPartner") ? (
+              <div className="lg:col-span-5">
+                <Field label="Partner brand access">
+                  <BrandSelector brands={brands} onChange={(partnerBrandIds) => setInvite((value) => ({ ...value, partnerBrandIds }))} value={invite.partnerBrandIds} />
+                </Field>
+                <p className="mt-1 text-xs text-muted-foreground">This guest will only see inventory, reports, movements, and comments for the selected brands.</p>
+              </div>
+            ) : null}
             <div className="lg:col-span-5 lg:flex lg:justify-end">
               <Button className="h-11 w-full lg:w-auto" data-tour={userTourTarget("invite")} disabled={saving === "invite"} type="submit">
                 <MailPlus className="h-4 w-4" />
@@ -383,7 +417,7 @@ export function UsersManagement() {
 
       <div className="grid gap-3 lg:hidden">
         {members.map((item) => {
-          const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item) };
+          const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item), partnerBrandIds: item.partnerBrandIds ?? [] };
           const isSelf = item.id === user?.uid;
           const protectedRole = hasUnassignableRole(item, assignableRoles);
           const canEditTarget = !isSelf && !protectedRole;
@@ -416,6 +450,7 @@ export function UsersManagement() {
                       <option value="all">All branches</option>
                     </Select>
                   </Field>
+                  {edit.roles.includes("brandPartner") ? <Field label="Partner brand access"><BrandSelector brands={brands} disabled={!canEditTarget} onChange={(partnerBrandIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBrandIds } }))} value={edit.partnerBrandIds} /></Field> : null}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <Button disabled={saving === `update-${item.id}` || !canEditTarget} onClick={() => submitMemberUpdate(item)} type="button" variant="outline">
@@ -456,7 +491,7 @@ export function UsersManagement() {
             </thead>
             <tbody>
               {members.map((item) => {
-                const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item) };
+                const edit = editing[item.id] ?? { branchAccess: item.branchAccess ?? "own", branchId: item.branchId, roles: memberRoles(item), partnerBrandIds: item.partnerBrandIds ?? [] };
                 const isSelf = item.id === user?.uid;
                 const protectedRole = hasUnassignableRole(item, assignableRoles);
                 const canEditTarget = !isSelf && !protectedRole;
@@ -470,6 +505,7 @@ export function UsersManagement() {
                       <div className="grid w-64 gap-2">
                         <RoleSelector disabled={!canEditTarget} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeAssignableRoleSelection(nextRoles, item.role, assignableRoles) } }))} options={protectedRole ? memberRoles(item) : assignableRoles} rolesValue={protectedRole ? memberRoles(item) : edit.roles.filter((role) => assignableRoles.includes(role))} />
                         <p className="text-xs text-muted-foreground">{protectedRole ? "Requires role management access." : displayRoles(item)}</p>
+                        {edit.roles.includes("brandPartner") ? <BrandSelector brands={brands} disabled={!canEditTarget} onChange={(partnerBrandIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBrandIds } }))} value={edit.partnerBrandIds} /> : null}
                       </div>
                     </td>
                     <td className="px-4 py-3">

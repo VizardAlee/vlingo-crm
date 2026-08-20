@@ -30,6 +30,14 @@ export type Permission =
   | "offerings.create"
   | "offerings.read"
   | "offerings.update"
+  | "inventory.read"
+  | "inventory.manageCatalog"
+  | "inventory.receive"
+  | "inventory.issue"
+  | "inventory.adjust"
+  | "inventory.transfer"
+  | "inventory.viewReports"
+  | "inventory.comment"
   | "tasks.create"
   | "tasks.read"
   | "tasks.update"
@@ -58,7 +66,9 @@ export type RoleName =
   | "customerServiceOfficer"
   | "frontDeskOfficer"
   | "agent"
-  | "auditor";
+  | "auditor"
+  | "inventoryManager"
+  | "brandPartner";
 
 export type MembershipStatus = "active" | "invited" | "disabled";
 export type BranchAccess = "own" | "all";
@@ -111,6 +121,7 @@ export interface Member {
   role: RoleName;
   roles?: RoleName[];
   permissions: Permission[];
+  partnerBrandIds?: string[];
   status: MembershipStatus;
   createdAt?: Date;
   createdBy?: string;
@@ -348,12 +359,91 @@ export interface Offering extends EntityMetadata {
   sellingPrice?: number;
   costPrice?: number;
   stockQuantity?: number;
+  brandId?: string;
+  brandName?: string;
   reorderLevel?: number;
   supplierName?: string;
   serviceDurationDays?: number;
   tags: string[];
   notes?: string;
   status: OfferingStatus;
+}
+
+export interface InventoryBrand extends EntityMetadata {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  contactName?: string;
+  contactEmail?: string;
+  status: "active" | "inactive";
+}
+
+export interface InventoryLocation extends EntityMetadata {
+  id: string;
+  name: string;
+  code: string;
+  address?: string;
+  locationType: "warehouse" | "store" | "site" | "vehicle" | "other";
+  status: "active" | "inactive";
+}
+
+export interface InventoryBalance {
+  id: string;
+  organizationId: string;
+  branchId: string;
+  brandId: string;
+  brandName: string;
+  offeringId: string;
+  offeringName: string;
+  sku?: string;
+  locationId: string;
+  locationName: string;
+  quantityOnHand: number;
+  updatedAt?: Date;
+  updatedBy: string;
+}
+
+export type InventoryMovementType = "receipt" | "issue" | "adjustmentIn" | "adjustmentOut" | "transfer" | "returnIn" | "returnOut";
+
+export interface InventoryMovement {
+  id: string;
+  organizationId: string;
+  branchId: string;
+  brandId: string;
+  brandName: string;
+  offeringId: string;
+  offeringName: string;
+  sku?: string;
+  movementType: InventoryMovementType;
+  quantity: number;
+  fromLocationId?: string;
+  fromLocationName?: string;
+  toLocationId?: string;
+  toLocationName?: string;
+  referenceNumber: string;
+  externalReference?: string;
+  notes?: string;
+  occurredAt: Date | string;
+  createdAt?: Date;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByName?: string;
+  isDeleted: false;
+}
+
+export interface InventoryComment {
+  id: string;
+  organizationId: string;
+  branchId: string;
+  brandId: string;
+  message: string;
+  reportPeriod?: string;
+  createdAt?: Date;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByName?: string;
+  isDeleted: false;
 }
 
 export interface Property extends EntityMetadata {

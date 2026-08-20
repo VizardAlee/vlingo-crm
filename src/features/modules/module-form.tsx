@@ -21,8 +21,9 @@ import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, lea
 import { effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
+import { listInventoryBrands } from "@/services/inventory";
 import { listMembers } from "@/services/users";
-import type { BusinessVertical, Client, DealType, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
+import type { BusinessVertical, Client, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
@@ -240,6 +241,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [leads, setLeads] = useState<Lead[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [inventoryBrands, setInventoryBrands] = useState<InventoryBrand[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<PropertyUnit[]>([]);
   const [stakeholderForm, setStakeholderForm] = useState({ email: "", name: "", notes: "", phoneNumber: "", type: "owner" as StakeholderKind });
@@ -384,6 +386,18 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       }),
     [config.collection, effectiveDealCategory, offerings, selectedInterestCategory],
   );
+  const inventoryBrandOptions = useMemo(() => inventoryBrands.map((brand) => ({ label: brand.name, value: brand.id })), [inventoryBrands]);
+
+  useEffect(() => {
+    if (config.collection !== "offerings") return;
+    let mounted = true;
+    listInventoryBrands(activeOrganizationId, member).then((items) => {
+      if (mounted) setInventoryBrands(items.filter((item) => item.status === "active"));
+    }).catch(() => {
+      if (mounted) setInventoryBrands([]);
+    });
+    return () => { mounted = false; };
+  }, [activeOrganizationId, config.collection, member]);
 
   useEffect(() => {
     if (config.collection !== "deals" && config.collection !== "leads" && config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
@@ -840,6 +854,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
 
     if (config.collection === "offerings") {
+      const brand = inventoryBrands.find((item) => item.id === parsedData.brandId);
+      parsedData.brandName = brand?.name ?? "";
       const offeringType = String(parsedData.type ?? "");
       const isInventoryOffering = ["material", "solarEquipment"].includes(offeringType);
       const isServiceOffering = ["solarService", "installationProject", "consultancy", "maintenance", "service"].includes(offeringType);
@@ -1051,6 +1067,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     if (field.optionSource === "offerings") {
       return offeringOptions;
+    }
+
+    if (field.optionSource === "inventoryBrands") {
+      return inventoryBrandOptions;
     }
 
     if (config.collection === "deals" && field.name === "dealType") {

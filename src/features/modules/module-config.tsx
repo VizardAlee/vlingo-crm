@@ -13,7 +13,7 @@ export interface FormField {
   name: string;
   label: string;
   options?: string[];
-  optionSource?: "clients" | "internalManagers" | "leads" | "managementCompanies" | "offerings" | "properties" | "propertyDevelopers" | "propertyOwners" | "propertyUnits";
+  optionSource?: "clients" | "internalManagers" | "inventoryBrands" | "leads" | "managementCompanies" | "offerings" | "properties" | "propertyDevelopers" | "propertyOwners" | "propertyUnits";
   readOnly?: boolean;
   placeholder?: string;
   required?: boolean;
@@ -312,6 +312,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "vertical", label: "Business vertical", options: businessVerticals, required: true, section: "Product/service basics", type: "select" },
       { name: "type", label: "Product/service type", options: offeringTypes, required: true, section: "Product/service basics", type: "select" },
       { name: "category", label: "Category", placeholder: "Solar package, cement, land, consulting...", required: true, section: "Product/service basics", type: "text" },
+      { helpText: "Required for stock tracking and partner-scoped inventory reports.", name: "brandId", label: "Brand", optionSource: "inventoryBrands", section: "Product/service basics", type: "select" },
       { name: "status", label: "Status", options: offeringStatuses, required: true, section: "Product/service basics", type: "select" },
       { colSpan: "full", name: "description", label: "Description", section: "Product/service basics", type: "textarea" },
 
@@ -319,7 +320,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "unitOfMeasure", label: "Unit of measure", options: unitOfMeasureOptions, section: "Commercials and stock", type: "select" },
       { name: "sellingPrice", label: "Selling price", section: "Commercials and stock", type: "number" },
       { name: "costPrice", label: "Cost price", section: "Commercials and stock", type: "number" },
-      { name: "stockQuantity", label: "Stock quantity", section: "Commercials and stock", type: "number" },
+      { helpText: "Calculated from the inventory movement ledger. Use Inventory to receive, issue, transfer, or adjust stock.", name: "stockQuantity", label: "Stock quantity", readOnly: true, section: "Commercials and stock", type: "number" },
       { name: "reorderLevel", label: "Reorder level", section: "Commercials and stock", type: "number" },
       { name: "supplierName", label: "Supplier / partner", section: "Commercials and stock", type: "text" },
       { name: "serviceDurationDays", label: "Service duration days", section: "Commercials and stock", type: "number" },

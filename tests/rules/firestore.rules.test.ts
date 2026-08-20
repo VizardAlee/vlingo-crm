@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 const projectId = "beacon-operations-crm";
 let testEnv: RulesTestEnvironment;
 
-async function seedMember(uid: string, orgId: string, permissions: string[], role = "salesExecutive") {
+async function seedMember(uid: string, orgId: string, permissions: string[], role = "salesExecutive", extra: Record<string, unknown> = {}) {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), `organizations/${orgId}/members/${uid}`), {
       branchId: "head-office",
@@ -16,6 +16,7 @@ async function seedMember(uid: string, orgId: string, permissions: string[], rol
       permissions,
       role,
       status: "active",
+      ...extra,
     });
   });
 }
@@ -113,6 +114,53 @@ describe("Beacon Firestore rules", () => {
     await seedLead("org-b", "lead-1", "sales-1");
     const db = testEnv.authenticatedContext("sales-1").firestore();
     await assertFails(getDoc(doc(db, "organizations/org-b/leads/lead-1")));
+  });
+
+  it("scopes brand partners to their assigned inventory brands", async () => {
+    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      for (const brandId of ["sorotec", "revo"]) {
+        await setDoc(doc(adminDb, `organizations/org-a/inventoryBalances/item-${brandId}_warehouse`), {
+          brandId,
+          branchId: "head-office",
+          offeringId: `item-${brandId}`,
+          offeringName: `${brandId} inverter`,
+          organizationId: "org-a",
+          quantityOnHand: 10,
+        });
+      }
+    });
+    const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
+    await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/item-sorotec_warehouse")));
+    await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/item-revo_warehouse")));
+  });
+
+  it("allows scoped partner comments but blocks direct stock writes", async () => {
+    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
+    const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
+    await assertSucceeds(setDoc(doc(partnerDb, "organizations/org-a/inventoryComments/comment-1"), {
+      brandId: "sorotec",
+      branchId: "head-office",
+      createdBy: "partner-1",
+      isDeleted: false,
+      message: "Please confirm this balance.",
+      organizationId: "org-a",
+    }));
+    await assertFails(setDoc(doc(partnerDb, "organizations/org-a/inventoryComments/comment-2"), {
+      brandId: "revo",
+      branchId: "head-office",
+      createdBy: "partner-1",
+      isDeleted: false,
+      message: "I should not see this brand.",
+      organizationId: "org-a",
+    }));
+    await assertFails(setDoc(doc(partnerDb, "organizations/org-a/inventoryMovements/move-1"), {
+      brandId: "sorotec",
+      branchId: "head-office",
+      organizationId: "org-a",
+      quantity: 10,
+    }));
   });
 
   it("allows a sales executive to read assigned leads", async () => {

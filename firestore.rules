@@ -63,6 +63,27 @@ service cloud.firestore {
       return canAccessBranch(orgId, request.resource.data.branchId);
     }
 
+    function isBrandPartner(orgId) {
+      return hasRole(orgId, ["brandPartner"]);
+    }
+
+    function partnerBrandIds(orgId) {
+      return memberData(orgId).keys().hasAny(["partnerBrandIds"]) &&
+        memberData(orgId).partnerBrandIds is list
+        ? memberData(orgId).partnerBrandIds
+        : [];
+    }
+
+    function canAccessInventoryBrand(orgId, brandId) {
+      return hasPermission(orgId, "inventory.read") &&
+        (!isBrandPartner(orgId) || (brandId is string && partnerBrandIds(orgId).hasAny([brandId])));
+    }
+
+    function canReadInventoryRecord(orgId) {
+      return canAccessInventoryBrand(orgId, resource.data.brandId) &&
+        (isBrandPartner(orgId) || canReadRecordBranch(orgId));
+    }
+
     function assignedOnlySalesUser(orgId) {
       return hasRole(orgId, ["salesExecutive"]) &&
         !hasRole(orgId, ["superAdmin", "managingDirector", "operationsManager", "salesManager"]);
@@ -343,10 +364,47 @@ service cloud.firestore {
       }
 
       match /offerings/{offeringId} {
-        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "offerings.read");
+        allow read: if (canReadRecordBranch(orgId) && hasPermission(orgId, "offerings.read")) || canReadInventoryRecord(orgId);
         allow create: if hasPermission(orgId, "offerings.create") && hasMetadata(orgId);
         allow update: if hasPermission(orgId, "offerings.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
         allow delete: if false;
+      }
+
+      match /inventoryBrands/{brandId} {
+        allow read: if canAccessInventoryBrand(orgId, resource.data.brandId) &&
+          (isBrandPartner(orgId) || canReadRecordBranch(orgId));
+        allow create: if hasPermission(orgId, "inventory.manageCatalog") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "inventory.manageCatalog") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow delete: if false;
+      }
+
+      match /inventoryLocations/{locationId} {
+        allow read: if !isBrandPartner(orgId) && hasPermission(orgId, "inventory.read") && canReadRecordBranch(orgId);
+        allow create: if hasPermission(orgId, "inventory.manageCatalog") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "inventory.manageCatalog") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow delete: if false;
+      }
+
+      match /inventoryBalances/{balanceId} {
+        allow read: if canReadInventoryRecord(orgId);
+        allow write: if false;
+      }
+
+      match /inventoryMovements/{movementId} {
+        allow read: if canReadInventoryRecord(orgId);
+        allow write: if false;
+      }
+
+      match /inventoryComments/{commentId} {
+        allow read: if canReadInventoryRecord(orgId);
+        allow create: if hasPermission(orgId, "inventory.comment") &&
+          organizationMatches(orgId) &&
+          canAccessInventoryBrand(orgId, request.resource.data.brandId) &&
+          request.resource.data.branchId is string &&
+          (isBrandPartner(orgId) || canWriteRequestBranch(orgId)) &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.isDeleted == false;
+        allow update, delete: if false;
       }
 
       match /rentalTenancies/{tenancyId} {
