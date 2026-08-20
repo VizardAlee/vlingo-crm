@@ -1,6 +1,8 @@
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { request } from "node:https";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { rolePermissions } from "../src/lib/permissions";
@@ -29,6 +31,59 @@ const db = getFirestore();
 const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 const firebaseCliClientId = "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com";
 const firebaseCliClientSecret = "j9iVZfS8kkCEFUPaAeJV0sAi";
+
+async function curlRequest(url: string, init: { body?: string; headers?: Record<string, string>; method?: string } = {}) {
+  return await new Promise<{ body: string; status: number }>((resolve, reject) => {
+    const headerArguments = Object.entries(init.headers ?? {}).flatMap(([name, value]) => ["--header", `${name}: ${value}`]);
+    const curl = spawn("curl", [
+      "--location",
+      "--request",
+      init.method ?? "GET",
+      "--show-error",
+      "--silent",
+      "--write-out",
+      "\n%{http_code}",
+      ...headerArguments,
+      ...(init.body ? ["--data-binary", "@-"] : []),
+      url,
+    ]);
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    curl.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    curl.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    curl.on("error", reject);
+    curl.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`curl request failed: ${Buffer.concat(stderr).toString("utf8")}`));
+        return;
+      }
+      const output = Buffer.concat(stdout).toString("utf8");
+      const separator = output.lastIndexOf("\n");
+      resolve({ body: output.slice(0, separator), status: Number(output.slice(separator + 1)) });
+    });
+    curl.stdin.end(init.body);
+  });
+}
+
+async function httpsRequest(url: string, init: { body?: string; headers?: Record<string, string>; method?: string } = {}) {
+  try {
+    return await new Promise<{ body: string; status: number }>((resolve, reject) => {
+      const req = request(url, { headers: init.headers, method: init.method }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => resolve({
+          body: Buffer.concat(chunks).toString("utf8"),
+          status: response.statusCode ?? 500,
+        }));
+      });
+      req.on("error", reject);
+      if (init.body) req.write(init.body);
+      req.end();
+    });
+  } catch {
+    return await curlRequest(url, init);
+  }
+}
 
 function isKnownRole(role: unknown): role is RoleName {
   return typeof role === "string" && role in rolePermissions;
@@ -117,17 +172,17 @@ async function getFirebaseCliAccessToken() {
     refresh_token: readFirebaseCliRefreshToken(),
   });
 
-  const response = await fetch("https://www.googleapis.com/oauth2/v3/token", {
-    body: params,
+  const response = await httpsRequest("https://www.googleapis.com/oauth2/v3/token", {
+    body: params.toString(),
     headers: { "content-type": "application/x-www-form-urlencoded" },
     method: "POST",
   });
 
-  if (!response.ok) {
-    throw new Error(`Unable to refresh Firebase CLI access token: ${response.status} ${await response.text()}`);
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`Unable to refresh Firebase CLI access token: ${response.status} ${response.body}`);
   }
 
-  const payload = await response.json() as { access_token?: string };
+  const payload = JSON.parse(response.body) as { access_token?: string };
   if (!payload.access_token) {
     throw new Error("Firebase CLI token refresh did not return an access token.");
   }
@@ -135,8 +190,8 @@ async function getFirebaseCliAccessToken() {
   return payload.access_token;
 }
 
-async function firestoreRequest<T>(accessToken: string, path: string, init: RequestInit = {}) {
-  const response = await fetch(`${firestoreBaseUrl}/${path}`, {
+async function firestoreRequest<T>(accessToken: string, path: string, init: { body?: string; headers?: Record<string, string>; method?: string } = {}) {
+  const response = await httpsRequest(`${firestoreBaseUrl}/${path}`, {
     ...init,
     headers: {
       authorization: `Bearer ${accessToken}`,
@@ -145,11 +200,11 @@ async function firestoreRequest<T>(accessToken: string, path: string, init: Requ
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Firestore REST request failed: ${response.status} ${await response.text()}`);
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`Firestore REST request failed: ${response.status} ${response.body}`);
   }
 
-  return await response.json() as T;
+  return JSON.parse(response.body) as T;
 }
 
 async function patchFirestoreDocument(accessToken: string, path: string, fields: Record<string, unknown>) {
