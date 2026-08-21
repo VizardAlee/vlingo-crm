@@ -74,18 +74,6 @@ service cloud.firestore {
         : [];
     }
 
-    function partnerBranchIds(orgId) {
-      return memberData(orgId).keys().hasAny(["partnerBranchIds"]) &&
-        memberData(orgId).partnerBranchIds is list
-        ? memberData(orgId).partnerBranchIds
-        : [memberData(orgId).branchId];
-    }
-
-    function canAccessPartnerBranch(orgId, branchId) {
-      return !isBrandPartner(orgId) ||
-        (branchId is string && partnerBranchIds(orgId).hasAny([branchId]));
-    }
-
     function canAccessInventoryBrand(orgId, brandId) {
       return hasPermission(orgId, "inventory.read") &&
         (!isBrandPartner(orgId) || (brandId is string && partnerBrandIds(orgId).hasAny([brandId])));
@@ -93,8 +81,7 @@ service cloud.firestore {
 
     function canReadInventoryRecord(orgId) {
       return canAccessInventoryBrand(orgId, resource.data.brandId) &&
-        ((isBrandPartner(orgId) && canAccessPartnerBranch(orgId, resource.data.branchId)) ||
-        (!isBrandPartner(orgId) && canReadRecordBranch(orgId)));
+        (isBrandPartner(orgId) || canReadRecordBranch(orgId));
     }
 
     function assignedOnlySalesUser(orgId) {
@@ -452,8 +439,7 @@ service cloud.firestore {
           organizationMatches(orgId) &&
           canAccessInventoryBrand(orgId, request.resource.data.brandId) &&
           request.resource.data.branchId is string &&
-          ((isBrandPartner(orgId) && canAccessPartnerBranch(orgId, request.resource.data.branchId)) ||
-          (!isBrandPartner(orgId) && canWriteRequestBranch(orgId))) &&
+          (isBrandPartner(orgId) || canWriteRequestBranch(orgId)) &&
           request.resource.data.createdBy == request.auth.uid &&
           request.resource.data.isDeleted == false;
         allow update, delete: if false;

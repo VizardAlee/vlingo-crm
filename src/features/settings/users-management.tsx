@@ -46,7 +46,7 @@ const userTourSteps: GuidedTourStep[] = [
   { target: userTourTarget("identity"), title: "User identity", body: "Enter the staff member's name, email, and optional phone number. The email is used for account setup." },
   { target: userTourTarget("branch"), title: "Branch assignment", body: "Choose the user's home branch. Branch-limited users only work inside this branch." },
   { target: userTourTarget("access"), title: "Branch access", body: "Choose whether this user is restricted to their own branch or can work across all branches." },
-  { target: userTourTarget("roles"), title: "Roles", body: "Assign one or more internal roles. Brand Representative is an exclusive read-only role; select its permitted brands and one or more representative branches." },
+  { target: userTourTarget("roles"), title: "Roles", body: "Assign one or more internal roles. Brand Representative is an exclusive read-only role; select its permitted brands, which will be visible across all branches." },
   { target: userTourTarget("invite"), title: "Generate setup link", body: "Generate a setup link that the admin can copy and share with the new user." },
   { target: userTourTarget("memberEdit"), title: "Edit existing users", body: "Use user cards or table rows to update roles, branch, branch access, and account status." },
 ];
@@ -139,10 +139,6 @@ function BrandSelector({ brands, disabled, onChange, value }: { brands: Inventor
       {!brands.length ? <p className="text-sm text-muted-foreground">Create an inventory brand before inviting a brand partner.</p> : null}
     </div>
   );
-}
-
-function PartnerBranchSelector({ branches, disabled, onChange, value }: { branches: Branch[]; disabled?: boolean; onChange: (ids: string[]) => void; value: string[] }) {
-  return <div className="grid max-h-40 gap-2 overflow-auto rounded-md border bg-white p-3 sm:grid-cols-2">{branches.filter((branch) => branch.status !== "closed").map((branch) => <label className="flex cursor-pointer items-center gap-2 text-sm" key={branch.id}><Input checked={value.includes(branch.id)} className="h-4 w-4" disabled={disabled} onChange={() => onChange(value.includes(branch.id) ? value.filter((id) => id !== branch.id) : [...value, branch.id])} type="checkbox" /><span>{branch.name}</span></label>)}</div>;
 }
 
 export function UsersManagement() {
@@ -399,7 +395,7 @@ export function UsersManagement() {
               <div data-tour={userTourTarget("roles")}>
               <Field label="Roles">
                 <RoleSelector
-                  onChange={(nextRoles) => setInvite((value) => ({ ...value, roles: normalizeAssignableRoleSelection(nextRoles, defaultAssignableRole, assignableRoles), partnerBranchIds: nextRoles.includes("brandPartner") && !value.partnerBranchIds.length ? [value.branchId] : value.partnerBranchIds }))}
+                  onChange={(nextRoles) => setInvite((value) => ({ ...value, roles: normalizeAssignableRoleSelection(nextRoles, defaultAssignableRole, assignableRoles) }))}
                   options={assignableRoles}
                   rolesValue={invite.roles}
                 />
@@ -411,10 +407,7 @@ export function UsersManagement() {
                 <Field label="Partner brand access">
                   <BrandSelector brands={brands} onChange={(partnerBrandIds) => setInvite((value) => ({ ...value, partnerBrandIds }))} value={invite.partnerBrandIds} />
                 </Field>
-                <Field label="Representative branch access">
-                  <PartnerBranchSelector branches={branches} onChange={(partnerBranchIds) => setInvite((value) => ({ ...value, partnerBranchIds }))} value={invite.partnerBranchIds} />
-                </Field>
-                <p className="mt-1 text-xs text-muted-foreground">This read-only representative will see the selected brands across every selected branch. Multiple brands and branches are supported.</p>
+                <p className="mt-1 text-xs text-muted-foreground">This read-only representative will see the selected brands across every branch.</p>
               </div>
             ) : null}
             <div className="lg:col-span-5 lg:flex lg:justify-end">
@@ -448,7 +441,7 @@ export function UsersManagement() {
                 </div>
                 <div className="grid gap-3 text-sm">
                   <Field label="Roles">
-                    <RoleSelector disabled={!canEditTarget} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeAssignableRoleSelection(nextRoles, item.role, assignableRoles), partnerBranchIds: nextRoles.includes("brandPartner") && !edit.partnerBranchIds.length ? [edit.branchId] : edit.partnerBranchIds } }))} options={protectedRole ? memberRoles(item) : assignableRoles} rolesValue={protectedRole ? memberRoles(item) : edit.roles.filter((role) => assignableRoles.includes(role))} />
+                    <RoleSelector disabled={!canEditTarget} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeAssignableRoleSelection(nextRoles, item.role, assignableRoles) } }))} options={protectedRole ? memberRoles(item) : assignableRoles} rolesValue={protectedRole ? memberRoles(item) : edit.roles.filter((role) => assignableRoles.includes(role))} />
                     {protectedRole ? <p className="text-xs text-muted-foreground">Requires role management access.</p> : null}
                   </Field>
                   <Field label="Branch">
@@ -462,7 +455,7 @@ export function UsersManagement() {
                       <option value="all">All branches</option>
                     </Select>
                   </Field>
-                  {edit.roles.includes("brandPartner") ? <><Field label="Partner brand access"><BrandSelector brands={brands} disabled={!canEditTarget} onChange={(partnerBrandIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBrandIds } }))} value={edit.partnerBrandIds} /></Field><Field label="Representative branches"><PartnerBranchSelector branches={branches} disabled={!canEditTarget} onChange={(partnerBranchIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBranchIds } }))} value={edit.partnerBranchIds} /></Field></> : null}
+                  {edit.roles.includes("brandPartner") ? <><Field label="Partner brand access"><BrandSelector brands={brands} disabled={!canEditTarget} onChange={(partnerBrandIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBrandIds } }))} value={edit.partnerBrandIds} /></Field><p className="text-xs text-muted-foreground">Selected brands are visible across every branch.</p></> : null}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <Button disabled={saving === `update-${item.id}` || !canEditTarget} onClick={() => submitMemberUpdate(item)} type="button" variant="outline">
@@ -515,9 +508,9 @@ export function UsersManagement() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="grid w-64 gap-2">
-                        <RoleSelector disabled={!canEditTarget} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeAssignableRoleSelection(nextRoles, item.role, assignableRoles), partnerBranchIds: nextRoles.includes("brandPartner") && !edit.partnerBranchIds.length ? [edit.branchId] : edit.partnerBranchIds } }))} options={protectedRole ? memberRoles(item) : assignableRoles} rolesValue={protectedRole ? memberRoles(item) : edit.roles.filter((role) => assignableRoles.includes(role))} />
+                        <RoleSelector disabled={!canEditTarget} onChange={(nextRoles) => setEditing((value) => ({ ...value, [item.id]: { ...edit, roles: normalizeAssignableRoleSelection(nextRoles, item.role, assignableRoles) } }))} options={protectedRole ? memberRoles(item) : assignableRoles} rolesValue={protectedRole ? memberRoles(item) : edit.roles.filter((role) => assignableRoles.includes(role))} />
                         <p className="text-xs text-muted-foreground">{protectedRole ? "Requires role management access." : displayRoles(item)}</p>
-                        {edit.roles.includes("brandPartner") ? <><BrandSelector brands={brands} disabled={!canEditTarget} onChange={(partnerBrandIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBrandIds } }))} value={edit.partnerBrandIds} /><PartnerBranchSelector branches={branches} disabled={!canEditTarget} onChange={(partnerBranchIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBranchIds } }))} value={edit.partnerBranchIds} /></> : null}
+                        {edit.roles.includes("brandPartner") ? <><BrandSelector brands={brands} disabled={!canEditTarget} onChange={(partnerBrandIds) => setEditing((value) => ({ ...value, [item.id]: { ...edit, partnerBrandIds } }))} value={edit.partnerBrandIds} /><p className="text-xs text-muted-foreground">Selected brands are visible across every branch.</p></> : null}
                       </div>
                     </td>
                     <td className="px-4 py-3">

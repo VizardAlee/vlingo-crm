@@ -13,7 +13,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { BrowserNotificationListener } from "@/features/notifications/browser-notification-listener";
 import { NotificationMenu } from "@/features/notifications/notification-menu";
 import { WhatsNew } from "@/features/updates/whats-new";
-import { canAccessAllBranches, defaultAppRoute, hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { canAccessAllBranches, defaultAppRoute, hasAnyPermission, hasPermission, memberRoles } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { listUserNotifications } from "@/services/notifications";
 import { listBranches } from "@/services/users";
@@ -52,10 +52,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const shouldRedirectFromDashboard = pathname === "/dashboard" && Boolean(member) && !canViewCurrentRoute;
   const canCreateLead = hasPermission(member, "leads.create");
   const canViewNotifications = hasAnyPermission(member, notificationAccessPermissions);
+  const isBrandPartner = memberRoles(member).includes("brandPartner");
   const visibleBranches = useMemo(() => (
     canAccessAllBranches(member) ? branches : branches.filter((branch) => branch.id === member?.branchId)
   ), [branches, member]);
-  const activeBranchName = visibleBranches.find((branch) => branch.id === activeBranchId)?.name ?? "Head office";
+  const activeBranchName = isBrandPartner ? "All branches" : visibleBranches.find((branch) => branch.id === activeBranchId)?.name ?? "Head office";
   const canSwitchBranches = canAccessAllBranches(member) && visibleBranches.length > 1;
 
   useEffect(() => {
@@ -337,11 +338,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input aria-label="Global search" placeholder="Search leads, clients, properties, tasks" />
             </div>
-            <Select aria-label="Branch selector" className="hidden w-40 md:block" value={activeBranchId} onChange={(event) => setActiveBranchId(event.target.value)}>
+            {!isBrandPartner ? <Select aria-label="Branch selector" className="hidden w-40 md:block" value={activeBranchId} onChange={(event) => setActiveBranchId(event.target.value)}>
               {visibleBranches.length ? visibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>) : (
                 <option value={activeBranchId}>{activeBranchName}</option>
               )}
-            </Select>
+            </Select> : <span className="hidden rounded-md border bg-muted/40 px-4 py-2 text-sm font-medium md:block">All branches</span>}
             {canCreateLead ? (
               <ButtonLink className="hidden lg:inline-flex" href="/leads/new" variant="secondary">
                 <Plus className="h-4 w-4" />

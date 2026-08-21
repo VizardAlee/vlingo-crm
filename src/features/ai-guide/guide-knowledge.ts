@@ -55,7 +55,7 @@ Current signed-in user:
 - Roles: ${roles.length ? roles.join(", ") : "No role recorded"}
 - Branch: ${typeof member.branchId === "string" && member.branchId ? member.branchId : "Not provided"}
 - Branch access: ${isSuperAdmin || member.branchAccess === "all" ? "all branches" : "assigned branch only"}
-- Brand representative branches: ${Array.isArray(member.partnerBranchIds) && member.partnerBranchIds.length ? member.partnerBranchIds.filter((value): value is string => typeof value === "string").join(", ") : "Not applicable or home branch only"}
+- Brand representative branch scope: All organization branches
 - Accessible areas inferred from current permissions: ${accessibleAreas.length ? accessibleAreas.join(", ") : "AI Guide only"}
 - Explicit permissions: ${isSuperAdmin ? "Unrestricted super admin access" : permissions.length ? permissions.join(", ") : "None recorded"}
 
@@ -179,8 +179,8 @@ export const guideTopics: GuideTopic[] = [
     title: "Give a brand partner access to inventory reports",
     steps: [
       "Create the inventory brands first under Inventory Setup.",
-      "Go to Settings, then Users; create or invite the guest with the Brand partner role, then select one or more permitted brands and representative branches.",
-      "After signing in, the partner can open Inventory to view only balances, movements, recorded sale issues, trace records, and reports belonging to their assigned brands and branches.",
+      "Go to Settings, then Users; create or invite the guest with the Brand Representative role, then select one or more permitted brands.",
+      "After signing in, the representative can open Inventory to view balances, movements, recorded sale issues, trace records, and reports for their assigned brands across every branch.",
       "The partner can export the scoped report and use Comments to collaborate on the selected brand and report period.",
       "Brand partners cannot access suppliers, purchase orders, stock counts, reservations, approvals, setup, or stock-changing actions.",
     ],

@@ -38,29 +38,27 @@ function partnerBrandIds(member: Member | null) {
   return member?.role === "brandPartner" || member?.roles?.includes("brandPartner") ? member.partnerBrandIds ?? [] : null;
 }
 
-function partnerBranchIds(member: Member | null) {
-  if (member?.role !== "brandPartner" && !member?.roles?.includes("brandPartner")) return null;
-  return member.partnerBranchIds?.length ? member.partnerBranchIds : member.branchId ? [member.branchId] : [];
-}
-
 async function scopedCollection<T extends { id: string }>(organizationId: string, collectionName: "inventoryBalances" | "inventoryBrands" | "inventoryComments" | "inventoryLocations" | "inventoryLots" | "inventoryMovements" | "inventoryPurchaseOrders" | "inventoryReservations" | "inventorySerials" | "inventoryStockCounts" | "inventorySuppliers" | "offerings", member: Member | null, constraints: QueryConstraint[] = []) {
   const firestore = assertDb();
   const brandIds = partnerBrandIds(member);
-  const branchIds = partnerBranchIds(member);
   if (brandIds && !brandIds.length) return [];
-  if (branchIds && !branchIds.length) return [];
 
   try {
     const branchConstraints = !brandIds && member && member.branchAccess !== "all" && member.role !== "superAdmin" && !member.roles?.includes("superAdmin")
       ? [where("branchId", "==", member.branchId)]
       : [];
-    const snapshots = brandIds && branchIds
-      ? await Promise.all(brandIds.flatMap((brandId) => branchIds.map((branchId) => getDocs(query(collection(firestore, orgCollectionPath(organizationId, collectionName)), where("brandId", "==", brandId), where("branchId", "==", branchId), ...constraints)))))
+    const snapshots = brandIds
+      ? await Promise.all(brandIds.map((brandId) => getDocs(query(collection(firestore, orgCollectionPath(organizationId, collectionName)), where("brandId", "==", brandId), ...constraints))))
       : [await getDocs(query(collection(firestore, orgCollectionPath(organizationId, collectionName)), ...branchConstraints, ...constraints))];
     const records = snapshots.flatMap((snapshot) => snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as T));
     return Array.from(new Map(records.map((item) => [item.id, item])).values());
   } catch (error) {
-    throw enrichFirestoreError(error, { action: "list", collectionName, organizationId });
+    throw enrichFirestoreError(error, {
+      action: "list",
+      collectionName,
+      organizationId,
+      requiredPermission: brandIds ? "inventory.read for an assigned brand across all branches" : undefined,
+    });
   }
 }
 

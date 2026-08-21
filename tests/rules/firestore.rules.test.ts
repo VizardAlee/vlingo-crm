@@ -136,37 +136,37 @@ describe("Beacon Firestore rules", () => {
     await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/item-revo_warehouse")));
   });
 
-  it("scopes brand representatives to multiple assigned branches", async () => {
-    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"], partnerBranchIds: ["head-office", "abuja"] });
+  it("allows brand representatives to read assigned brands across every branch", async () => {
+    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const adminDb = context.firestore();
       for (const branchId of ["head-office", "abuja", "kano"]) {
         await setDoc(doc(adminDb, `organizations/org-a/inventoryBalances/sorotec-${branchId}`), { brandId: "sorotec", branchId, offeringId: "item-sorotec", organizationId: "org-a", quantityOnHand: 5 });
       }
+      await setDoc(doc(adminDb, "organizations/org-a/inventoryBalances/revo-head-office"), { brandId: "revo", branchId: "head-office", offeringId: "item-revo", organizationId: "org-a", quantityOnHand: 5 });
     });
     const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
     await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/sorotec-head-office")));
     await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/sorotec-abuja")));
-    await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/sorotec-kano")));
-    await assertSucceeds(getDocs(query(collection(partnerDb, "organizations/org-a/inventoryBalances"), where("brandId", "==", "sorotec"), where("branchId", "==", "abuja"))));
-    await assertFails(getDocs(query(collection(partnerDb, "organizations/org-a/inventoryBalances"), where("brandId", "==", "sorotec"))));
+    await assertSucceeds(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/sorotec-kano")));
+    await assertFails(getDoc(doc(partnerDb, "organizations/org-a/inventoryBalances/revo-head-office")));
+    await assertSucceeds(getDocs(query(collection(partnerDb, "organizations/org-a/inventoryBalances"), where("brandId", "==", "sorotec"))));
+    await assertFails(getDocs(query(collection(partnerDb, "organizations/org-a/inventoryBalances"), where("brandId", "==", "revo"))));
   });
 
   it("allows brand representatives to list assigned products with the inventory query", async () => {
-    const partnerBranchIds = ["head-office", "kdo", "kn-civic-center"];
-    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"], partnerBranchIds });
+    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const adminDb = context.firestore();
       await setDoc(doc(adminDb, "organizations/org-a/offerings/sorotec-product"), { brandId: "sorotec", branchId: "head-office", isDeleted: false, name: "Sorotec inverter", organizationId: "org-a", type: "solarEquipment" });
       await setDoc(doc(adminDb, "organizations/org-a/offerings/revo-product"), { brandId: "revo", branchId: "head-office", isDeleted: false, name: "Revo inverter", organizationId: "org-a", type: "solarEquipment" });
     });
     const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
-    await Promise.all(partnerBranchIds.map((branchId) => assertSucceeds(getDocs(query(
+    await assertSucceeds(getDocs(query(
       collection(partnerDb, "organizations/org-a/offerings"),
       where("brandId", "==", "sorotec"),
-      where("branchId", "==", branchId),
       where("isDeleted", "==", false),
-    )))));
+    )));
   });
 
   it("requires inventory products to reference an active brand", async () => {

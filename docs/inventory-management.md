@@ -55,10 +55,9 @@ The Inventory page includes a permission-aware **Guide me** tour. Internal users
 1. Open Settings > Users and start an invitation.
 2. Select the `Brand partner` role. It is intentionally exclusive and cannot be combined with an internal role.
 3. Select one or more brands. The invitation is rejected if no active brand is selected.
-4. Select one or more representative branches. The same representative can cover multiple brands and multiple branches.
-5. Generate and share the setup link. Existing users can also be converted to a brand representative by editing their role, brand access, and branch access under Settings > Users.
+4. Generate and share the setup link. Existing users can also be converted to a brand representative by editing their role and brand access under Settings > Users.
 
-The partner sees only the Inventory area. Reports, item balances, movements, recorded product-sale issues, exported CSV data, and comments are restricted to the intersection of the member's `partnerBrandIds` and `partnerBranchIds`. This restriction is enforced in both application queries and Firestore rules. A sale appears on the representative dashboard when an inventory issue is recorded with purpose `sale`, or when a deal-linked reservation is fulfilled.
+The partner sees only the Inventory area. Reports, item balances, movements, recorded product-sale issues, exported CSV data, and comments are restricted to the member's `partnerBrandIds` across every organization branch. This brand-only restriction is enforced in both application queries and Firestore rules. A sale appears on the representative dashboard when an inventory issue is recorded with purpose `sale`, or when a deal-linked reservation is fulfilled.
 
 ## Collections
 

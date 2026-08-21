@@ -191,17 +191,6 @@ async function requirePartnerBrandIds(organizationId: string, roles: RoleName[],
   return ids;
 }
 
-async function requirePartnerBranchIds(organizationId: string, roles: RoleName[], value: unknown) {
-  if (!roles.includes("brandPartner")) return [];
-  const ids = Array.from(new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : []));
-  if (!ids.length) throw new HttpsError("invalid-argument", "Select at least one branch for a brand representative.");
-  const snapshots = await db.getAll(...ids.map((id) => db.doc(`organizations/${organizationId}/branches/${id}`)));
-  if (snapshots.some((snapshot) => !snapshot.exists || snapshot.data()?.status === "closed")) {
-    throw new HttpsError("invalid-argument", "Every representative branch must exist and be active.");
-  }
-  return ids;
-}
-
 function requireBranchAccess(value: unknown) {
   return value === "all" ? "all" : "own";
 }
@@ -708,7 +697,7 @@ export const provisionOrganizationMember = onCall(callableOptions, async (reques
     assertCanAssignRoles(actor, roles);
     assertCanGrantBranchAccess(actor, branchAccess);
     const partnerBrandIds = await requirePartnerBrandIds(organizationId, roles, request.data?.partnerBrandIds);
-    const partnerBranchIds = await requirePartnerBranchIds(organizationId, roles, request.data?.partnerBranchIds);
+    const partnerBranchIds: string[] = [];
 
     const user = await getOrCreateUser(email, displayName);
     const memberRef = db.doc(`organizations/${organizationId}/members/${user.uid}`);
@@ -1182,7 +1171,7 @@ export const updateOrganizationMemberRole = onCall(callableOptions, async (reque
   assertCanAssignRoles(actor, roles);
   assertCanGrantBranchAccess(actor, branchAccess);
   const partnerBrandIds = await requirePartnerBrandIds(organizationId, roles, request.data?.partnerBrandIds);
-  const partnerBranchIds = await requirePartnerBranchIds(organizationId, roles, request.data?.partnerBranchIds);
+  const partnerBranchIds: string[] = [];
 
   if (targetUid === request.auth.uid) {
     throw new HttpsError("failed-precondition", "You cannot change your own role or branch.");
