@@ -153,20 +153,20 @@ describe("Beacon Firestore rules", () => {
   });
 
   it("allows brand representatives to list assigned products with the inventory query", async () => {
-    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"], partnerBranchIds: ["head-office"] });
+    const partnerBranchIds = ["head-office", "kdo", "kn-civic-center"];
+    await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"], partnerBranchIds });
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const adminDb = context.firestore();
       await setDoc(doc(adminDb, "organizations/org-a/offerings/sorotec-product"), { brandId: "sorotec", branchId: "head-office", isDeleted: false, name: "Sorotec inverter", organizationId: "org-a", type: "solarEquipment" });
       await setDoc(doc(adminDb, "organizations/org-a/offerings/revo-product"), { brandId: "revo", branchId: "head-office", isDeleted: false, name: "Revo inverter", organizationId: "org-a", type: "solarEquipment" });
     });
     const partnerDb = testEnv.authenticatedContext("partner-1").firestore();
-    const assignedProducts = query(
+    await Promise.all(partnerBranchIds.map((branchId) => assertSucceeds(getDocs(query(
       collection(partnerDb, "organizations/org-a/offerings"),
       where("brandId", "==", "sorotec"),
-      where("branchId", "==", "head-office"),
+      where("branchId", "==", branchId),
       where("isDeleted", "==", false),
-    );
-    await assertSucceeds(getDocs(assignedProducts));
+    )))));
   });
 
   it("requires inventory products to reference an active brand", async () => {
