@@ -15,7 +15,10 @@ interface GuideMemberContext {
 }
 
 const guideAreaPermissions = [
-  ["Dashboard", ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"]],
+  [
+    "Dashboard",
+    ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"],
+  ],
   ["Leads and Lead Locations", ["leads.readAssigned", "leads.readAll"]],
   ["Clients", ["clients.read"]],
   ["Deals", ["deals.read"]],
@@ -35,19 +38,31 @@ const guideAreaPermissions = [
 ] as const;
 
 export function buildGuideMemberContext(member: GuideMemberContext) {
-  const roles = Array.from(new Set([
-    ...(Array.isArray(member.roles) ? member.roles.filter((role): role is string => typeof role === "string") : []),
-    ...(typeof member.role === "string" ? [member.role] : []),
-  ]));
+  const roles = Array.from(
+    new Set([
+      ...(Array.isArray(member.roles)
+        ? member.roles.filter(
+            (role): role is string => typeof role === "string",
+          )
+        : []),
+      ...(typeof member.role === "string" ? [member.role] : []),
+    ]),
+  );
   const permissions = Array.isArray(member.permissions)
-    ? member.permissions.filter((permission): permission is string => typeof permission === "string")
+    ? member.permissions.filter(
+        (permission): permission is string => typeof permission === "string",
+      )
     : [];
   const isSuperAdmin = roles.includes("superAdmin");
   const accessibleAreas = isSuperAdmin
     ? guideAreaPermissions.map(([area]) => area)
     : guideAreaPermissions
-      .filter(([, requiredPermissions]) => requiredPermissions.some((permission) => permissions.includes(permission)))
-      .map(([area]) => area);
+        .filter(([, requiredPermissions]) =>
+          requiredPermissions.some((permission) =>
+            permissions.includes(permission),
+          ),
+        )
+        .map(([area]) => area);
 
   return `
 Current signed-in user:
@@ -69,7 +84,15 @@ Permission guidance rules:
 
 export const guideTopics: GuideTopic[] = [
   {
-    keywords: ["crm", "concept", "customer relationship", "what is crm", "why crm", "pipeline", "customer journey"],
+    keywords: [
+      "crm",
+      "concept",
+      "customer relationship",
+      "what is crm",
+      "why crm",
+      "pipeline",
+      "customer journey",
+    ],
     title: "Understand the CRM concept",
     steps: [
       "CRM means Customer Relationship Management. It is the system and process a company uses to track prospects, clients, conversations, deals, tasks, and revenue.",
@@ -82,7 +105,14 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["lead", "capture", "new lead", "import lead", "geotag", "location"],
+    keywords: [
+      "lead",
+      "capture",
+      "new lead",
+      "import lead",
+      "geotag",
+      "location",
+    ],
     title: "Create or import a lead",
     steps: [
       "Go to Leads, then choose Create Lead.",
@@ -108,7 +138,18 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["how inventory works", "inventory system", "inventory overview", "inventory report", "stock report", "stock balance", "available stock", "reserved stock", "low stock", "inventory csv"],
+    keywords: [
+      "how inventory works",
+      "inventory system",
+      "inventory overview",
+      "inventory report",
+      "stock report",
+      "stock balance",
+      "available stock",
+      "reserved stock",
+      "low stock",
+      "inventory csv",
+    ],
     title: "Review inventory balances and reports",
     steps: [
       "Go to Inventory and open Overview to see on-hand, reserved, and available quantities, stock value, low-stock items, and balances by location.",
@@ -119,30 +160,61 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["purchase order", "purchase stock", "procurement", "supplier", "receive purchase", "partial receipt"],
+    keywords: [
+      "purchase order",
+      "purchase stock",
+      "procurement",
+      "supplier",
+      "receive purchase",
+      "partial receipt",
+      "credit purchase",
+      "supplier payment",
+      "amount owing",
+    ],
     title: "Procure and receive inventory",
     steps: [
-      "Go to Inventory, then Procurement; creating suppliers and purchase orders requires inventory.procure permission.",
-      "Create or select an active supplier, then add one or more catalogue items with quantities, unit costs, expected date, tax, and notes.",
+      "Go to Inventory, then Purchasing; creating suppliers and purchase orders requires inventory.procure permission.",
+      "Create or select an active supplier, add the catalogue items, then choose Paid in full, Credit agreement, or Part payment. Credit and part-paid orders require a balance due date.",
       "Submit the purchase order for approval. Its creator cannot approve it, so another user with inventory.approve permission must approve or reject it from Approvals.",
       "After approval, receive each line into a stock location. Partial receipts are allowed and the order remains Part received until every line is complete.",
+      "Receiving stock and paying the supplier are separate. Authorized inventory or finance users can record later payments against the outstanding order balance.",
       "For batch items, enter the batch number and optional expiry date. For serial items, enter one unique serial number for every unit received.",
       "Receiving updates the purchase order, location balance, trace register, product total, and movement ledger together.",
     ],
   },
   {
-    keywords: ["stock movement", "transfer stock", "issue stock", "record product sale", "inventory sale", "inventory receipt", "inventory adjustment", "return stock", "barcode"],
+    keywords: [
+      "stock movement",
+      "transfer stock",
+      "issue stock",
+      "record product sale",
+      "inventory sale",
+      "inventory receipt",
+      "inventory adjustment",
+      "return stock",
+      "barcode",
+      "opening stock",
+      "existing stock",
+      "initial quantity",
+    ],
     title: "Record a stock movement",
     steps: [
-      "Go to Inventory, then Movements. The movement form appears only when your role has the permission required for the selected action.",
-      "Scan the item's barcode or select the product, then choose Receipt, Issue, Transfer, Adjustment, Customer return, or Supplier return. For a sale, choose Issue and set its purpose to Sale.",
+      "Go to Inventory, then Add / move stock. The form shows only actions allowed by your role.",
+      "For stock already owned when the system is introduced, choose Enter existing / opening stock. For a delivery without a purchase order, choose Receive stock without a purchase order.",
+      "Scan the item's barcode or select the product. For a sale, choose Record stock leaving and set its purpose to Sale.",
       "Enter the quantity and required source or destination location. Add the supplier, purchase order, job, or sale reference when applicable.",
       "For traceability-controlled items, provide the required batch number or exactly one serial number per unit.",
       "Submit the movement. The system verifies available stock and updates all affected balances atomically before adding the ledger entry.",
     ],
   },
   {
-    keywords: ["stock count", "cycle count", "physical count", "inventory variance", "post variance"],
+    keywords: [
+      "stock count",
+      "cycle count",
+      "physical count",
+      "inventory variance",
+      "post variance",
+    ],
     title: "Perform and approve a stock count",
     steps: [
       "Go to Inventory, then Counts; submitting a count requires inventory.count permission.",
@@ -153,7 +225,13 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["reserve inventory", "reserve stock", "stock reservation", "fulfill reservation", "release reservation"],
+    keywords: [
+      "reserve inventory",
+      "reserve stock",
+      "stock reservation",
+      "fulfill reservation",
+      "release reservation",
+    ],
     title: "Reserve stock for work or a sale",
     steps: [
       "Go to Inventory, then Reservations; this requires inventory.reserve permission.",
@@ -164,7 +242,14 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["batch tracking", "lot tracking", "serial tracking", "traceability", "expiry date", "serial number"],
+    keywords: [
+      "batch tracking",
+      "lot tracking",
+      "serial tracking",
+      "traceability",
+      "expiry date",
+      "serial number",
+    ],
     title: "Use batch and serial traceability",
     steps: [
       "Set the item's Traceability field in Products/Services to None, Batch, or Serial and add its barcode or GTIN when available.",
@@ -175,7 +260,15 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["brand partner", "brand rep", "brand representative", "partner inventory", "guest inventory", "partner report", "invite partner"],
+    keywords: [
+      "brand partner",
+      "brand rep",
+      "brand representative",
+      "partner inventory",
+      "guest inventory",
+      "partner report",
+      "invite partner",
+    ],
     title: "Give a brand partner access to inventory reports",
     steps: [
       "Create the inventory brands first under Inventory Setup.",
@@ -186,7 +279,14 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["finance", "payment", "receipt", "expense", "commission", "approval"],
+    keywords: [
+      "finance",
+      "payment",
+      "receipt",
+      "expense",
+      "commission",
+      "approval",
+    ],
     title: "Record finance activity",
     steps: [
       "Go to Finance.",
@@ -198,7 +298,14 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["email", "smtp", "bulk email", "message", "client email", "lead email"],
+    keywords: [
+      "email",
+      "smtp",
+      "bulk email",
+      "message",
+      "client email",
+      "lead email",
+    ],
     title: "Send emails from the CRM",
     steps: [
       "Go to Settings, then Email Settings.",
@@ -210,7 +317,14 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["notification", "unread", "read", "alert", "browser notification", "push notification"],
+    keywords: [
+      "notification",
+      "unread",
+      "read",
+      "alert",
+      "browser notification",
+      "push notification",
+    ],
     title: "Use notifications",
     steps: [
       "Open Notifications from the Workspace section.",
@@ -222,7 +336,13 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["calendar", "google calendar", "sync task", "dated task", "follow-up date"],
+    keywords: [
+      "calendar",
+      "google calendar",
+      "sync task",
+      "dated task",
+      "follow-up date",
+    ],
     title: "Connect tasks to Google Calendar",
     steps: [
       "Go to Settings, then Google Calendar, and choose Connect Google Calendar.",
@@ -234,7 +354,15 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["report", "performance", "amount generated", "revenue report", "conversion rate", "my performance", "csv"],
+    keywords: [
+      "report",
+      "performance",
+      "amount generated",
+      "revenue report",
+      "conversion rate",
+      "my performance",
+      "csv",
+    ],
     title: "Review personal performance",
     steps: [
       "Go to Reports and open My performance.",
@@ -259,7 +387,14 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["invite", "invitation", "invite link", "expired invite", "resend link", "new user"],
+    keywords: [
+      "invite",
+      "invitation",
+      "invite link",
+      "expired invite",
+      "resend link",
+      "new user",
+    ],
     title: "Invite or re-invite a user",
     steps: [
       "Go to Settings, then Users; this requires user-management permission.",
@@ -270,7 +405,14 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["role", "permission", "branch", "sales executive", "manager", "super admin"],
+    keywords: [
+      "role",
+      "permission",
+      "branch",
+      "sales executive",
+      "manager",
+      "super admin",
+    ],
     title: "Understand roles and branch access",
     steps: [
       "Super admins have unrestricted app access and can switch branches.",
@@ -281,7 +423,17 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["property", "unit", "offering", "catalog", "product", "service", "solar", "materials", "services"],
+    keywords: [
+      "property",
+      "unit",
+      "offering",
+      "catalog",
+      "product",
+      "service",
+      "solar",
+      "materials",
+      "services",
+    ],
     title: "Manage properties, units, and products/services",
     steps: [
       "Use Properties and Units for real-estate inventory.",
@@ -301,7 +453,13 @@ export const guideTopics: GuideTopic[] = [
     ],
   },
   {
-    keywords: ["organization", "logo", "branding", "primary color", "company name"],
+    keywords: [
+      "organization",
+      "logo",
+      "branding",
+      "primary color",
+      "company name",
+    ],
     title: "Update organization branding",
     steps: [
       "Go to Settings, then Organization; this requires organization administration permission.",
@@ -335,7 +493,7 @@ Main routes and modules:
 - Deals: dynamic finance-facing pipeline for property sales, rentals, solar, materials, services, consultancy, installation, and custom work. Deal forms reveal fields based on category and type, inherit useful lead/client/product data, and record owner/creator attribution.
 - Properties and Units: real-estate inventory and unit management.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
-- Inventory: branch-aware stock balances, movement ledger, supplier master, purchase orders and partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, CSV reports, and brand-partner collaboration.
+- Inventory: branch-aware stock balances, guided opening-stock entry, movement ledger, supplier master, paid/part-paid/credit purchase orders, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, CSV reports, and brand-partner collaboration.
 - Rentals: tenancy, rent payment, lease dates, renewal tasks, and tenant follow-up.
 - Development: property development projects, project managers, delivery details, and related operational work.
 - Marketing: campaign records connected to lead sources and sales follow-up.
@@ -377,7 +535,9 @@ Answer style:
 
 export function fallbackGuideAnswer(question: string) {
   const normalized = question.toLowerCase();
-  const topic = guideTopics.find((item) => item.keywords.some((keyword) => normalized.includes(keyword)));
+  const topic = guideTopics.find((item) =>
+    item.keywords.some((keyword) => normalized.includes(keyword)),
+  );
   const selected = topic ?? {
     title: "Use the CRM effectively",
     steps: [

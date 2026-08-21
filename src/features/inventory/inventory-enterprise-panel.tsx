@@ -1,6 +1,17 @@
 "use client";
 
-import { Check, ClipboardCheck, PackagePlus, Plus, RefreshCw, RotateCcw, ShieldCheck, Truck, X } from "lucide-react";
+import {
+  Banknote,
+  Check,
+  ClipboardCheck,
+  PackagePlus,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  Truck,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,18 +38,60 @@ import {
   listInventorySuppliers,
   postStockCount,
   receivePurchaseOrderLine,
+  recordPurchaseOrderPayment,
 } from "@/services/inventory";
-import type { InventoryBalance, InventoryLocation, InventoryLot, InventoryPurchaseOrder, InventoryReservation, InventorySerial, InventoryStockCount, InventorySupplier, Member, Offering } from "@/types/crm";
+import type {
+  InventoryBalance,
+  InventoryLocation,
+  InventoryLot,
+  InventoryPurchaseOrder,
+  InventoryReservation,
+  InventorySerial,
+  InventoryStockCount,
+  InventorySupplier,
+  Member,
+  Offering,
+} from "@/types/crm";
 
-export type InventoryEnterpriseMode = "procurement" | "counts" | "reservations" | "traceability" | "approvals";
-type PurchaseLineDraft = { offeringId: string; quantity: number; unitCost: number };
-type CountLineDraft = { offeringId: string; locationId: string; actualQuantity: number; reason: string };
+export type InventoryEnterpriseMode =
+  | "procurement"
+  | "counts"
+  | "reservations"
+  | "traceability"
+  | "approvals";
+type PurchaseLineDraft = {
+  offeringId: string;
+  quantity: number;
+  unitCost: number;
+};
+type CountLineDraft = {
+  offeringId: string;
+  locationId: string;
+  actualQuantity: number;
+  reason: string;
+};
 
-export function InventoryEnterprisePanel({ balances, items, locations, member, mode, onChanged }: { balances: InventoryBalance[]; items: Offering[]; locations: InventoryLocation[]; member: Member | null; mode: InventoryEnterpriseMode; onChanged: () => Promise<void> }) {
+export function InventoryEnterprisePanel({
+  balances,
+  items,
+  locations,
+  member,
+  mode,
+  onChanged,
+}: {
+  balances: InventoryBalance[];
+  items: Offering[];
+  locations: InventoryLocation[];
+  member: Member | null;
+  mode: InventoryEnterpriseMode;
+  onChanged: () => Promise<void>;
+}) {
   const { activeBranchId, activeOrganizationId, user } = useAuth();
   const toast = useToast();
   const [suppliers, setSuppliers] = useState<InventorySupplier[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<InventoryPurchaseOrder[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<
+    InventoryPurchaseOrder[]
+  >([]);
   const [counts, setCounts] = useState<InventoryStockCount[]>([]);
   const [reservations, setReservations] = useState<InventoryReservation[]>([]);
   const [lots, setLots] = useState<InventoryLot[]>([]);
@@ -46,91 +99,1724 @@ export function InventoryEnterprisePanel({ balances, items, locations, member, m
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [supplierForm, setSupplierForm] = useState({ name: "", code: "", contactName: "", email: "", phoneNumber: "", address: "", taxId: "", paymentTerms: "", brandIds: [] as string[] });
-  const [poForm, setPoForm] = useState({ supplierId: "", expectedAt: "", taxAmount: 0, notes: "", lines: [{ offeringId: "", quantity: 1, unitCost: 0 }] as PurchaseLineDraft[] });
-  const [countForm, setCountForm] = useState({ name: "", notes: "", lines: [{ offeringId: "", locationId: "", actualQuantity: 0, reason: "" }] as CountLineDraft[] });
-  const [reservationForm, setReservationForm] = useState({ offeringId: "", locationId: "", quantity: 1, batchNumber: "", serialText: "", relatedEntityType: "deal" as "deal" | "project" | "workOrder" | "other", relatedEntityId: "", relatedEntityName: "", expiresAt: "", notes: "" });
-  const [receiptDrafts, setReceiptDrafts] = useState<Record<string, { locationId: string; quantity: number; batchNumber: string; expiryDate: string; serialText: string }>>({});
+  const [supplierForm, setSupplierForm] = useState({
+    name: "",
+    code: "",
+    contactName: "",
+    email: "",
+    phoneNumber: "",
+    address: "",
+    taxId: "",
+    paymentTerms: "",
+    brandIds: [] as string[],
+  });
+  const [poForm, setPoForm] = useState({
+    supplierId: "",
+    expectedAt: "",
+    taxAmount: 0,
+    paymentArrangement: "credit" as "paid" | "credit" | "partPaid",
+    amountPaid: 0,
+    paymentMethod: "bankTransfer" as
+      | "cash"
+      | "bankTransfer"
+      | "card"
+      | "cheque"
+      | "other",
+    paymentReference: "",
+    paymentDueAt: "",
+    notes: "",
+    lines: [
+      { offeringId: "", quantity: 1, unitCost: 0 },
+    ] as PurchaseLineDraft[],
+  });
+  const [countForm, setCountForm] = useState({
+    name: "",
+    notes: "",
+    lines: [
+      { offeringId: "", locationId: "", actualQuantity: 0, reason: "" },
+    ] as CountLineDraft[],
+  });
+  const [reservationForm, setReservationForm] = useState({
+    offeringId: "",
+    locationId: "",
+    quantity: 1,
+    batchNumber: "",
+    serialText: "",
+    relatedEntityType: "deal" as "deal" | "project" | "workOrder" | "other",
+    relatedEntityId: "",
+    relatedEntityName: "",
+    expiresAt: "",
+    notes: "",
+  });
+  const [receiptDrafts, setReceiptDrafts] = useState<
+    Record<
+      string,
+      {
+        locationId: string;
+        quantity: number;
+        batchNumber: string;
+        expiryDate: string;
+        serialText: string;
+      }
+    >
+  >({});
+  const [paymentDrafts, setPaymentDrafts] = useState<
+    Record<
+      string,
+      {
+        amount: number;
+        paymentMethod: "cash" | "bankTransfer" | "card" | "cheque" | "other";
+        paymentReference: string;
+        paidAt: string;
+      }
+    >
+  >({});
   const [traceSearch, setTraceSearch] = useState("");
   const canProcure = hasPermission(member, "inventory.procure");
+  const canRecordPayment =
+    canProcure || hasPermission(member, "finance.update");
   const canCount = hasPermission(member, "inventory.count");
   const canReserve = hasPermission(member, "inventory.reserve");
   const canApprove = hasPermission(member, "inventory.approve");
-  const countableItems = useMemo(() => items.filter((item) => !item.trackingMode || item.trackingMode === "none"), [items]);
+  const countableItems = useMemo(
+    () =>
+      items.filter(
+        (item) => !item.trackingMode || item.trackingMode === "none",
+      ),
+    [items],
+  );
+  const purchaseOrderTotal =
+    poForm.lines.reduce((sum, line) => sum + line.quantity * line.unitCost, 0) +
+    poForm.taxAmount;
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const [nextSuppliers, nextOrders, nextCounts, nextReservations, nextLots, nextSerials] = await Promise.all([
-        listInventorySuppliers(activeOrganizationId, member), listInventoryPurchaseOrders(activeOrganizationId, member), listInventoryStockCounts(activeOrganizationId, member), listInventoryReservations(activeOrganizationId, member), listInventoryLots(activeOrganizationId, member), listInventorySerials(activeOrganizationId, member),
+      const [
+        nextSuppliers,
+        nextOrders,
+        nextCounts,
+        nextReservations,
+        nextLots,
+        nextSerials,
+      ] = await Promise.all([
+        listInventorySuppliers(activeOrganizationId, member),
+        listInventoryPurchaseOrders(activeOrganizationId, member),
+        listInventoryStockCounts(activeOrganizationId, member),
+        listInventoryReservations(activeOrganizationId, member),
+        listInventoryLots(activeOrganizationId, member),
+        listInventorySerials(activeOrganizationId, member),
       ]);
-      setSuppliers(nextSuppliers); setPurchaseOrders(nextOrders); setCounts(nextCounts); setReservations(nextReservations); setLots(nextLots); setSerials(nextSerials);
-      setPoForm((value) => ({ ...value, supplierId: value.supplierId || nextSuppliers[0]?.id || "" }));
-      setReservationForm((value) => ({ ...value, offeringId: value.offeringId || items[0]?.id || "", locationId: value.locationId || locations[0]?.id || "" }));
-      setCountForm((value) => ({ ...value, lines: value.lines.map((line) => ({ ...line, offeringId: line.offeringId || countableItems[0]?.id || "", locationId: line.locationId || locations[0]?.id || "" })) }));
-    } catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Unable to load enterprise inventory records."); }
-    finally { setLoading(false); }
+      setSuppliers(nextSuppliers);
+      setPurchaseOrders(nextOrders);
+      setCounts(nextCounts);
+      setReservations(nextReservations);
+      setLots(nextLots);
+      setSerials(nextSerials);
+      setPoForm((value) => ({
+        ...value,
+        supplierId: value.supplierId || nextSuppliers[0]?.id || "",
+      }));
+      setReservationForm((value) => ({
+        ...value,
+        offeringId: value.offeringId || items[0]?.id || "",
+        locationId: value.locationId || locations[0]?.id || "",
+      }));
+      setCountForm((value) => ({
+        ...value,
+        lines: value.lines.map((line) => ({
+          ...line,
+          offeringId: line.offeringId || countableItems[0]?.id || "",
+          locationId: line.locationId || locations[0]?.id || "",
+        })),
+      }));
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Unable to load enterprise inventory records.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [activeOrganizationId, countableItems, items, locations, member]);
 
-  useEffect(() => { const timeout = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timeout); }, [load]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [load]);
 
-  async function refreshAll() { await Promise.all([load(), onChanged()]); }
-  function fail(title: string, nextError: unknown) { toast({ title, description: nextError instanceof Error ? nextError.message : "Try again.", variant: "error" }); }
+  async function refreshAll() {
+    await Promise.all([load(), onChanged()]);
+  }
+  function fail(title: string, nextError: unknown) {
+    toast({
+      title,
+      description:
+        nextError instanceof Error ? nextError.message : "Try again.",
+      variant: "error",
+    });
+  }
 
   async function submitSupplier(event: React.FormEvent) {
-    event.preventDefault(); if (!user) return; setSaving("supplier");
-    try { await createInventorySupplier({ ...supplierForm, status: "active" }, { organizationId: activeOrganizationId, branchId: activeBranchId, userId: user.uid, userEmail: member?.email, userName: member?.displayName }); setSupplierForm({ name: "", code: "", contactName: "", email: "", phoneNumber: "", address: "", taxId: "", paymentTerms: "", brandIds: [] }); toast({ title: "Supplier created", variant: "success" }); await refreshAll(); } catch (nextError) { fail("Unable to create supplier", nextError); } finally { setSaving(null); }
+    event.preventDefault();
+    if (!user) return;
+    setSaving("supplier");
+    try {
+      await createInventorySupplier(
+        { ...supplierForm, status: "active" },
+        {
+          organizationId: activeOrganizationId,
+          branchId: activeBranchId,
+          userId: user.uid,
+          userEmail: member?.email,
+          userName: member?.displayName,
+        },
+      );
+      setSupplierForm({
+        name: "",
+        code: "",
+        contactName: "",
+        email: "",
+        phoneNumber: "",
+        address: "",
+        taxId: "",
+        paymentTerms: "",
+        brandIds: [],
+      });
+      toast({ title: "Supplier created", variant: "success" });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to create supplier", nextError);
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function submitPurchaseOrder(event: React.FormEvent) {
-    event.preventDefault(); setSaving("po");
-    try { const result = await createPurchaseOrder({ ...poForm, organizationId: activeOrganizationId, branchId: activeBranchId }); toast({ title: "Purchase order submitted for approval", description: result.referenceNumber, variant: "success" }); setPoForm((value) => ({ ...value, taxAmount: 0, notes: "", lines: [{ offeringId: items[0]?.id || "", quantity: 1, unitCost: 0 }] })); await refreshAll(); } catch (nextError) { fail("Unable to create purchase order", nextError); } finally { setSaving(null); }
+    event.preventDefault();
+    setSaving("po");
+    try {
+      const result = await createPurchaseOrder({
+        ...poForm,
+        organizationId: activeOrganizationId,
+        branchId: activeBranchId,
+      });
+      toast({
+        title: "Purchase order submitted for approval",
+        description: result.referenceNumber,
+        variant: "success",
+      });
+      setPoForm((value) => ({
+        ...value,
+        taxAmount: 0,
+        paymentArrangement: "credit",
+        amountPaid: 0,
+        paymentReference: "",
+        paymentDueAt: "",
+        notes: "",
+        lines: [{ offeringId: items[0]?.id || "", quantity: 1, unitCost: 0 }],
+      }));
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to create purchase order", nextError);
+    } finally {
+      setSaving(null);
+    }
   }
 
-  async function decide(entityType: "purchaseOrder" | "stockCount", entityId: string, decision: "approved" | "rejected") {
-    const reason = decision === "rejected" ? window.prompt("Reason for rejection")?.trim() : ""; if (decision === "rejected" && !reason) return;
-    setSaving(`${decision}-${entityId}`); try { await decideInventoryApproval({ organizationId: activeOrganizationId, entityType, entityId, decision, reason }); toast({ title: `${titleCase(entityType)} ${decision}`, variant: "success" }); await refreshAll(); } catch (nextError) { fail("Unable to record approval", nextError); } finally { setSaving(null); }
+  async function decide(
+    entityType: "purchaseOrder" | "stockCount",
+    entityId: string,
+    decision: "approved" | "rejected",
+  ) {
+    const reason =
+      decision === "rejected"
+        ? window.prompt("Reason for rejection")?.trim()
+        : "";
+    if (decision === "rejected" && !reason) return;
+    setSaving(`${decision}-${entityId}`);
+    try {
+      await decideInventoryApproval({
+        organizationId: activeOrganizationId,
+        entityType,
+        entityId,
+        decision,
+        reason,
+      });
+      toast({
+        title: `${titleCase(entityType)} ${decision}`,
+        variant: "success",
+      });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to record approval", nextError);
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function receiveLine(order: InventoryPurchaseOrder, lineIndex: number) {
-    const key = `${order.id}-${lineIndex}`; const line = order.lines[lineIndex]; const draft = receiptDrafts[key] ?? { locationId: locations[0]?.id || "", quantity: Math.max(1, line.quantity - line.receivedQuantity), batchNumber: "", expiryDate: "", serialText: "" };
-    setSaving(`receive-${key}`); try { await receivePurchaseOrderLine({ organizationId: activeOrganizationId, purchaseOrderId: order.id, lineIndex, locationId: draft.locationId, quantity: draft.quantity, batchNumber: draft.batchNumber, expiryDate: draft.expiryDate, serialNumbers: draft.serialText.split(/[\n,]+/).map((value) => value.trim()).filter(Boolean) }); toast({ title: "Purchase line received", variant: "success" }); await refreshAll(); } catch (nextError) { fail("Unable to receive purchase line", nextError); } finally { setSaving(null); }
+    const key = `${order.id}-${lineIndex}`;
+    const line = order.lines[lineIndex];
+    const draft = receiptDrafts[key] ?? {
+      locationId: locations[0]?.id || "",
+      quantity: Math.max(1, line.quantity - line.receivedQuantity),
+      batchNumber: "",
+      expiryDate: "",
+      serialText: "",
+    };
+    setSaving(`receive-${key}`);
+    try {
+      await receivePurchaseOrderLine({
+        organizationId: activeOrganizationId,
+        purchaseOrderId: order.id,
+        lineIndex,
+        locationId: draft.locationId,
+        quantity: draft.quantity,
+        batchNumber: draft.batchNumber,
+        expiryDate: draft.expiryDate,
+        serialNumbers: draft.serialText
+          .split(/[\n,]+/)
+          .map((value) => value.trim())
+          .filter(Boolean),
+      });
+      toast({ title: "Purchase line received", variant: "success" });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to receive purchase line", nextError);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function recordPayment(order: InventoryPurchaseOrder) {
+    const balanceDue = Number(order.balanceDue ?? order.totalAmount);
+    const draft = paymentDrafts[order.id] ?? {
+      amount: balanceDue,
+      paymentMethod: "bankTransfer" as const,
+      paymentReference: "",
+      paidAt: new Date().toISOString().slice(0, 10),
+    };
+    setSaving(`payment-${order.id}`);
+    try {
+      await recordPurchaseOrderPayment({
+        ...draft,
+        organizationId: activeOrganizationId,
+        purchaseOrderId: order.id,
+      });
+      toast({ title: "Supplier payment recorded", variant: "success" });
+      setPaymentDrafts((value) => {
+        const next = { ...value };
+        delete next[order.id];
+        return next;
+      });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to record supplier payment", nextError);
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function submitCount(event: React.FormEvent) {
-    event.preventDefault(); setSaving("count"); try { await createStockCount({ ...countForm, organizationId: activeOrganizationId, branchId: activeBranchId }); toast({ title: "Stock count submitted for approval", variant: "success" }); setCountForm({ name: "", notes: "", lines: [{ offeringId: countableItems[0]?.id || "", locationId: locations[0]?.id || "", actualQuantity: 0, reason: "" }] }); await refreshAll(); } catch (nextError) { fail("Unable to submit stock count", nextError); } finally { setSaving(null); }
+    event.preventDefault();
+    setSaving("count");
+    try {
+      await createStockCount({
+        ...countForm,
+        organizationId: activeOrganizationId,
+        branchId: activeBranchId,
+      });
+      toast({
+        title: "Stock count submitted for approval",
+        variant: "success",
+      });
+      setCountForm({
+        name: "",
+        notes: "",
+        lines: [
+          {
+            offeringId: countableItems[0]?.id || "",
+            locationId: locations[0]?.id || "",
+            actualQuantity: 0,
+            reason: "",
+          },
+        ],
+      });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to submit stock count", nextError);
+    } finally {
+      setSaving(null);
+    }
   }
 
-  async function postCount(id: string) { setSaving(`post-${id}`); try { await postStockCount({ organizationId: activeOrganizationId, countId: id }); toast({ title: "Stock count posted", variant: "success" }); await refreshAll(); } catch (nextError) { fail("Unable to post stock count", nextError); } finally { setSaving(null); } }
+  async function postCount(id: string) {
+    setSaving(`post-${id}`);
+    try {
+      await postStockCount({
+        organizationId: activeOrganizationId,
+        countId: id,
+      });
+      toast({ title: "Stock count posted", variant: "success" });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to post stock count", nextError);
+    } finally {
+      setSaving(null);
+    }
+  }
 
   async function submitReservation(event: React.FormEvent) {
-    event.preventDefault(); setSaving("reservation"); try { await createStockReservation({ ...reservationForm, serialNumbers: reservationForm.serialText.split(/[\n,]+/).map((value) => value.trim()).filter(Boolean), organizationId: activeOrganizationId, branchId: activeBranchId }); toast({ title: "Stock reserved", variant: "success" }); setReservationForm((value) => ({ ...value, quantity: 1, batchNumber: "", serialText: "", relatedEntityId: "", relatedEntityName: "", notes: "" })); await refreshAll(); } catch (nextError) { fail("Unable to reserve stock", nextError); } finally { setSaving(null); }
+    event.preventDefault();
+    setSaving("reservation");
+    try {
+      await createStockReservation({
+        ...reservationForm,
+        serialNumbers: reservationForm.serialText
+          .split(/[\n,]+/)
+          .map((value) => value.trim())
+          .filter(Boolean),
+        organizationId: activeOrganizationId,
+        branchId: activeBranchId,
+      });
+      toast({ title: "Stock reserved", variant: "success" });
+      setReservationForm((value) => ({
+        ...value,
+        quantity: 1,
+        batchNumber: "",
+        serialText: "",
+        relatedEntityId: "",
+        relatedEntityName: "",
+        notes: "",
+      }));
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to reserve stock", nextError);
+    } finally {
+      setSaving(null);
+    }
   }
 
-  async function closeReservation(id: string, action: "release" | "fulfill") { setSaving(`${action}-${id}`); try { await closeStockReservation({ organizationId: activeOrganizationId, reservationId: id, action }); toast({ title: `Reservation ${action === "fulfill" ? "fulfilled" : "released"}`, variant: "success" }); await refreshAll(); } catch (nextError) { fail("Unable to close reservation", nextError); } finally { setSaving(null); } }
+  async function closeReservation(id: string, action: "release" | "fulfill") {
+    setSaving(`${action}-${id}`);
+    try {
+      await closeStockReservation({
+        organizationId: activeOrganizationId,
+        reservationId: id,
+        action,
+      });
+      toast({
+        title: `Reservation ${action === "fulfill" ? "fulfilled" : "released"}`,
+        variant: "success",
+      });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to close reservation", nextError);
+    } finally {
+      setSaving(null);
+    }
+  }
 
   const traceItems = useMemo(() => {
-    const needle = traceSearch.trim().toLowerCase(); if (!needle) return { lots, serials };
-    const matches = (values: unknown[]) => values.some((value) => String(value ?? "").toLowerCase().includes(needle));
-    return { lots: lots.filter((item) => matches([item.batchNumber, item.offeringName, item.locationName])), serials: serials.filter((item) => matches([item.serialNumber, item.offeringName, item.locationName])) };
+    const needle = traceSearch.trim().toLowerCase();
+    if (!needle) return { lots, serials };
+    const matches = (values: unknown[]) =>
+      values.some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(needle),
+      );
+    return {
+      lots: lots.filter((item) =>
+        matches([item.batchNumber, item.offeringName, item.locationName]),
+      ),
+      serials: serials.filter((item) =>
+        matches([item.serialNumber, item.offeringName, item.locationName]),
+      ),
+    };
   }, [lots, serials, traceSearch]);
-  const pendingOrders = purchaseOrders.filter((item) => item.approvalStatus === "pendingApproval");
-  const pendingCounts = counts.filter((item) => item.approvalStatus === "pendingApproval");
+  const pendingOrders = purchaseOrders.filter(
+    (item) => item.approvalStatus === "pendingApproval",
+  );
+  const pendingCounts = counts.filter(
+    (item) => item.approvalStatus === "pendingApproval",
+  );
 
   if (loading) return <LoadingState label="Loading enterprise inventory" />;
   if (error) return <ErrorState message={error} />;
 
-  if (mode === "procurement") return <div className="grid gap-5 xl:grid-cols-2">
-    {canProcure ? <Card><CardHeader><CardTitle>Supplier master</CardTitle></CardHeader><CardContent><form className="grid gap-3 sm:grid-cols-2" onSubmit={submitSupplier}><Field label="Supplier name"><Input required value={supplierForm.name} onChange={(e) => setSupplierForm((v) => ({ ...v, name: e.target.value }))} /></Field><Field label="Code"><Input required value={supplierForm.code} onChange={(e) => setSupplierForm((v) => ({ ...v, code: e.target.value.toUpperCase() }))} /></Field><Field label="Contact"><Input value={supplierForm.contactName} onChange={(e) => setSupplierForm((v) => ({ ...v, contactName: e.target.value }))} /></Field><Field label="Email"><Input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm((v) => ({ ...v, email: e.target.value }))} /></Field><Field label="Phone"><Input value={supplierForm.phoneNumber} onChange={(e) => setSupplierForm((v) => ({ ...v, phoneNumber: e.target.value }))} /></Field><Field label="Tax ID"><Input value={supplierForm.taxId} onChange={(e) => setSupplierForm((v) => ({ ...v, taxId: e.target.value }))} /></Field><Field label="Payment terms"><Input value={supplierForm.paymentTerms} onChange={(e) => setSupplierForm((v) => ({ ...v, paymentTerms: e.target.value }))} /></Field><Field label="Address"><Textarea value={supplierForm.address} onChange={(e) => setSupplierForm((v) => ({ ...v, address: e.target.value }))} /></Field><Button className="sm:col-span-2" disabled={saving === "supplier"} type="submit"><Truck className="h-4 w-4" />Create supplier</Button></form><div className="mt-4 grid gap-2">{suppliers.map((supplier) => <div className="rounded-md border p-3" key={supplier.id}><p className="font-semibold">{supplier.name}</p><p className="text-xs text-muted-foreground">{supplier.code} · {supplier.email || supplier.phoneNumber || "No contact"}</p></div>)}</div></CardContent></Card> : null}
-    {canProcure ? <Card><CardHeader><CardTitle>New purchase order</CardTitle></CardHeader><CardContent><form className="grid gap-3" onSubmit={submitPurchaseOrder}><Field label="Supplier"><Select required value={poForm.supplierId} onChange={(e) => setPoForm((v) => ({ ...v, supplierId: e.target.value }))}><option value="">Select supplier</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</Select></Field>{poForm.lines.map((line, index) => <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-[1fr_100px_140px_auto]" key={index}><Select required value={line.offeringId} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, offeringId: e.target.value, unitCost: Number(items.find((entry) => entry.id === e.target.value)?.costPrice ?? item.unitCost) } : item) }))}><option value="">Select item</option>{items.map((item) => <option key={item.id} value={item.id}>{item.brandName} · {item.name}</option>)}</Select><Input min={1} required type="number" value={line.quantity} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, quantity: Number(e.target.value) } : item) }))} /><Input min={0} required type="number" value={line.unitCost} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, unitCost: Number(e.target.value) } : item) }))} /><Button disabled={poForm.lines.length === 1} onClick={() => setPoForm((v) => ({ ...v, lines: v.lines.filter((_, i) => i !== index) }))} size="icon" type="button" variant="ghost"><X className="h-4 w-4" /></Button></div>)}<Button onClick={() => setPoForm((v) => ({ ...v, lines: [...v.lines, { offeringId: items[0]?.id || "", quantity: 1, unitCost: Number(items[0]?.costPrice ?? 0) }] }))} type="button" variant="outline"><Plus className="h-4 w-4" />Add line</Button><div className="grid gap-3 sm:grid-cols-2"><Field label="Expected date"><Input type="date" value={poForm.expectedAt} onChange={(e) => setPoForm((v) => ({ ...v, expectedAt: e.target.value }))} /></Field><Field label="Tax amount"><Input min={0} type="number" value={poForm.taxAmount} onChange={(e) => setPoForm((v) => ({ ...v, taxAmount: Number(e.target.value) }))} /></Field></div><Field label="Notes"><Textarea value={poForm.notes} onChange={(e) => setPoForm((v) => ({ ...v, notes: e.target.value }))} /></Field><p className="text-right font-semibold">Total: {formatCurrency(poForm.lines.reduce((sum, line) => sum + line.quantity * line.unitCost, 0) + poForm.taxAmount)}</p><Button disabled={saving === "po" || !suppliers.length} type="submit"><PackagePlus className="h-4 w-4" />Submit for approval</Button></form></CardContent></Card> : null}
-    <Card className="xl:col-span-2"><CardHeader><CardTitle>Purchase orders and receiving</CardTitle></CardHeader><CardContent className="grid gap-3">{purchaseOrders.map((order) => <div className="rounded-md border p-4" key={order.id}><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-semibold">{order.referenceNumber} · {order.supplierName}</p><p className="text-xs text-muted-foreground">{formatCurrency(order.totalAmount)} · Expected {formatDate(order.expectedAt)}</p></div><div className="flex gap-2"><Badge tone={order.approvalStatus === "approved" ? "success" : order.approvalStatus === "rejected" ? "danger" : "warning"}>{titleCase(order.approvalStatus)}</Badge><Badge tone="info">{titleCase(order.receivingStatus)}</Badge></div></div><div className="mt-3 grid gap-2">{order.lines.map((line, index) => { const outstanding = line.quantity - line.receivedQuantity; const key = `${order.id}-${index}`; const draft = receiptDrafts[key] ?? { locationId: locations[0]?.id || "", quantity: Math.max(1, outstanding), batchNumber: "", expiryDate: "", serialText: "" }; const tracking = items.find((item) => item.id === line.offeringId)?.trackingMode ?? "none"; return <div className="rounded-md bg-muted/50 p-3" key={key}><div className="flex justify-between gap-3"><span>{line.offeringName}</span><span>{line.receivedQuantity}/{line.quantity}</span></div>{order.approvalStatus === "approved" && outstanding > 0 ? <div className="mt-2 grid gap-2 md:grid-cols-3"><Select value={draft.locationId} onChange={(e) => setReceiptDrafts((v) => ({ ...v, [key]: { ...draft, locationId: e.target.value } }))}>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</Select><Input max={outstanding} min={1} type="number" value={draft.quantity} onChange={(e) => setReceiptDrafts((v) => ({ ...v, [key]: { ...draft, quantity: Number(e.target.value) } }))} />{tracking === "batch" ? <><Input placeholder="Batch number" value={draft.batchNumber} onChange={(e) => setReceiptDrafts((v) => ({ ...v, [key]: { ...draft, batchNumber: e.target.value } }))} /><Input type="date" value={draft.expiryDate} onChange={(e) => setReceiptDrafts((v) => ({ ...v, [key]: { ...draft, expiryDate: e.target.value } }))} /></> : null}{tracking === "serial" ? <Textarea className="md:col-span-2" placeholder="One serial number per line" value={draft.serialText} onChange={(e) => setReceiptDrafts((v) => ({ ...v, [key]: { ...draft, serialText: e.target.value } }))} /> : null}<Button disabled={saving === `receive-${key}`} onClick={() => receiveLine(order, index)} type="button"><Truck className="h-4 w-4" />Receive</Button></div> : null}</div>; })}</div></div>)}{!purchaseOrders.length ? <p className="py-6 text-center text-muted-foreground">No purchase orders yet.</p> : null}</CardContent></Card>
-  </div>;
+  if (mode === "procurement")
+    return (
+      <div className="grid gap-5 xl:grid-cols-2">
+        {canProcure ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Supplier master</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="grid gap-3 sm:grid-cols-2"
+                onSubmit={submitSupplier}
+              >
+                <Field label="Supplier name">
+                  <Input
+                    required
+                    value={supplierForm.name}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({ ...v, name: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field label="Code">
+                  <Input
+                    required
+                    value={supplierForm.code}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({
+                        ...v,
+                        code: e.target.value.toUpperCase(),
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Contact">
+                  <Input
+                    value={supplierForm.contactName}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({
+                        ...v,
+                        contactName: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Email">
+                  <Input
+                    type="email"
+                    value={supplierForm.email}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({ ...v, email: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field label="Phone">
+                  <Input
+                    value={supplierForm.phoneNumber}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({
+                        ...v,
+                        phoneNumber: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Tax ID">
+                  <Input
+                    value={supplierForm.taxId}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({ ...v, taxId: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field label="Payment terms">
+                  <Input
+                    value={supplierForm.paymentTerms}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({
+                        ...v,
+                        paymentTerms: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Address">
+                  <Textarea
+                    value={supplierForm.address}
+                    onChange={(e) =>
+                      setSupplierForm((v) => ({
+                        ...v,
+                        address: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Button
+                  className="sm:col-span-2"
+                  disabled={saving === "supplier"}
+                  type="submit"
+                >
+                  <Truck className="h-4 w-4" />
+                  Create supplier
+                </Button>
+              </form>
+              <div className="mt-4 grid gap-2">
+                {suppliers.map((supplier) => (
+                  <div className="rounded-md border p-3" key={supplier.id}>
+                    <p className="font-semibold">{supplier.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {supplier.code} ·{" "}
+                      {supplier.email || supplier.phoneNumber || "No contact"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+        {canProcure ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>New purchase order</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-3" onSubmit={submitPurchaseOrder}>
+                <Field label="Supplier">
+                  <Select
+                    required
+                    value={poForm.supplierId}
+                    onChange={(e) =>
+                      setPoForm((v) => ({ ...v, supplierId: e.target.value }))
+                    }
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {poForm.lines.map((line, index) => (
+                  <div
+                    className="grid gap-2 rounded-md border p-3 sm:grid-cols-[1fr_100px_140px_auto]"
+                    key={index}
+                  >
+                    <Field label="Item">
+                      <Select required value={line.offeringId} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, offeringId: e.target.value, unitCost: Number(items.find((entry) => entry.id === e.target.value)?.costPrice ?? item.unitCost) } : item) }))}>
+                        <option value="">Select item</option>
+                        {items.map((item) => <option key={item.id} value={item.id}>{item.brandName} · {item.name}</option>)}
+                      </Select>
+                    </Field>
+                    <Field label="Quantity">
+                      <Input min={1} required type="number" value={line.quantity} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, quantity: Number(e.target.value) } : item) }))} />
+                    </Field>
+                    <Field label="Unit cost">
+                      <Input min={0} required step="0.01" type="number" value={line.unitCost} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, unitCost: Number(e.target.value) } : item) }))} />
+                    </Field>
+                    <Button
+                      className="self-end"
+                      disabled={poForm.lines.length === 1}
+                      onClick={() =>
+                        setPoForm((v) => ({
+                          ...v,
+                          lines: v.lines.filter((_, i) => i !== index),
+                        }))
+                      }
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  onClick={() =>
+                    setPoForm((v) => ({
+                      ...v,
+                      lines: [
+                        ...v.lines,
+                        {
+                          offeringId: items[0]?.id || "",
+                          quantity: 1,
+                          unitCost: Number(items[0]?.costPrice ?? 0),
+                        },
+                      ],
+                    }))
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add line
+                </Button>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Expected date">
+                    <Input
+                      type="date"
+                      value={poForm.expectedAt}
+                      onChange={(e) =>
+                        setPoForm((v) => ({ ...v, expectedAt: e.target.value }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Tax amount">
+                    <Input
+                      min={0}
+                      type="number"
+                      value={poForm.taxAmount}
+                      onChange={(e) =>
+                        setPoForm((v) => ({
+                          ...v,
+                          taxAmount: Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </Field>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="mb-3 font-semibold">
+                    How will this purchase be paid?
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Payment arrangement">
+                      <Select
+                        value={poForm.paymentArrangement}
+                        onChange={(e) =>
+                          setPoForm((value) => ({
+                            ...value,
+                            paymentArrangement: e.target
+                              .value as typeof value.paymentArrangement,
+                            amountPaid:
+                              e.target.value === "paid"
+                                ? purchaseOrderTotal
+                                : e.target.value === "credit"
+                                  ? 0
+                                  : value.amountPaid,
+                          }))
+                        }
+                      >
+                        <option value="paid">Paid in full</option>
+                        <option value="credit">Credit agreement</option>
+                        <option value="partPaid">Part payment</option>
+                      </Select>
+                    </Field>
+                    {poForm.paymentArrangement === "partPaid" ? (
+                      <Field label="Amount paid now">
+                        <Input
+                          max={Math.max(0, purchaseOrderTotal)}
+                          min={0.01}
+                          required
+                          step="0.01"
+                          type="number"
+                          value={poForm.amountPaid}
+                          onChange={(e) =>
+                            setPoForm((value) => ({
+                              ...value,
+                              amountPaid: Number(e.target.value),
+                            }))
+                          }
+                        />
+                      </Field>
+                    ) : null}
+                    {poForm.paymentArrangement !== "credit" ? (
+                      <Field label="Payment method">
+                        <Select
+                          value={poForm.paymentMethod}
+                          onChange={(e) =>
+                            setPoForm((value) => ({
+                              ...value,
+                              paymentMethod: e.target
+                                .value as typeof value.paymentMethod,
+                            }))
+                          }
+                        >
+                          <option value="bankTransfer">Bank transfer</option>
+                          <option value="cash">Cash</option>
+                          <option value="card">Card</option>
+                          <option value="cheque">Cheque</option>
+                          <option value="other">Other</option>
+                        </Select>
+                      </Field>
+                    ) : null}
+                    {poForm.paymentArrangement !== "credit" ? (
+                      <Field label="Payment reference (optional)">
+                        <Input
+                          value={poForm.paymentReference}
+                          onChange={(e) =>
+                            setPoForm((value) => ({
+                              ...value,
+                              paymentReference: e.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                    ) : null}
+                    {poForm.paymentArrangement !== "paid" ? (
+                      <Field label="Balance due date">
+                        <Input
+                          required
+                          type="date"
+                          value={poForm.paymentDueAt}
+                          onChange={(e) =>
+                            setPoForm((value) => ({
+                              ...value,
+                              paymentDueAt: e.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-muted/60 p-3 text-sm">
+                    <span>Paid now</span>
+                    <span className="text-right font-semibold">
+                      {formatCurrency(
+                        poForm.paymentArrangement === "paid"
+                          ? purchaseOrderTotal
+                          : poForm.paymentArrangement === "partPaid"
+                            ? poForm.amountPaid
+                            : 0,
+                      )}
+                    </span>
+                    <span>Balance due</span>
+                    <span className="text-right font-semibold">
+                      {formatCurrency(
+                        Math.max(
+                          0,
+                          purchaseOrderTotal -
+                            (poForm.paymentArrangement === "paid"
+                              ? purchaseOrderTotal
+                              : poForm.paymentArrangement === "partPaid"
+                                ? poForm.amountPaid
+                                : 0),
+                        ),
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <Field label="Notes">
+                  <Textarea
+                    value={poForm.notes}
+                    onChange={(e) =>
+                      setPoForm((v) => ({ ...v, notes: e.target.value }))
+                    }
+                  />
+                </Field>
+                <p className="text-right font-semibold">
+                  Total: {formatCurrency(purchaseOrderTotal)}
+                </p>
+                <Button
+                  disabled={saving === "po" || !suppliers.length}
+                  type="submit"
+                >
+                  <PackagePlus className="h-4 w-4" />
+                  Submit for approval
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle>Purchase orders and receiving</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {purchaseOrders.map((order) => (
+              <div className="rounded-md border p-4" key={order.id}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">
+                      {order.referenceNumber} · {order.supplierName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatCurrency(order.totalAmount)} · Expected{" "}
+                      {formatDate(order.expectedAt)}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Badge
+                      tone={
+                        order.approvalStatus === "approved"
+                          ? "success"
+                          : order.approvalStatus === "rejected"
+                            ? "danger"
+                            : "warning"
+                      }
+                    >
+                      {titleCase(order.approvalStatus)}
+                    </Badge>
+                    <Badge tone="info">
+                      {titleCase(order.receivingStatus)}
+                    </Badge>
+                    <Badge
+                      tone={
+                        (order.paymentStatus ??
+                          (Number(order.balanceDue ?? order.totalAmount) === 0
+                            ? "paid"
+                            : "unpaid")) === "paid"
+                          ? "success"
+                          : "warning"
+                      }
+                    >
+                      {titleCase(
+                        order.paymentStatus ??
+                          (Number(order.balanceDue ?? order.totalAmount) === 0
+                            ? "paid"
+                            : "unpaid"),
+                      )}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Order total</p>
+                    <p className="font-semibold">
+                      {formatCurrency(order.totalAmount)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Paid</p>
+                    <p className="font-semibold">
+                      {formatCurrency(Number(order.amountPaid ?? 0))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Balance due</p>
+                    <p className="font-semibold">
+                      {formatCurrency(
+                        Number(order.balanceDue ?? order.totalAmount),
+                      )}
+                      {Number(order.balanceDue ?? order.totalAmount) > 0 &&
+                      order.paymentDueAt ? (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          by {formatDate(order.paymentDueAt)}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                </div>
+                {canRecordPayment &&
+                Number(order.balanceDue ?? order.totalAmount) > 0 &&
+                !["rejected", "cancelled"].includes(order.approvalStatus)
+                  ? (() => {
+                      const paymentDraft = paymentDrafts[order.id] ?? {
+                        amount: Number(order.balanceDue ?? order.totalAmount),
+                        paymentMethod: "bankTransfer" as const,
+                        paymentReference: "",
+                        paidAt: new Date().toISOString().slice(0, 10),
+                      };
+                      return (
+                        <div className="mt-3 rounded-md border p-3">
+                          <p className="mb-2 font-semibold">
+                            Record a supplier payment
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                            <Input
+                              aria-label="Payment amount"
+                              max={Number(
+                                order.balanceDue ?? order.totalAmount,
+                              )}
+                              min={0.01}
+                              step="0.01"
+                              type="number"
+                              value={paymentDraft.amount}
+                              onChange={(e) =>
+                                setPaymentDrafts((value) => ({
+                                  ...value,
+                                  [order.id]: {
+                                    ...paymentDraft,
+                                    amount: Number(e.target.value),
+                                  },
+                                }))
+                              }
+                            />
+                            <Select
+                              aria-label="Payment method"
+                              value={paymentDraft.paymentMethod}
+                              onChange={(e) =>
+                                setPaymentDrafts((value) => ({
+                                  ...value,
+                                  [order.id]: {
+                                    ...paymentDraft,
+                                    paymentMethod: e.target
+                                      .value as typeof paymentDraft.paymentMethod,
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="bankTransfer">
+                                Bank transfer
+                              </option>
+                              <option value="cash">Cash</option>
+                              <option value="card">Card</option>
+                              <option value="cheque">Cheque</option>
+                              <option value="other">Other</option>
+                            </Select>
+                            <Input
+                              aria-label="Payment reference"
+                              placeholder="Reference (optional)"
+                              value={paymentDraft.paymentReference}
+                              onChange={(e) =>
+                                setPaymentDrafts((value) => ({
+                                  ...value,
+                                  [order.id]: {
+                                    ...paymentDraft,
+                                    paymentReference: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                            <Input
+                              aria-label="Payment date"
+                              type="date"
+                              value={paymentDraft.paidAt}
+                              onChange={(e) =>
+                                setPaymentDrafts((value) => ({
+                                  ...value,
+                                  [order.id]: {
+                                    ...paymentDraft,
+                                    paidAt: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                            <Button
+                              disabled={saving === `payment-${order.id}`}
+                              onClick={() => recordPayment(order)}
+                              type="button"
+                            >
+                              <Banknote className="h-4 w-4" />
+                              Record payment
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  : null}
+                <div className="mt-3 grid gap-2">
+                  {order.lines.map((line, index) => {
+                    const outstanding = line.quantity - line.receivedQuantity;
+                    const key = `${order.id}-${index}`;
+                    const draft = receiptDrafts[key] ?? {
+                      locationId: locations[0]?.id || "",
+                      quantity: Math.max(1, outstanding),
+                      batchNumber: "",
+                      expiryDate: "",
+                      serialText: "",
+                    };
+                    const tracking =
+                      items.find((item) => item.id === line.offeringId)
+                        ?.trackingMode ?? "none";
+                    return (
+                      <div className="rounded-md bg-muted/50 p-3" key={key}>
+                        <div className="flex justify-between gap-3">
+                          <span>{line.offeringName}</span>
+                          <span>
+                            {line.receivedQuantity}/{line.quantity}
+                          </span>
+                        </div>
+                        {order.approvalStatus === "approved" &&
+                        outstanding > 0 ? (
+                          <div className="mt-2 grid gap-2 md:grid-cols-3">
+                            <Select
+                              value={draft.locationId}
+                              onChange={(e) =>
+                                setReceiptDrafts((v) => ({
+                                  ...v,
+                                  [key]: {
+                                    ...draft,
+                                    locationId: e.target.value,
+                                  },
+                                }))
+                              }
+                            >
+                              {locations.map((location) => (
+                                <option key={location.id} value={location.id}>
+                                  {location.name}
+                                </option>
+                              ))}
+                            </Select>
+                            <Input
+                              max={outstanding}
+                              min={1}
+                              type="number"
+                              value={draft.quantity}
+                              onChange={(e) =>
+                                setReceiptDrafts((v) => ({
+                                  ...v,
+                                  [key]: {
+                                    ...draft,
+                                    quantity: Number(e.target.value),
+                                  },
+                                }))
+                              }
+                            />
+                            {tracking === "batch" ? (
+                              <>
+                                <Input
+                                  placeholder="Batch number"
+                                  value={draft.batchNumber}
+                                  onChange={(e) =>
+                                    setReceiptDrafts((v) => ({
+                                      ...v,
+                                      [key]: {
+                                        ...draft,
+                                        batchNumber: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                                <Input
+                                  type="date"
+                                  value={draft.expiryDate}
+                                  onChange={(e) =>
+                                    setReceiptDrafts((v) => ({
+                                      ...v,
+                                      [key]: {
+                                        ...draft,
+                                        expiryDate: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              </>
+                            ) : null}
+                            {tracking === "serial" ? (
+                              <Textarea
+                                className="md:col-span-2"
+                                placeholder="One serial number per line"
+                                value={draft.serialText}
+                                onChange={(e) =>
+                                  setReceiptDrafts((v) => ({
+                                    ...v,
+                                    [key]: {
+                                      ...draft,
+                                      serialText: e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            ) : null}
+                            <Button
+                              disabled={saving === `receive-${key}`}
+                              onClick={() => receiveLine(order, index)}
+                              type="button"
+                            >
+                              <Truck className="h-4 w-4" />
+                              Receive
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {!purchaseOrders.length ? (
+              <p className="py-6 text-center text-muted-foreground">
+                No purchase orders yet.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+    );
 
-  if (mode === "counts") return <div className="grid gap-5 lg:grid-cols-[420px_1fr]">{canCount ? <Card><CardHeader><CardTitle>New stock count</CardTitle></CardHeader><CardContent><form className="grid gap-3" onSubmit={submitCount}><Field label="Count name"><Input required value={countForm.name} onChange={(e) => setCountForm((v) => ({ ...v, name: e.target.value }))} /></Field>{countForm.lines.map((line, index) => <div className="grid gap-2 rounded-md border p-3" key={index}><Select value={line.offeringId} onChange={(e) => setCountForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, offeringId: e.target.value } : item) }))}>{countableItems.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select value={line.locationId} onChange={(e) => setCountForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, locationId: e.target.value } : item) }))}>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</Select><Input min={0} placeholder="Actual quantity" type="number" value={line.actualQuantity} onChange={(e) => setCountForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, actualQuantity: Number(e.target.value) } : item) }))} /><Input placeholder="Variance reason" value={line.reason} onChange={(e) => setCountForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, reason: e.target.value } : item) }))} /><Button disabled={countForm.lines.length === 1} onClick={() => setCountForm((v) => ({ ...v, lines: v.lines.filter((_, i) => i !== index) }))} type="button" variant="ghost">Remove line</Button></div>)}<p className="text-xs text-muted-foreground">Batch- and serial-controlled items are reconciled through traceable inventory movements.</p><Button disabled={!countableItems.length} onClick={() => setCountForm((v) => ({ ...v, lines: [...v.lines, { offeringId: countableItems[0]?.id || "", locationId: locations[0]?.id || "", actualQuantity: 0, reason: "" }] }))} type="button" variant="outline"><Plus className="h-4 w-4" />Add count line</Button><Field label="Notes"><Textarea value={countForm.notes} onChange={(e) => setCountForm((v) => ({ ...v, notes: e.target.value }))} /></Field><Button disabled={saving === "count" || !countableItems.length} type="submit"><ClipboardCheck className="h-4 w-4" />Submit count</Button></form></CardContent></Card> : null}<Card><CardHeader><CardTitle>Count history</CardTitle></CardHeader><CardContent className="grid gap-3">{counts.map((count) => <div className="rounded-md border p-3" key={count.id}><div className="flex justify-between gap-2"><div><p className="font-semibold">{count.referenceNumber} · {count.name}</p><p className="text-xs text-muted-foreground">{count.lines.length} lines · {formatDate(count.countedAt)}</p></div><div className="flex gap-2"><Badge tone={count.approvalStatus === "approved" ? "success" : "warning"}>{titleCase(count.approvalStatus)}</Badge><Badge tone="info">{titleCase(count.countStatus)}</Badge></div></div><div className="mt-2 text-xs text-muted-foreground">{count.lines.map((line) => `${line.offeringName}: ${line.systemQuantity} → ${line.actualQuantity} (${line.variance >= 0 ? "+" : ""}${line.variance})`).join(" · ")}</div>{canApprove && count.approvalStatus === "approved" && count.countStatus === "submitted" ? <Button className="mt-3" disabled={saving === `post-${count.id}`} onClick={() => postCount(count.id)} size="sm" type="button"><Check className="h-4 w-4" />Post variances</Button> : null}</div>)}{!counts.length ? <p className="py-6 text-center text-muted-foreground">No stock counts yet.</p> : null}</CardContent></Card></div>;
+  if (mode === "counts")
+    return (
+      <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
+        {canCount ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>New stock count</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-3" onSubmit={submitCount}>
+                <Field label="Count name">
+                  <Input
+                    required
+                    value={countForm.name}
+                    onChange={(e) =>
+                      setCountForm((v) => ({ ...v, name: e.target.value }))
+                    }
+                  />
+                </Field>
+                {countForm.lines.map((line, index) => (
+                  <div className="grid gap-2 rounded-md border p-3" key={index}>
+                    <Select
+                      value={line.offeringId}
+                      onChange={(e) =>
+                        setCountForm((v) => ({
+                          ...v,
+                          lines: v.lines.map((item, i) =>
+                            i === index
+                              ? { ...item, offeringId: e.target.value }
+                              : item,
+                          ),
+                        }))
+                      }
+                    >
+                      {countableItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select
+                      value={line.locationId}
+                      onChange={(e) =>
+                        setCountForm((v) => ({
+                          ...v,
+                          lines: v.lines.map((item, i) =>
+                            i === index
+                              ? { ...item, locationId: e.target.value }
+                              : item,
+                          ),
+                        }))
+                      }
+                    >
+                      {locations.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      min={0}
+                      placeholder="Actual quantity"
+                      type="number"
+                      value={line.actualQuantity}
+                      onChange={(e) =>
+                        setCountForm((v) => ({
+                          ...v,
+                          lines: v.lines.map((item, i) =>
+                            i === index
+                              ? {
+                                  ...item,
+                                  actualQuantity: Number(e.target.value),
+                                }
+                              : item,
+                          ),
+                        }))
+                      }
+                    />
+                    <Input
+                      placeholder="Variance reason"
+                      value={line.reason}
+                      onChange={(e) =>
+                        setCountForm((v) => ({
+                          ...v,
+                          lines: v.lines.map((item, i) =>
+                            i === index
+                              ? { ...item, reason: e.target.value }
+                              : item,
+                          ),
+                        }))
+                      }
+                    />
+                    <Button
+                      disabled={countForm.lines.length === 1}
+                      onClick={() =>
+                        setCountForm((v) => ({
+                          ...v,
+                          lines: v.lines.filter((_, i) => i !== index),
+                        }))
+                      }
+                      type="button"
+                      variant="ghost"
+                    >
+                      Remove line
+                    </Button>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Batch- and serial-controlled items are reconciled through
+                  traceable inventory movements.
+                </p>
+                <Button
+                  disabled={!countableItems.length}
+                  onClick={() =>
+                    setCountForm((v) => ({
+                      ...v,
+                      lines: [
+                        ...v.lines,
+                        {
+                          offeringId: countableItems[0]?.id || "",
+                          locationId: locations[0]?.id || "",
+                          actualQuantity: 0,
+                          reason: "",
+                        },
+                      ],
+                    }))
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add count line
+                </Button>
+                <Field label="Notes">
+                  <Textarea
+                    value={countForm.notes}
+                    onChange={(e) =>
+                      setCountForm((v) => ({ ...v, notes: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Button
+                  disabled={saving === "count" || !countableItems.length}
+                  type="submit"
+                >
+                  <ClipboardCheck className="h-4 w-4" />
+                  Submit count
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
+        <Card>
+          <CardHeader>
+            <CardTitle>Count history</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {counts.map((count) => (
+              <div className="rounded-md border p-3" key={count.id}>
+                <div className="flex justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">
+                      {count.referenceNumber} · {count.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {count.lines.length} lines · {formatDate(count.countedAt)}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Badge
+                      tone={
+                        count.approvalStatus === "approved"
+                          ? "success"
+                          : "warning"
+                      }
+                    >
+                      {titleCase(count.approvalStatus)}
+                    </Badge>
+                    <Badge tone="info">{titleCase(count.countStatus)}</Badge>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {count.lines
+                    .map(
+                      (line) =>
+                        `${line.offeringName}: ${line.systemQuantity} → ${line.actualQuantity} (${line.variance >= 0 ? "+" : ""}${line.variance})`,
+                    )
+                    .join(" · ")}
+                </div>
+                {canApprove &&
+                count.approvalStatus === "approved" &&
+                count.countStatus === "submitted" ? (
+                  <Button
+                    className="mt-3"
+                    disabled={saving === `post-${count.id}`}
+                    onClick={() => postCount(count.id)}
+                    size="sm"
+                    type="button"
+                  >
+                    <Check className="h-4 w-4" />
+                    Post variances
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+            {!counts.length ? (
+              <p className="py-6 text-center text-muted-foreground">
+                No stock counts yet.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+    );
 
-  if (mode === "reservations") { const reservationItem = items.find((item) => item.id === reservationForm.offeringId); return <div className="grid gap-5 lg:grid-cols-[380px_1fr]">{canReserve ? <Card><CardHeader><CardTitle>Reserve stock</CardTitle></CardHeader><CardContent><form className="grid gap-3" onSubmit={submitReservation}><Field label="Item"><Select value={reservationForm.offeringId} onChange={(e) => setReservationForm((v) => ({ ...v, offeringId: e.target.value, batchNumber: "", serialText: "" }))}>{items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field><Field label="Location"><Select value={reservationForm.locationId} onChange={(e) => setReservationForm((v) => ({ ...v, locationId: e.target.value }))}>{locations.map((location) => { const balance = balances.find((item) => item.locationId === location.id && item.offeringId === reservationForm.offeringId); return <option key={location.id} value={location.id}>{location.name} ({Number(balance?.quantityOnHand ?? 0) - Number(balance?.quantityReserved ?? 0)} available)</option>; })}</Select></Field><Field label="Quantity"><Input min={1} type="number" value={reservationForm.quantity} onChange={(e) => setReservationForm((v) => ({ ...v, quantity: Number(e.target.value) }))} /></Field>{reservationItem?.trackingMode === "batch" ? <Field label="Batch number"><Input required value={reservationForm.batchNumber} onChange={(e) => setReservationForm((v) => ({ ...v, batchNumber: e.target.value }))} /></Field> : null}{reservationItem?.trackingMode === "serial" ? <Field label="Serial numbers (one per line)"><Textarea required value={reservationForm.serialText} onChange={(e) => setReservationForm((v) => ({ ...v, serialText: e.target.value }))} /></Field> : null}<Field label="Purpose"><Select value={reservationForm.relatedEntityType} onChange={(e) => setReservationForm((v) => ({ ...v, relatedEntityType: e.target.value as typeof v.relatedEntityType }))}>{["deal", "project", "workOrder", "other"].map((value) => <option key={value} value={value}>{titleCase(value)}</option>)}</Select></Field><Field label="Related record ID"><Input value={reservationForm.relatedEntityId} onChange={(e) => setReservationForm((v) => ({ ...v, relatedEntityId: e.target.value }))} /></Field><Field label="Customer / project / job"><Input value={reservationForm.relatedEntityName} onChange={(e) => setReservationForm((v) => ({ ...v, relatedEntityName: e.target.value }))} /></Field><Field label="Expires"><Input type="date" value={reservationForm.expiresAt} onChange={(e) => setReservationForm((v) => ({ ...v, expiresAt: e.target.value }))} /></Field><Button disabled={saving === "reservation"} type="submit">Reserve stock</Button></form></CardContent></Card> : null}<Card><CardHeader><CardTitle>Reservations</CardTitle></CardHeader><CardContent className="grid gap-3">{reservations.map((reservation) => <div className="rounded-md border p-3" key={reservation.id}><div className="flex justify-between gap-2"><div><p className="font-semibold">{reservation.referenceNumber} · {reservation.offeringName}</p><p className="text-xs text-muted-foreground">{reservation.quantity} at {reservation.locationName} · {reservation.batchNumber || reservation.serialNumbers?.join(", ") || reservation.relatedEntityName || reservation.relatedEntityId || "General"}</p></div><Badge tone={reservation.reservationStatus === "active" ? "warning" : reservation.reservationStatus === "fulfilled" ? "success" : "muted"}>{titleCase(reservation.reservationStatus)}</Badge></div>{reservation.reservationStatus === "active" && canReserve ? <div className="mt-3 flex gap-2"><Button disabled={saving === `fulfill-${reservation.id}`} onClick={() => closeReservation(reservation.id, "fulfill")} size="sm" type="button"><Check className="h-4 w-4" />Fulfill</Button><Button disabled={saving === `release-${reservation.id}`} onClick={() => closeReservation(reservation.id, "release")} size="sm" type="button" variant="outline"><RotateCcw className="h-4 w-4" />Release</Button></div> : null}</div>)}</CardContent></Card></div>; }
+  if (mode === "reservations") {
+    const reservationItem = items.find(
+      (item) => item.id === reservationForm.offeringId,
+    );
+    return (
+      <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
+        {canReserve ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Reserve stock</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-3" onSubmit={submitReservation}>
+                <Field label="Item">
+                  <Select
+                    value={reservationForm.offeringId}
+                    onChange={(e) =>
+                      setReservationForm((v) => ({
+                        ...v,
+                        offeringId: e.target.value,
+                        batchNumber: "",
+                        serialText: "",
+                      }))
+                    }
+                  >
+                    {items.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Location">
+                  <Select
+                    value={reservationForm.locationId}
+                    onChange={(e) =>
+                      setReservationForm((v) => ({
+                        ...v,
+                        locationId: e.target.value,
+                      }))
+                    }
+                  >
+                    {locations.map((location) => {
+                      const balance = balances.find(
+                        (item) =>
+                          item.locationId === location.id &&
+                          item.offeringId === reservationForm.offeringId,
+                      );
+                      return (
+                        <option key={location.id} value={location.id}>
+                          {location.name} (
+                          {Number(balance?.quantityOnHand ?? 0) -
+                            Number(balance?.quantityReserved ?? 0)}{" "}
+                          available)
+                        </option>
+                      );
+                    })}
+                  </Select>
+                </Field>
+                <Field label="Quantity">
+                  <Input
+                    min={1}
+                    type="number"
+                    value={reservationForm.quantity}
+                    onChange={(e) =>
+                      setReservationForm((v) => ({
+                        ...v,
+                        quantity: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </Field>
+                {reservationItem?.trackingMode === "batch" ? (
+                  <Field label="Batch number">
+                    <Input
+                      required
+                      value={reservationForm.batchNumber}
+                      onChange={(e) =>
+                        setReservationForm((v) => ({
+                          ...v,
+                          batchNumber: e.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                ) : null}
+                {reservationItem?.trackingMode === "serial" ? (
+                  <Field label="Serial numbers (one per line)">
+                    <Textarea
+                      required
+                      value={reservationForm.serialText}
+                      onChange={(e) =>
+                        setReservationForm((v) => ({
+                          ...v,
+                          serialText: e.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                ) : null}
+                <Field label="Purpose">
+                  <Select
+                    value={reservationForm.relatedEntityType}
+                    onChange={(e) =>
+                      setReservationForm((v) => ({
+                        ...v,
+                        relatedEntityType: e.target
+                          .value as typeof v.relatedEntityType,
+                      }))
+                    }
+                  >
+                    {["deal", "project", "workOrder", "other"].map((value) => (
+                      <option key={value} value={value}>
+                        {titleCase(value)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Related record ID">
+                  <Input
+                    value={reservationForm.relatedEntityId}
+                    onChange={(e) =>
+                      setReservationForm((v) => ({
+                        ...v,
+                        relatedEntityId: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Customer / project / job">
+                  <Input
+                    value={reservationForm.relatedEntityName}
+                    onChange={(e) =>
+                      setReservationForm((v) => ({
+                        ...v,
+                        relatedEntityName: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Expires">
+                  <Input
+                    type="date"
+                    value={reservationForm.expiresAt}
+                    onChange={(e) =>
+                      setReservationForm((v) => ({
+                        ...v,
+                        expiresAt: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Button disabled={saving === "reservation"} type="submit">
+                  Reserve stock
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
+        <Card>
+          <CardHeader>
+            <CardTitle>Reservations</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {reservations.map((reservation) => (
+              <div className="rounded-md border p-3" key={reservation.id}>
+                <div className="flex justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">
+                      {reservation.referenceNumber} · {reservation.offeringName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {reservation.quantity} at {reservation.locationName} ·{" "}
+                      {reservation.batchNumber ||
+                        reservation.serialNumbers?.join(", ") ||
+                        reservation.relatedEntityName ||
+                        reservation.relatedEntityId ||
+                        "General"}
+                    </p>
+                  </div>
+                  <Badge
+                    tone={
+                      reservation.reservationStatus === "active"
+                        ? "warning"
+                        : reservation.reservationStatus === "fulfilled"
+                          ? "success"
+                          : "muted"
+                    }
+                  >
+                    {titleCase(reservation.reservationStatus)}
+                  </Badge>
+                </div>
+                {reservation.reservationStatus === "active" && canReserve ? (
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      disabled={saving === `fulfill-${reservation.id}`}
+                      onClick={() =>
+                        closeReservation(reservation.id, "fulfill")
+                      }
+                      size="sm"
+                      type="button"
+                    >
+                      <Check className="h-4 w-4" />
+                      Fulfill
+                    </Button>
+                    <Button
+                      disabled={saving === `release-${reservation.id}`}
+                      onClick={() =>
+                        closeReservation(reservation.id, "release")
+                      }
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Release
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-  if (mode === "traceability") return <div className="grid gap-5"><Card><CardHeader><CardTitle>Barcode and traceability lookup</CardTitle></CardHeader><CardContent><BarcodeScanner onScan={setTraceSearch} placeholder="Scan item barcode, batch, or serial number" /><Input className="mt-2" placeholder="Search item, location, batch, or serial" value={traceSearch} onChange={(e) => setTraceSearch(e.target.value)} /></CardContent></Card><div className="grid gap-5 lg:grid-cols-2"><Card><CardHeader><CardTitle>Batch / lot register</CardTitle></CardHeader><CardContent className="grid gap-2">{traceItems.lots.map((lot) => <div className="rounded-md border p-3" key={lot.id}><div className="flex justify-between"><div><p className="font-semibold">{lot.batchNumber}</p><p className="text-xs text-muted-foreground">{lot.offeringName} · {lot.locationName}</p></div><p className="font-bold">{lot.quantityOnHand}</p></div><p className="mt-1 text-xs text-muted-foreground">Expiry: {formatDate(lot.expiryDate)}</p></div>)}</CardContent></Card><Card><CardHeader><CardTitle>Serial register</CardTitle></CardHeader><CardContent className="grid gap-2">{traceItems.serials.map((serial) => <div className="flex items-center justify-between rounded-md border p-3" key={serial.id}><div><p className="font-mono font-semibold">{serial.serialNumber}</p><p className="text-xs text-muted-foreground">{serial.offeringName} · {serial.locationName}</p></div><Badge tone={serial.status === "available" ? "success" : serial.status === "issued" ? "muted" : "warning"}>{serial.status}</Badge></div>)}</CardContent></Card></div></div>;
+  if (mode === "traceability")
+    return (
+      <div className="grid gap-5">
+        <Card>
+          <CardHeader>
+            <CardTitle>Barcode and traceability lookup</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BarcodeScanner
+              onScan={setTraceSearch}
+              placeholder="Scan item barcode, batch, or serial number"
+            />
+            <Input
+              className="mt-2"
+              placeholder="Search item, location, batch, or serial"
+              value={traceSearch}
+              onChange={(e) => setTraceSearch(e.target.value)}
+            />
+          </CardContent>
+        </Card>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Batch / lot register</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              {traceItems.lots.map((lot) => (
+                <div className="rounded-md border p-3" key={lot.id}>
+                  <div className="flex justify-between">
+                    <div>
+                      <p className="font-semibold">{lot.batchNumber}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {lot.offeringName} · {lot.locationName}
+                      </p>
+                    </div>
+                    <p className="font-bold">{lot.quantityOnHand}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Expiry: {formatDate(lot.expiryDate)}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Serial register</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              {traceItems.serials.map((serial) => (
+                <div
+                  className="flex items-center justify-between rounded-md border p-3"
+                  key={serial.id}
+                >
+                  <div>
+                    <p className="font-mono font-semibold">
+                      {serial.serialNumber}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {serial.offeringName} · {serial.locationName}
+                    </p>
+                  </div>
+                  <Badge
+                    tone={
+                      serial.status === "available"
+                        ? "success"
+                        : serial.status === "issued"
+                          ? "muted"
+                          : "warning"
+                    }
+                  >
+                    {serial.status}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
 
-  return <Card><CardHeader><CardTitle>Approval queue</CardTitle></CardHeader><CardContent className="grid gap-3">{[...pendingOrders.map((item) => ({ id: item.id, type: "purchaseOrder" as const, title: `${item.referenceNumber} · ${item.supplierName}`, detail: formatCurrency(item.totalAmount), createdBy: item.createdBy })), ...pendingCounts.map((item) => ({ id: item.id, type: "stockCount" as const, title: `${item.referenceNumber} · ${item.name}`, detail: `${item.lines.length} count lines`, createdBy: item.createdBy }))].map((entry) => <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4" key={`${entry.type}-${entry.id}`}><div><p className="font-semibold">{entry.title}</p><p className="text-xs text-muted-foreground">{entry.detail}{entry.createdBy === user?.uid ? " · Created by you (separation of duties applies)" : ""}</p></div>{canApprove ? <div className="flex gap-2"><Button disabled={entry.createdBy === user?.uid || saving === `approved-${entry.id}`} onClick={() => decide(entry.type, entry.id, "approved")} size="sm" type="button"><ShieldCheck className="h-4 w-4" />Approve</Button><Button disabled={entry.createdBy === user?.uid || saving === `rejected-${entry.id}`} onClick={() => decide(entry.type, entry.id, "rejected")} size="sm" type="button" variant="danger">Reject</Button></div> : null}</div>)}{!pendingOrders.length && !pendingCounts.length ? <p className="py-8 text-center text-muted-foreground">No inventory approvals are waiting.</p> : null}<Button onClick={refreshAll} type="button" variant="outline"><RefreshCw className="h-4 w-4" />Refresh approvals</Button></CardContent></Card>;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Approval queue</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {[
+          ...pendingOrders.map((item) => ({
+            id: item.id,
+            type: "purchaseOrder" as const,
+            title: `${item.referenceNumber} · ${item.supplierName}`,
+            detail: `${formatCurrency(item.totalAmount)} · ${titleCase(item.paymentArrangement ?? "credit")} · ${formatCurrency(Number(item.balanceDue ?? item.totalAmount))} due`,
+            createdBy: item.createdBy,
+          })),
+          ...pendingCounts.map((item) => ({
+            id: item.id,
+            type: "stockCount" as const,
+            title: `${item.referenceNumber} · ${item.name}`,
+            detail: `${item.lines.length} count lines`,
+            createdBy: item.createdBy,
+          })),
+        ].map((entry) => (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-4"
+            key={`${entry.type}-${entry.id}`}
+          >
+            <div>
+              <p className="font-semibold">{entry.title}</p>
+              <p className="text-xs text-muted-foreground">
+                {entry.detail}
+                {entry.createdBy === user?.uid
+                  ? " · Created by you (separation of duties applies)"
+                  : ""}
+              </p>
+            </div>
+            {canApprove ? (
+              <div className="flex gap-2">
+                <Button
+                  disabled={
+                    entry.createdBy === user?.uid ||
+                    saving === `approved-${entry.id}`
+                  }
+                  onClick={() => decide(entry.type, entry.id, "approved")}
+                  size="sm"
+                  type="button"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Approve
+                </Button>
+                <Button
+                  disabled={
+                    entry.createdBy === user?.uid ||
+                    saving === `rejected-${entry.id}`
+                  }
+                  onClick={() => decide(entry.type, entry.id, "rejected")}
+                  size="sm"
+                  type="button"
+                  variant="danger"
+                >
+                  Reject
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {!pendingOrders.length && !pendingCounts.length ? (
+          <p className="py-8 text-center text-muted-foreground">
+            No inventory approvals are waiting.
+          </p>
+        ) : null}
+        <Button onClick={refreshAll} type="button" variant="outline">
+          <RefreshCw className="h-4 w-4" />
+          Refresh approvals
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }

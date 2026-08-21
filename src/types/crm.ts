@@ -253,11 +253,43 @@ export type DealStatus =
   | "lost"
   | "dormant";
 
-export type DealType = "sale" | "rent" | "lease" | "reservation" | "investment" | "other";
-export type DealFinanceStatus = "notInvoiced" | "paymentPending" | "partPaid" | "paid" | "overdue";
-export type DealLegalStatus = "notStarted" | "drafting" | "inReview" | "signed" | "completed" | "blocked";
-export type DealProposalStatus = "notStarted" | "drafting" | "sent" | "accepted" | "rejected" | "expired";
-export type DealFulfillmentStatus = "notStarted" | "awaitingPayment" | "procurement" | "scheduled" | "inProgress" | "delivered" | "completed" | "onHold" | "cancelled";
+export type DealType =
+  | "sale"
+  | "rent"
+  | "lease"
+  | "reservation"
+  | "investment"
+  | "other";
+export type DealFinanceStatus =
+  | "notInvoiced"
+  | "paymentPending"
+  | "partPaid"
+  | "paid"
+  | "overdue";
+export type DealLegalStatus =
+  | "notStarted"
+  | "drafting"
+  | "inReview"
+  | "signed"
+  | "completed"
+  | "blocked";
+export type DealProposalStatus =
+  | "notStarted"
+  | "drafting"
+  | "sent"
+  | "accepted"
+  | "rejected"
+  | "expired";
+export type DealFulfillmentStatus =
+  | "notStarted"
+  | "awaitingPayment"
+  | "procurement"
+  | "scheduled"
+  | "inProgress"
+  | "delivered"
+  | "completed"
+  | "onHold"
+  | "cancelled";
 
 export interface Deal extends EntityMetadata {
   id: string;
@@ -337,7 +369,12 @@ export type PropertyStatus =
   | "unavailable"
   | "withdrawn";
 
-export type BusinessVertical = "realEstate" | "solar" | "buildingMaterials" | "generalServices" | "custom";
+export type BusinessVertical =
+  | "realEstate"
+  | "solar"
+  | "buildingMaterials"
+  | "generalServices"
+  | "custom";
 export type OfferingType =
   | "property"
   | "unit"
@@ -437,7 +474,23 @@ export interface InventoryPurchaseOrderLine {
   unitCost: number;
 }
 
-export type InventoryApprovalStatus = "draft" | "pendingApproval" | "approved" | "rejected" | "cancelled";
+export type InventoryApprovalStatus =
+  | "draft"
+  | "pendingApproval"
+  | "approved"
+  | "rejected"
+  | "cancelled";
+export type InventoryProcurementPaymentArrangement =
+  | "paid"
+  | "credit"
+  | "partPaid";
+export type InventoryProcurementPaymentStatus = "unpaid" | "partPaid" | "paid";
+export type InventoryPaymentMethod =
+  | "cash"
+  | "bankTransfer"
+  | "card"
+  | "cheque"
+  | "other";
 
 export interface InventoryPurchaseOrder extends EntityMetadata {
   id: string;
@@ -448,6 +501,14 @@ export interface InventoryPurchaseOrder extends EntityMetadata {
   subtotal: number;
   taxAmount: number;
   totalAmount: number;
+  paymentArrangement?: InventoryProcurementPaymentArrangement;
+  paymentStatus?: InventoryProcurementPaymentStatus;
+  amountPaid?: number;
+  balanceDue?: number;
+  paymentMethod?: InventoryPaymentMethod;
+  paymentReference?: string;
+  paymentDueAt?: Date | string;
+  lastPaymentAt?: Date | string;
   expectedAt?: Date | string;
   approvalStatus: InventoryApprovalStatus;
   receivingStatus: "notReceived" | "partReceived" | "received";
@@ -537,8 +598,19 @@ export interface InventoryReservation extends EntityMetadata {
   notes?: string;
 }
 
-export type InventoryMovementType = "receipt" | "issue" | "adjustmentIn" | "adjustmentOut" | "transfer" | "returnIn" | "returnOut";
-export type InventoryMovementPurpose = "sale" | "project" | "internalUse" | "other";
+export type InventoryMovementType =
+  | "receipt"
+  | "issue"
+  | "adjustmentIn"
+  | "adjustmentOut"
+  | "transfer"
+  | "returnIn"
+  | "returnOut";
+export type InventoryMovementPurpose =
+  | "sale"
+  | "project"
+  | "internalUse"
+  | "other";
 
 export interface InventoryMovement {
   id: string;
@@ -686,9 +758,28 @@ export interface PropertyUnit extends EntityMetadata {
   reservationExpiresAt?: Date | null;
 }
 
-export type RentalTenancyStatus = "draft" | "active" | "expiringSoon" | "renewalDue" | "renewed" | "terminated" | "defaulting" | "movedOut";
-export type RentalPaymentStatus = "notInvoiced" | "invoiced" | "partPaid" | "paid" | "overdue";
-export type RentalPaymentMethod = "bankTransfer" | "cash" | "pos" | "cheque" | "onlinePayment" | "other";
+export type RentalTenancyStatus =
+  | "draft"
+  | "active"
+  | "expiringSoon"
+  | "renewalDue"
+  | "renewed"
+  | "terminated"
+  | "defaulting"
+  | "movedOut";
+export type RentalPaymentStatus =
+  | "notInvoiced"
+  | "invoiced"
+  | "partPaid"
+  | "paid"
+  | "overdue";
+export type RentalPaymentMethod =
+  | "bankTransfer"
+  | "cash"
+  | "pos"
+  | "cheque"
+  | "onlinePayment"
+  | "other";
 
 export interface RentalPaymentRecord {
   amount: number;
@@ -751,9 +842,25 @@ export interface RentalTenancy extends EntityMetadata {
 }
 
 export type PaymentVerificationStatus = "pending" | "verified" | "rejected";
-export type FinanceApprovalStatus = "pendingApproval" | "approved" | "rejected" | "paid" | "void";
-export type FinancePaymentSourceType = "deal" | "lead" | "rental" | "property" | "unit" | "other";
-export type FinanceRevenueCategory = BusinessVertical | "propertySale" | "rental" | "unitSale" | "other";
+export type FinanceApprovalStatus =
+  | "pendingApproval"
+  | "approved"
+  | "rejected"
+  | "paid"
+  | "void";
+export type FinancePaymentSourceType =
+  | "deal"
+  | "lead"
+  | "rental"
+  | "property"
+  | "unit"
+  | "other";
+export type FinanceRevenueCategory =
+  | BusinessVertical
+  | "propertySale"
+  | "rental"
+  | "unitSale"
+  | "other";
 
 export interface FinancePayment extends EntityMetadata {
   id: string;
@@ -793,7 +900,16 @@ export interface FinanceExpense extends EntityMetadata {
   method?: RentalPaymentMethod;
   paymentReference?: string;
   description?: string;
-  relatedEntityType?: "deal" | "property" | "unit" | "tenancy" | "development" | "marketing" | "offering" | "office" | "other";
+  relatedEntityType?:
+    | "deal"
+    | "property"
+    | "unit"
+    | "tenancy"
+    | "development"
+    | "marketing"
+    | "offering"
+    | "office"
+    | "other";
   relatedEntityId?: string;
   approvalStatus: FinanceApprovalStatus;
   approvedAt?: string;
@@ -825,8 +941,21 @@ export interface FinanceCommission extends EntityMetadata {
   paidBy?: string;
 }
 
-export type NotificationKind = "task" | "lead" | "rent" | "renewal" | "activity" | "deal" | "finance" | "system";
-export type NotificationTone = "danger" | "warning" | "info" | "success" | "muted";
+export type NotificationKind =
+  | "task"
+  | "lead"
+  | "rent"
+  | "renewal"
+  | "activity"
+  | "deal"
+  | "finance"
+  | "system";
+export type NotificationTone =
+  | "danger"
+  | "warning"
+  | "info"
+  | "success"
+  | "muted";
 
 export interface AppNotification extends EntityMetadata {
   id: string;
@@ -902,8 +1031,25 @@ export interface DevelopmentProject extends EntityMetadata {
   notes?: string;
 }
 
-export type MarketingCampaignStatus = "draft" | "planned" | "active" | "paused" | "completed" | "cancelled";
-export type MarketingCampaignChannel = "Facebook" | "Instagram" | "Google Ads" | "WhatsApp" | "Email" | "SMS" | "Property portal" | "Referral" | "Event" | "Outdoor" | "Other";
+export type MarketingCampaignStatus =
+  | "draft"
+  | "planned"
+  | "active"
+  | "paused"
+  | "completed"
+  | "cancelled";
+export type MarketingCampaignChannel =
+  | "Facebook"
+  | "Instagram"
+  | "Google Ads"
+  | "WhatsApp"
+  | "Email"
+  | "SMS"
+  | "Property portal"
+  | "Referral"
+  | "Event"
+  | "Outdoor"
+  | "Other";
 
 export interface MarketingCampaign extends EntityMetadata {
   id: string;
@@ -935,7 +1081,13 @@ export interface MarketingCampaign extends EntityMetadata {
   notes?: string;
 }
 
-export type TaskStatus = "notStarted" | "inProgress" | "waiting" | "completed" | "cancelled" | "overdue";
+export type TaskStatus =
+  | "notStarted"
+  | "inProgress"
+  | "waiting"
+  | "completed"
+  | "cancelled"
+  | "overdue";
 
 export interface Task extends EntityMetadata {
   id: string;
@@ -950,7 +1102,16 @@ export interface Task extends EntityMetadata {
   assignedTo?: string;
   assignedToEmail?: string;
   assignedToName?: string;
-  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "tenancy" | "development" | "marketing" | "offering";
+  relatedEntityType?:
+    | "deal"
+    | "lead"
+    | "client"
+    | "property"
+    | "unit"
+    | "tenancy"
+    | "development"
+    | "marketing"
+    | "offering";
   relatedEntityId?: string;
   status: TaskStatus;
 }
@@ -974,7 +1135,17 @@ export interface Activity extends EntityMetadata {
   subject: string;
   body?: string;
   status: string;
-  relatedEntityType?: "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "offering";
+  relatedEntityType?:
+    | "deal"
+    | "lead"
+    | "client"
+    | "property"
+    | "unit"
+    | "task"
+    | "tenancy"
+    | "development"
+    | "marketing"
+    | "offering";
   relatedEntityId?: string;
 }
 
