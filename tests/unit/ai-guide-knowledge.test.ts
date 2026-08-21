@@ -29,7 +29,7 @@ describe("AI Guide knowledge", () => {
     const inventoryContext = buildGuideMemberContext({ permissions: ["inventory.read"], role: "brandPartner" });
     const salesContext = buildGuideMemberContext({ permissions: ["leads.readAssigned"], role: "salesExecutive" });
 
-    expect(inventoryContext).toContain("Accessible areas inferred from current permissions: Inventory");
+    expect(inventoryContext).toContain("Accessible areas inferred from current permissions: Dashboard, Inventory");
     expect(salesContext).not.toContain("Accessible areas inferred from current permissions: Inventory");
   });
 

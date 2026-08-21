@@ -45,6 +45,8 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "inventory.approve",
     "inventory.count",
     "inventory.reserve",
+    "pos.read",
+    "pos.sell",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -73,6 +75,7 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "inventory.viewReports",
     "inventory.comment",
     "inventory.approve",
+    "pos.read",
     "tasks.read",
     "activities.read",
     "finance.approve",
@@ -120,6 +123,8 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "inventory.approve",
     "inventory.count",
     "inventory.reserve",
+    "pos.read",
+    "pos.sell",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -127,19 +132,19 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "activities.read",
     "users.manage",
   ],
-  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.reserve", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "offerings.read", "inventory.read", "inventory.reserve", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.reserve", "pos.read", "pos.sell", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "properties.read", "units.read", "offerings.read", "inventory.read", "inventory.reserve", "pos.read", "pos.sell", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   propertyManager: ["properties.create", "properties.read", "properties.update", "units.create", "units.read", "units.update", "offerings.read", "deals.read", "rentals.create", "rentals.read", "rentals.update", "development.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "inventory.approve", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
-  accountant: ["clients.read", "properties.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "activities.create", "activities.read", "finance.create", "finance.update", "reports.viewFinancial"],
+  financeManager: ["clients.read", "properties.read", "units.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.comment", "inventory.approve", "pos.read", "activities.create", "activities.read", "finance.create", "finance.update", "finance.approve", "reports.viewFinancial", "auditLogs.read"],
+  accountant: ["clients.read", "properties.read", "deals.read", "rentals.read", "rentals.update", "offerings.read", "inventory.read", "inventory.viewReports", "pos.read", "activities.create", "activities.read", "finance.create", "finance.update", "reports.viewFinancial"],
   legalOfficer: ["clients.read", "properties.read", "deals.read", "rentals.read", "offerings.read", "auditLogs.read"],
   projectManager: ["properties.read", "properties.update", "development.create", "development.read", "development.update", "offerings.read", "inventory.read", "inventory.issue", "inventory.reserve", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
   marketingOfficer: ["leads.create", "leads.readAll", "properties.read", "marketing.create", "marketing.read", "marketing.update", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   customerServiceOfficer: ["leads.create", "leads.readAssigned", "clients.read", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
-  frontDeskOfficer: ["leads.create", "leads.readAssigned", "offerings.read", "tasks.create", "tasks.read", "activities.create", "activities.read"],
+  frontDeskOfficer: ["leads.create", "leads.readAssigned", "offerings.read", "inventory.read", "pos.read", "pos.sell", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   agent: ["leads.readAssigned", "activities.create", "activities.read"],
-  auditor: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "tasks.read", "activities.read", "reports.viewFinancial", "auditLogs.read"],
-  inventoryManager: ["offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "inventory.procure", "inventory.count", "inventory.reserve", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
+  auditor: ["dashboard.viewExecutive", "leads.readAll", "clients.read", "deals.read", "properties.read", "units.read", "rentals.read", "development.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "pos.read", "tasks.read", "activities.read", "reports.viewFinancial", "auditLogs.read"],
+  inventoryManager: ["offerings.create", "offerings.read", "offerings.update", "inventory.read", "inventory.manageCatalog", "inventory.receive", "inventory.issue", "inventory.adjust", "inventory.transfer", "inventory.viewReports", "inventory.comment", "inventory.procure", "inventory.count", "inventory.reserve", "pos.read", "tasks.create", "tasks.read", "tasks.update", "activities.create", "activities.read"],
   brandPartner: ["inventory.read", "inventory.viewReports", "inventory.comment"],
 };
 
@@ -160,7 +165,7 @@ export function hasAnyPermission(member: Member | null, permissions: Permission[
 }
 
 export function defaultAppRoute(member: Member | null) {
-  if (hasAnyPermission(member, ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"])) {
+  if (hasAnyPermission(member, ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll", "inventory.read"])) {
     return "/dashboard";
   }
 

@@ -24,6 +24,8 @@ describe("route access rules", () => {
     expect(accessRuleForPath("/offerings/new")?.permissions).toEqual(["offerings.create"]);
     expect(accessRuleForPath("/reports")?.permissions).toEqual(expect.arrayContaining(["leads.readAssigned", "reports.viewFinancial"]));
     expect(accessRuleForPath("/finance")?.permissions).toEqual(["reports.viewFinancial"]);
+    expect(accessRuleForPath("/pos")?.permissions).toEqual(["pos.read"]);
+    expect(accessRuleForPath("/pos/sales/sale-1/invoice")?.permissions).toEqual(["pos.read"]);
   });
 
   it("keeps navigation links aligned with direct route access rules", () => {
@@ -115,7 +117,7 @@ describe("route access rules", () => {
     }
   });
 
-  it("routes brand partners only to the scoped inventory report", () => {
+  it("routes brand partners to an inventory-first dashboard", () => {
     expect(accessRuleForPath("/inventory")?.permissions).toEqual(["inventory.read"]);
     expect(rolePermissions.brandPartner).toEqual(["inventory.read", "inventory.viewReports", "inventory.comment"]);
     expect(rolePermissions.brandPartner).not.toEqual(expect.arrayContaining(["offerings.read", "reports.viewFinancial"]));
@@ -129,7 +131,9 @@ describe("route access rules", () => {
       role: "brandPartner" as const,
       status: "active" as const,
     } as Member;
-    expect(defaultAppRoute(brandPartner)).toBe("/inventory");
+    expect(defaultAppRoute(brandPartner)).toBe("/dashboard");
+    expect(accessRuleForPath("/dashboard")?.permissions).toContain("inventory.read");
+    expect(accessRuleForPath("/pos")?.permissions.some((permission) => rolePermissions.brandPartner.includes(permission))).toBe(false);
   });
 
   it("separates enterprise inventory duties", () => {
@@ -141,7 +145,8 @@ describe("route access rules", () => {
   });
 
   it("keeps role permissions aligned with operational responsibilities", () => {
-    expect(rolePermissions.salesExecutive).toEqual(expect.arrayContaining(["deals.update", "offerings.read"]));
+    expect(rolePermissions.salesExecutive).toEqual(expect.arrayContaining(["deals.update", "offerings.read", "pos.read", "pos.sell"]));
+    expect(rolePermissions.salesManager).toEqual(expect.arrayContaining(["pos.read", "pos.sell"]));
     expect(rolePermissions.salesExecutive).not.toEqual(expect.arrayContaining(["clients.update", "finance.create", "users.manage"]));
     expect(rolePermissions.salesManager).toEqual(expect.arrayContaining(["clients.update", "leads.assign"]));
     expect(rolePermissions.auditor).toEqual(expect.arrayContaining(["reports.viewFinancial", "auditLogs.read"]));

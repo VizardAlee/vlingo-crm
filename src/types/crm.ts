@@ -42,6 +42,8 @@ export type Permission =
   | "inventory.approve"
   | "inventory.count"
   | "inventory.reserve"
+  | "pos.read"
+  | "pos.sell"
   | "tasks.create"
   | "tasks.read"
   | "tasks.update"
@@ -661,6 +663,61 @@ export interface InventoryComment {
   isDeleted: false;
 }
 
+export type PosPaymentStatus = "unpaid" | "partPaid" | "paid";
+export type PosSaleStatus = "completed" | "void";
+
+export interface PosSaleLine {
+  offeringId: string;
+  offeringName: string;
+  brandId: string;
+  brandName: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  lineTotal: number;
+  unitCost?: number;
+}
+
+export interface PosPaymentEntry {
+  paymentId: string;
+  receiptNumber: string;
+  amount: number;
+  at: Date | string;
+  method: RentalPaymentMethod;
+  paymentReference?: string;
+  recordedBy: string;
+}
+
+export interface PosSale extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  invoiceNumber: string;
+  receiptNumber?: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  lines: PosSaleLine[];
+  subtotal: number;
+  discountAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  totalAmount: number;
+  amountPaid: number;
+  balanceDue: number;
+  paymentStatus: PosPaymentStatus;
+  paymentMethod?: RentalPaymentMethod;
+  paymentReference?: string;
+  paymentHistory?: PosPaymentEntry[];
+  saleStatus: PosSaleStatus;
+  soldAt: Date | string;
+  notes?: string;
+  voidedAt?: Date | string;
+  voidedBy?: string;
+  voidReason?: string;
+}
+
 export interface Property extends EntityMetadata {
   id: string;
   referenceNumber: string;
@@ -857,6 +914,7 @@ export type FinancePaymentSourceType =
   | "rental"
   | "property"
   | "unit"
+  | "posSale"
   | "other";
 export type FinanceRevenueCategory =
   | BusinessVertical

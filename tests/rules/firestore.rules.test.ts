@@ -845,6 +845,37 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
+  it("allows branch-scoped POS reads but keeps sales server-written", async () => {
+    await seedMember("cashier-1", "org-a", ["pos.read", "pos.sell"], "frontDeskOfficer");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      await setDoc(doc(adminDb, "organizations/org-a/posSales/sale-head"), {
+        branchId: "head-office",
+        customerName: "Walk-in customer",
+        isDeleted: false,
+        organizationId: "org-a",
+        saleStatus: "completed",
+      });
+      await setDoc(doc(adminDb, "organizations/org-a/posSales/sale-kano"), {
+        branchId: "kano",
+        customerName: "Kano customer",
+        isDeleted: false,
+        organizationId: "org-a",
+        saleStatus: "completed",
+      });
+    });
+    const cashierDb = testEnv.authenticatedContext("cashier-1").firestore();
+    await assertSucceeds(getDoc(doc(cashierDb, "organizations/org-a/posSales/sale-head")));
+    await assertFails(getDoc(doc(cashierDb, "organizations/org-a/posSales/sale-kano")));
+    await assertFails(setDoc(doc(cashierDb, "organizations/org-a/posSales/direct-write"), {
+      branchId: "head-office",
+      createdBy: "cashier-1",
+      isDeleted: false,
+      organizationId: "org-a",
+      updatedBy: "cashier-1",
+    }));
+  });
+
   it("blocks ordinary audit log writes", async () => {
     await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
     const db = testEnv.authenticatedContext("sales-1").firestore();

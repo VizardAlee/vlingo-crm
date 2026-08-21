@@ -529,6 +529,11 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /posSales/{saleId} {
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "pos.read");
+        allow create, update, delete: if false;
+      }
+
       match /financeExpenses/{expenseId} {
         allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "reports.viewFinancial");
         allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);

@@ -26,6 +26,7 @@ export type OrgCollection =
   | "members"
   | "notifications"
   | "offerings"
+  | "posSales"
   | "properties"
   | "propertyStakeholders"
   | "propertyUnits"

@@ -42,6 +42,16 @@ Reservations hold stock for a deal, project, work order, or other purpose. Avail
 
 The creator of a purchase order or stock count cannot approve it. `inventoryManager` can procure, count, reserve, and operate stock but cannot approve. Operations managers, finance managers, managing directors, and super admins can approve according to their assigned permissions.
 
+### Point of Sale
+
+Point of Sale uses the inventory ledger rather than maintaining a second stock count. A user with `pos.sell` selects products that have available stock in the active dashboard branch, builds a cart, optionally captures customer contact details, applies line discounts and tax, and records any amount received. Walk-in, fully paid, partly paid, and unpaid sales are supported.
+
+Completing checkout is atomic: the server checks current unreserved stock, uses the catalogue selling price, creates the POS sale, deducts each product from the active branch balance, updates catalogue totals, records sale-purpose inventory issues, creates a numbered invoice, and creates a verified finance payment and receipt when money was received. If any product lacks sufficient stock, the entire checkout is rejected and nothing is partially written.
+
+Outstanding invoices remain visible in Sales history. An authorized POS or finance user can record a later payment, update the invoice balance, and issue another numbered receipt. Printable invoice and receipt views are available from every sale. Batch-controlled products remain in the controlled Inventory issue workflow until POS batch selection is introduced; optional serial capture remains consistent with the current inventory policy.
+
+The main dashboard is inventory-first. It shows units on hand, available and reserved quantities, low-stock items, inventory value, units sold, stock by brand, recent movements, POS sales value, and outstanding invoices before the CRM pipeline summary.
+
 ### In-app guidance
 
 The Inventory page includes a permission-aware **Guide me** tour that runs only when the user chooses it; refreshing the page never opens it automatically. Internal users are shown only the workflow tabs their role can access, while brand partners receive guidance for their scoped report, movement history, comments, and CSV export. The AI Guide covers opening stock, paid and credit procurement, partial receiving, movements, stock counts, reservations, traceability, approvals, and partner invitations. Its recommendations use the signed-in member's permissions and branch scope.
@@ -79,6 +89,7 @@ The partner sees only the Inventory area. Reports, item balances, movements, rec
 - `inventorySerials`: unique serial status and location register.
 - `inventoryStockCounts`: count snapshots, variances, approvals, and posting state.
 - `inventoryReservations`: committed stock and fulfillment state.
+- `posSales`: server-written sales, line prices, discounts, tax, payment state, invoice/receipt numbers, customer details, and audit metadata.
 - `offerings`: product catalog, extended with `brandId` and `brandName`.
 
 ## Deployment

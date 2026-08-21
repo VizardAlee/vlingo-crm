@@ -96,6 +96,8 @@ const rolePermissions = {
     "inventory.approve",
     "inventory.count",
     "inventory.reserve",
+    "pos.read",
+    "pos.sell",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -124,6 +126,7 @@ const rolePermissions = {
     "inventory.viewReports",
     "inventory.comment",
     "inventory.approve",
+    "pos.read",
     "tasks.read",
     "activities.read",
     "finance.approve",
@@ -171,6 +174,8 @@ const rolePermissions = {
     "inventory.approve",
     "inventory.count",
     "inventory.reserve",
+    "pos.read",
+    "pos.sell",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -196,6 +201,8 @@ const rolePermissions = {
     "inventory.read",
     "inventory.viewReports",
     "inventory.reserve",
+    "pos.read",
+    "pos.sell",
     "tasks.create",
     "tasks.read",
     "activities.create",
@@ -215,6 +222,8 @@ const rolePermissions = {
     "offerings.read",
     "inventory.read",
     "inventory.reserve",
+    "pos.read",
+    "pos.sell",
     "tasks.create",
     "tasks.read",
     "activities.create",
@@ -250,6 +259,7 @@ const rolePermissions = {
     "inventory.viewReports",
     "inventory.comment",
     "inventory.approve",
+    "pos.read",
     "activities.create",
     "activities.read",
     "finance.create",
@@ -267,6 +277,7 @@ const rolePermissions = {
     "offerings.read",
     "inventory.read",
     "inventory.viewReports",
+    "pos.read",
     "activities.create",
     "activities.read",
     "finance.create",
@@ -324,6 +335,9 @@ const rolePermissions = {
     "leads.create",
     "leads.readAssigned",
     "offerings.read",
+    "inventory.read",
+    "pos.read",
+    "pos.sell",
     "tasks.create",
     "tasks.read",
     "activities.create",
@@ -343,6 +357,7 @@ const rolePermissions = {
     "offerings.read",
     "inventory.read",
     "inventory.viewReports",
+    "pos.read",
     "tasks.read",
     "activities.read",
     "reports.viewFinancial",
@@ -363,6 +378,7 @@ const rolePermissions = {
     "inventory.procure",
     "inventory.count",
     "inventory.reserve",
+    "pos.read",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -2831,6 +2847,384 @@ export const recordInventoryMovement = onCall(
     return { movementId: movementRef.id, referenceNumber };
   },
 );
+
+const posPaymentMethods = new Set([
+  "cash",
+  "bankTransfer",
+  "card",
+  "cheque",
+  "mobileMoney",
+  "onlinePayment",
+  "other",
+]);
+
+function money(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export const createPosSale = onCall(callableOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const branchId = requireString(request.data?.branchId, "branchId");
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "pos.sell")) {
+    throw new HttpsError("permission-denied", "You do not have permission to record POS sales.");
+  }
+  if (!canActorAccessBranch(actor, branchId)) {
+    throw new HttpsError("permission-denied", "You do not have access to this branch.");
+  }
+
+  const rawLines: unknown[] = Array.isArray(request.data?.lines) ? request.data.lines : [];
+  if (!rawLines.length || rawLines.length > 100) {
+    throw new HttpsError("invalid-argument", "Add between 1 and 100 products to the sale.");
+  }
+  const normalizedLines = rawLines.map((raw: unknown) => {
+    const line = (raw ?? {}) as Record<string, unknown>;
+    const offeringId = requireString(line.offeringId, "offeringId");
+    const quantity = requireNumber(line.quantity, "quantity");
+    const discountAmount = line.discountAmount === undefined ? 0 : requireNumber(line.discountAmount, "discountAmount");
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new HttpsError("invalid-argument", "Sale quantities must be positive whole numbers.");
+    }
+    if (discountAmount < 0) {
+      throw new HttpsError("invalid-argument", "Line discounts cannot be negative.");
+    }
+    return { offeringId, quantity, discountAmount: money(discountAmount) };
+  });
+  if (new Set(normalizedLines.map((line) => line.offeringId)).size !== normalizedLines.length) {
+    throw new HttpsError("invalid-argument", "Each product can appear only once in a sale.");
+  }
+
+  const taxRate = request.data?.taxRate === undefined ? 0 : requireNumber(request.data.taxRate, "taxRate");
+  if (taxRate < 0 || taxRate > 100) {
+    throw new HttpsError("invalid-argument", "Tax rate must be between 0 and 100.");
+  }
+  const amountPaid = request.data?.amountPaid === undefined ? 0 : requireNumber(request.data.amountPaid, "amountPaid");
+  if (amountPaid < 0) {
+    throw new HttpsError("invalid-argument", "Amount paid cannot be negative.");
+  }
+  const paymentMethod = typeof request.data?.paymentMethod === "string" ? request.data.paymentMethod : "";
+  if (amountPaid > 0 && !posPaymentMethods.has(paymentMethod)) {
+    throw new HttpsError("invalid-argument", "Select a payment method for the amount received.");
+  }
+  const customerName = typeof request.data?.customerName === "string" && request.data.customerName.trim()
+    ? request.data.customerName.trim().slice(0, 160)
+    : "Walk-in customer";
+  const soldAt = request.data?.soldAt ? new Date(String(request.data.soldAt)) : new Date();
+  if (Number.isNaN(soldAt.getTime())) {
+    throw new HttpsError("invalid-argument", "Enter a valid sale date.");
+  }
+
+  const saleRef = db.collection(`organizations/${organizationId}/posSales`).doc();
+  const suffix = `${Date.now().toString(36).toUpperCase()}-${saleRef.id.slice(0, 5).toUpperCase()}`;
+  const referenceNumber = `SAL-${suffix}`;
+  const invoiceNumber = `INV-${suffix}`;
+  const receiptNumber = amountPaid > 0 ? `RCT-${suffix}` : "";
+  const branchRef = db.doc(`organizations/${organizationId}/branches/${branchId}`);
+  const offeringRefs = normalizedLines.map((line) => db.doc(`organizations/${organizationId}/offerings/${line.offeringId}`));
+  const balanceRefs = normalizedLines.map((line) => db.doc(`organizations/${organizationId}/inventoryBalances/${line.offeringId}_${branchId}`));
+  const movementRefs = normalizedLines.map(() => db.collection(`organizations/${organizationId}/inventoryMovements`).doc());
+  const paymentRef = amountPaid > 0 ? db.collection(`organizations/${organizationId}/financePayments`).doc() : null;
+
+  let resultTotal = 0;
+  await db.runTransaction(async (transaction) => {
+    const [branchSnapshot, ...snapshots] = await Promise.all([
+      transaction.get(branchRef),
+      ...offeringRefs.map((ref) => transaction.get(ref)),
+      ...balanceRefs.map((ref) => transaction.get(ref)),
+    ]);
+    if (!branchSnapshot.exists || branchSnapshot.data()?.status === "closed") {
+      throw new HttpsError("failed-precondition", "The selected branch is not active.");
+    }
+    const offeringSnapshots = snapshots.slice(0, normalizedLines.length);
+    const balanceSnapshots = snapshots.slice(normalizedLines.length);
+    const saleLines = normalizedLines.map((line, index) => {
+      const offeringSnapshot = offeringSnapshots[index];
+      const balanceSnapshot = balanceSnapshots[index];
+      if (!offeringSnapshot.exists) {
+        throw new HttpsError("not-found", "A product in the cart was not found.");
+      }
+      const offering = offeringSnapshot.data() ?? {};
+      if (offering.isDeleted === true || offering.status !== "active" || !offering.brandId) {
+        throw new HttpsError("failed-precondition", `${offering.name ?? "A product"} is not available for sale.`);
+      }
+      if (offering.trackingMode === "batch") {
+        throw new HttpsError("failed-precondition", `${offering.name ?? "This product"} is batch-controlled. Issue it from Inventory until POS batch selection is enabled.`);
+      }
+      const balance = balanceSnapshot.data() ?? {};
+      const onHand = Number(balance.quantityOnHand ?? 0);
+      const reserved = Number(balance.quantityReserved ?? 0);
+      const available = onHand - reserved;
+      if (available < line.quantity) {
+        throw new HttpsError("failed-precondition", `${offering.name ?? "A product"} has only ${available} available units in this branch.`);
+      }
+      const unitPrice = money(Number(offering.sellingPrice ?? 0));
+      if (unitPrice < 0) {
+        throw new HttpsError("failed-precondition", `${offering.name ?? "A product"} has an invalid selling price.`);
+      }
+      const gross = money(unitPrice * line.quantity);
+      if (line.discountAmount > gross) {
+        throw new HttpsError("invalid-argument", `Discount exceeds the value of ${offering.name ?? "a product"}.`);
+      }
+      return {
+        offeringId: line.offeringId,
+        offeringName: String(offering.name ?? offering.referenceNumber ?? "Inventory item"),
+        brandId: String(offering.brandId),
+        brandName: String(offering.brandName ?? ""),
+        sku: String(offering.sku ?? ""),
+        quantity: line.quantity,
+        unitPrice,
+        discountAmount: line.discountAmount,
+        lineTotal: money(gross - line.discountAmount),
+        unitCost: money(Number(offering.costPrice ?? 0)),
+      };
+    });
+    const subtotal = money(saleLines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0));
+    const discountAmount = money(saleLines.reduce((sum, line) => sum + line.discountAmount, 0));
+    const taxableAmount = money(subtotal - discountAmount);
+    const taxAmount = money(taxableAmount * taxRate / 100);
+    const totalAmount = money(taxableAmount + taxAmount);
+    if (amountPaid > totalAmount) {
+      throw new HttpsError("invalid-argument", "Amount paid cannot exceed the sale total.");
+    }
+    const paid = money(amountPaid);
+    const balanceDue = money(totalAmount - paid);
+    const paymentStatus = paid <= 0 ? "unpaid" : balanceDue > 0 ? "partPaid" : "paid";
+    resultTotal = totalAmount;
+
+    saleLines.forEach((line, index) => {
+      const balance = balanceSnapshots[index].data() ?? {};
+      transaction.set(balanceRefs[index], {
+        organizationId,
+        branchId,
+        brandId: line.brandId,
+        brandName: line.brandName,
+        offeringId: line.offeringId,
+        offeringName: line.offeringName,
+        sku: line.sku,
+        locationId: branchId,
+        locationName: String(branchSnapshot.data()?.name ?? ""),
+        quantityOnHand: Number(balance.quantityOnHand ?? 0) - line.quantity,
+        quantityReserved: Number(balance.quantityReserved ?? 0),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      }, { merge: true });
+      transaction.update(offeringRefs[index], {
+        stockQuantity: FieldValue.increment(-line.quantity),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      });
+      transaction.set(movementRefs[index], {
+        organizationId,
+        branchId,
+        brandId: line.brandId,
+        brandName: line.brandName,
+        offeringId: line.offeringId,
+        offeringName: line.offeringName,
+        sku: line.sku,
+        movementType: "issue",
+        movementPurpose: "sale",
+        quantity: line.quantity,
+        fromBranchId: branchId,
+        fromLocationId: branchId,
+        fromLocationName: String(branchSnapshot.data()?.name ?? ""),
+        toBranchId: "",
+        toLocationId: "",
+        toLocationName: "",
+        referenceNumber: `MOV-${suffix}-${index + 1}`,
+        externalReference: referenceNumber,
+        notes: `POS sale ${invoiceNumber}`,
+        occurredAt: soldAt,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
+        isDeleted: false,
+      });
+    });
+
+    transaction.set(saleRef, {
+      organizationId,
+      branchId,
+      referenceNumber,
+      invoiceNumber,
+      receiptNumber,
+      customerName,
+      customerPhone: typeof request.data?.customerPhone === "string" ? request.data.customerPhone.trim().slice(0, 60) : "",
+      customerEmail: typeof request.data?.customerEmail === "string" ? request.data.customerEmail.trim().slice(0, 160) : "",
+      customerAddress: typeof request.data?.customerAddress === "string" ? request.data.customerAddress.trim().slice(0, 500) : "",
+      lines: saleLines,
+      subtotal,
+      discountAmount,
+      taxRate,
+      taxAmount,
+      totalAmount,
+      amountPaid: paid,
+      balanceDue,
+      paymentStatus,
+      paymentMethod,
+      paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
+      paymentHistory: paymentRef ? [{
+        paymentId: paymentRef.id,
+        receiptNumber,
+        amount: paid,
+        at: soldAt.toISOString(),
+        method: paymentMethod,
+        paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
+        recordedBy: actor.id,
+      }] : [],
+      saleStatus: "completed",
+      soldAt,
+      notes: typeof request.data?.notes === "string" ? request.data.notes.trim().slice(0, 1000) : "",
+      status: "completed",
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: actor.id,
+      createdByEmail: actor.email,
+      createdByName: actor.displayName,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+      updatedByEmail: actor.email,
+      updatedByName: actor.displayName,
+      isDeleted: false,
+    });
+
+    if (paymentRef) {
+      transaction.set(paymentRef, {
+        organizationId,
+        branchId,
+        referenceNumber: receiptNumber,
+        receiptNumber,
+        sourceType: "posSale",
+        sourceId: saleRef.id,
+        sourceReference: referenceNumber,
+        payerName: customerName,
+        revenueCategory: "other",
+        revenueOwnerId: actor.id,
+        revenueOwnerName: actor.displayName,
+        amount: paid,
+        at: soldAt.toISOString().slice(0, 10),
+        method: paymentMethod,
+        paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
+        note: `POS payment for ${invoiceNumber}`,
+        verificationStatus: "verified",
+        verifiedAt: FieldValue.serverTimestamp(),
+        verifiedBy: actor.id,
+        status: "active",
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+        updatedByEmail: actor.email,
+        updatedByName: actor.displayName,
+        isDeleted: false,
+      });
+    }
+  });
+
+  return { saleId: saleRef.id, referenceNumber, invoiceNumber, receiptNumber, totalAmount: resultTotal };
+});
+
+export const recordPosSalePayment = onCall(callableOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const saleId = requireString(request.data?.saleId, "saleId");
+  const amount = money(requireNumber(request.data?.amount, "amount"));
+  const paymentMethod = requireString(request.data?.paymentMethod, "paymentMethod");
+  if (amount <= 0 || !posPaymentMethods.has(paymentMethod)) {
+    throw new HttpsError("invalid-argument", "Enter a positive amount and valid payment method.");
+  }
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasAnyActorPermission(actor, ["pos.sell", "finance.create"])) {
+    throw new HttpsError("permission-denied", "You do not have permission to record this payment.");
+  }
+  const saleRef = db.doc(`organizations/${organizationId}/posSales/${saleId}`);
+  const paymentRef = db.collection(`organizations/${organizationId}/financePayments`).doc();
+  const receiptNumber = `RCT-${Date.now().toString(36).toUpperCase()}-${paymentRef.id.slice(0, 5).toUpperCase()}`;
+  let balanceDue = 0;
+  let paymentStatus = "unpaid";
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(saleRef);
+    if (!snapshot.exists) {
+      throw new HttpsError("not-found", "POS sale was not found.");
+    }
+    const sale = snapshot.data() ?? {};
+    if (!canActorAccessBranch(actor, String(sale.branchId ?? ""))) {
+      throw new HttpsError("permission-denied", "You do not have access to this sale's branch.");
+    }
+    if (sale.saleStatus !== "completed") {
+      throw new HttpsError("failed-precondition", "Payments cannot be added to a void sale.");
+    }
+    const currentBalance = money(Number(sale.balanceDue ?? 0));
+    if (amount > currentBalance) {
+      throw new HttpsError("invalid-argument", `Only ${currentBalance.toFixed(2)} remains due on this invoice.`);
+    }
+    const amountPaid = money(Number(sale.amountPaid ?? 0) + amount);
+    balanceDue = money(Number(sale.totalAmount ?? 0) - amountPaid);
+    paymentStatus = balanceDue > 0 ? "partPaid" : "paid";
+    transaction.update(saleRef, {
+      amountPaid,
+      balanceDue,
+      paymentStatus,
+      receiptNumber,
+      paymentMethod,
+      paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
+      paymentHistory: FieldValue.arrayUnion({
+        paymentId: paymentRef.id,
+        receiptNumber,
+        amount,
+        at: new Date().toISOString(),
+        method: paymentMethod,
+        paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
+        recordedBy: actor.id,
+      }),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+      updatedByEmail: actor.email,
+      updatedByName: actor.displayName,
+    });
+    transaction.set(paymentRef, {
+      organizationId,
+      branchId: sale.branchId,
+      referenceNumber: receiptNumber,
+      receiptNumber,
+      sourceType: "posSale",
+      sourceId: saleId,
+      sourceReference: sale.referenceNumber,
+      payerName: sale.customerName ?? "Walk-in customer",
+      revenueCategory: "other",
+      revenueOwnerId: actor.id,
+      revenueOwnerName: actor.displayName,
+      amount,
+      at: new Date().toISOString().slice(0, 10),
+      method: paymentMethod,
+      paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
+      note: `POS payment for ${sale.invoiceNumber ?? sale.referenceNumber}`,
+      verificationStatus: "verified",
+      verifiedAt: FieldValue.serverTimestamp(),
+      verifiedBy: actor.id,
+      status: "active",
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: actor.id,
+      createdByEmail: actor.email,
+      createdByName: actor.displayName,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+      updatedByEmail: actor.email,
+      updatedByName: actor.displayName,
+      isDeleted: false,
+    });
+  });
+
+  return { ok: true, receiptNumber, balanceDue, paymentStatus };
+});
 
 function inventoryReference(prefix: string, id: string) {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}-${id.slice(0, 5).toUpperCase()}`;

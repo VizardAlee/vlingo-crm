@@ -20,6 +20,7 @@ import {
   Receipt,
   Settings,
   ShieldCheck,
+  ShoppingCart,
   Users,
   Warehouse,
 } from "lucide-react";
@@ -94,6 +95,7 @@ export const aiGuideAccessPermissions: Permission[] = [
   "activities.read",
   "reports.viewFinancial",
   "users.manage",
+  "pos.read",
 ];
 
 export const reportsAccessPermissions: Permission[] = Array.from(new Set([
@@ -109,7 +111,7 @@ export interface RouteAccessRule {
 }
 
 export const routeAccessRules: RouteAccessRule[] = [
-  { exact: "/dashboard", permissions: ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"] },
+  { exact: "/dashboard", permissions: ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll", "inventory.read"] },
   { exact: "/ai-guide", permissions: aiGuideAccessPermissions },
   { exact: "/notifications", permissions: notificationAccessPermissions },
 
@@ -139,6 +141,7 @@ export const routeAccessRules: RouteAccessRule[] = [
   { pattern: /^\/offerings\/[^/]+\/edit$/, permissions: ["offerings.update"] },
   { pattern: /^\/offerings(\/[^/]+)?$/, permissions: ["offerings.read"] },
   { pattern: /^\/inventory(\/.*)?$/, permissions: ["inventory.read"] },
+  { pattern: /^\/pos(\/.*)?$/, permissions: ["pos.read"] },
 
   { exact: "/rentals/new", permissions: ["rentals.create"] },
   { pattern: /^\/rentals\/[^/]+\/edit$/, permissions: ["rentals.update"] },
@@ -181,7 +184,7 @@ export const navigation: NavSection[] = [
   {
     label: "Workspace",
     items: [
-      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", permissions: ["leads.readAssigned", "leads.readAll", "dashboard.viewExecutive"] },
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", permissions: ["leads.readAssigned", "leads.readAll", "dashboard.viewExecutive", "inventory.read"] },
       { href: "/ai-guide", icon: Bot, label: "AI Guide", permissions: aiGuideAccessPermissions },
       { href: "/notifications", icon: Bell, label: "Notifications", permissions: notificationAccessPermissions },
     ],
@@ -217,6 +220,7 @@ export const navigation: NavSection[] = [
   {
     label: "Business",
     items: [
+      { href: "/pos", icon: ShoppingCart, label: "Point of Sale", permissions: ["pos.read"] },
       { href: "/finance", icon: Receipt, label: "Finance", permissions: ["reports.viewFinancial"] },
       { href: "/rentals", icon: Landmark, label: "Rentals", permissions: ["rentals.read"] },
       { href: "/development", icon: FolderKanban, label: "Development", permissions: ["development.read"] },

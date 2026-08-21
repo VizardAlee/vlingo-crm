@@ -152,6 +152,14 @@
         { "fieldPath": "branchId", "order": "ASCENDING" },
         { "fieldPath": "isDeleted", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "posSales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "soldAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

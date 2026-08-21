@@ -17,7 +17,7 @@ interface GuideMemberContext {
 const guideAreaPermissions = [
   [
     "Dashboard",
-    ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"],
+    ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll", "inventory.read"],
   ],
   ["Leads and Lead Locations", ["leads.readAssigned", "leads.readAll"]],
   ["Clients", ["clients.read"]],
@@ -26,6 +26,7 @@ const guideAreaPermissions = [
   ["Units", ["units.read"]],
   ["Products/Services", ["offerings.read"]],
   ["Inventory", ["inventory.read"]],
+  ["Point of Sale", ["pos.read"]],
   ["Rentals", ["rentals.read"]],
   ["Development", ["development.read"]],
   ["Marketing", ["marketing.read"]],
@@ -83,6 +84,29 @@ Permission guidance rules:
 }
 
 export const guideTopics: GuideTopic[] = [
+  {
+    keywords: [
+      "point of sale",
+      "pos",
+      "checkout",
+      "record sale",
+      "sales receipt",
+      "sales invoice",
+      "part payment",
+      "customer receipt",
+    ],
+    title: "Record a sale and issue documents",
+    steps: [
+      "Go to Point of Sale and choose New sale. Checkout always uses available stock in the active dashboard branch.",
+      "Search by product name, SKU, barcode, or brand, then add products to the cart and confirm each quantity. Reserved units cannot be sold.",
+      "Add the customer details when known; a blank name is saved as Walk-in customer.",
+      "Apply line discounts and tax where required. The server uses the product catalogue selling price and checks stock again before completing the sale.",
+      "Enter the amount received and payment method. Full, partial, and unpaid sales are supported.",
+      "Complete the sale. The system deducts stock, records sale movements, creates a numbered invoice, and creates a receipt whenever money is received—all in one transaction.",
+      "Open Sales history to print an invoice or receipt. For an outstanding invoice, choose Record payment to receive the balance and issue a new receipt.",
+      "Users need pos.read to view sales and pos.sell to process checkout or receive later payments. Brand partners do not receive POS access.",
+    ],
+  },
   {
     keywords: [
       "crm",
@@ -476,7 +500,7 @@ export const guideTopics: GuideTopic[] = [
 ];
 
 export const appGuideContext = `
-Vlingo Systems CRM is an internal business operations CRM for real estate, solar, building materials, services, consultancy, installations, projects, inventory, rentals, finance, documents, notifications, and team administration.
+Vlingo Systems CRM is an internal business operations CRM for real estate, solar, building materials, services, consultancy, installations, projects, inventory, point of sale, rentals, finance, documents, notifications, and team administration.
 
 CRM concept:
 - CRM means Customer Relationship Management.
@@ -498,6 +522,7 @@ Main routes and modules:
 - Properties and Units: real-estate inventory and unit management.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
 - Inventory: branch-aware stock balances, guided opening-stock entry, movement ledger, supplier master, paid/part-paid/credit purchase orders, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, CSV reports, and brand-partner collaboration.
+- Point of Sale: branch-aware checkout, customer details, discounts, tax, full/partial/unpaid sales, stock deduction, sales history, later payments, and printable invoices and receipts.
 - Rentals: tenancy, rent payment, lease dates, renewal tasks, and tenant follow-up.
 - Development: property development projects, project managers, delivery details, and related operational work.
 - Marketing: campaign records connected to lead sources and sales follow-up.
@@ -517,6 +542,8 @@ Cross-module workflows:
 - Phone numbers in lead/client areas can open WhatsApp, and single or bulk email uses the organization's configured SMTP mailbox.
 - Dated assigned tasks can sync to the user's connected Google Calendar and task notifications can reach enabled browsers/PWA devices.
 - Product/service catalogue items marked as inventory feed branch/location balances. Procurement receipts, controlled movements, counts, and reservation fulfillment update stock through server-side transactions.
+- The dashboard is inventory-first: it highlights stock on hand, available and reserved units, low-stock exposure, inventory value, recent movements, units sold, POS revenue, and outstanding invoices before CRM pipeline summaries.
+- Point of Sale sells from the active branch's available balance. Checkout creates the sale, invoice, optional receipt and finance payment, inventory issues, and stock deductions atomically. It supports walk-in customers, discounts, tax, unpaid invoices, part payments, and later balance receipts.
 - Inventory availability is on-hand quantity minus reserved quantity. Batch and serial records must stay synchronized with the balance and movement ledgers.
 
 Role behavior:
