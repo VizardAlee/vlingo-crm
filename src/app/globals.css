@@ -136,9 +136,12 @@ textarea {
     line-height: 2.25rem !important;
   }
 
-  .finance-print-amount,
-  .pos-document-signoff > :last-child {
+  .finance-print-amount {
     text-align: right !important;
+  }
+
+  .document-authorization {
+    text-align: center !important;
   }
 
   .pos-print-document .overflow-x-auto {

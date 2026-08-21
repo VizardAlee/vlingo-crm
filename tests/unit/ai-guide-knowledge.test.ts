@@ -33,6 +33,7 @@ describe("AI Guide knowledge", () => {
 
     expect(pos).toContain("Type the full required whole-number quantity directly");
     expect(pos).toContain("Vlingo letterhead template");
+    expect(pos).toContain("official stamp");
     expect(dashboard).toContain("Sales record section");
     expect(dashboard).toContain("eight latest completed invoices");
   });

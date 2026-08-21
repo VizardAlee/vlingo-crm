@@ -6,6 +6,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
+import { AuthorizedDocumentSignature } from "@/components/authorized-document-signature";
 import { useAuth } from "@/features/auth/auth-provider";
 import { nairaAmountInWords } from "@/features/pos/pos-document-utils";
 import { hasPermission } from "@/lib/permissions";
@@ -173,7 +174,7 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
 
           <footer className="pos-document-signoff mt-8 grid gap-6 border-t-2 border-[#c7a13a] pt-5 sm:grid-cols-2 sm:items-end">
             <div><p className="text-[10px] text-[#5e665e]">Prepared by:</p><p className="text-xs font-bold text-[#174f20]">Vlingo Systems Nigeria Limited</p></div>
-            {type === "receipt" ? <div className="sm:text-right"><div className="ml-auto h-8 w-56 border-b border-[#151915]" /><p className="mt-1 text-[10px] font-semibold">Authorised Signatory / Date</p></div> : null}
+            {type === "receipt" ? <AuthorizedDocumentSignature /> : null}
           </footer>
         </div>
         <div className="bg-[#174f20] px-6 py-2 text-center text-[9px] font-semibold tracking-[0.08em] text-white sm:px-10">Vlingo Systems Nigeria Limited &nbsp;|&nbsp; Solar • Energy • Infrastructure Solutions</div>
