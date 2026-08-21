@@ -425,6 +425,7 @@ export interface InventoryBrand extends EntityMetadata {
 
 export interface InventoryLocation extends EntityMetadata {
   id: string;
+  isLegacy?: boolean;
   name: string;
   code: string;
   address?: string;
@@ -624,8 +625,10 @@ export interface InventoryMovement {
   movementType: InventoryMovementType;
   movementPurpose?: InventoryMovementPurpose;
   quantity: number;
+  fromBranchId?: string;
   fromLocationId?: string;
   fromLocationName?: string;
+  toBranchId?: string;
   toLocationId?: string;
   toLocationName?: string;
   referenceNumber: string;

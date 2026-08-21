@@ -7,7 +7,7 @@ Inventory is transaction-led. Products remain in the Products/Services catalog, 
 - A catalog item must be linked to a brand before stock can move.
 - Stock enters through receipts, returns, or positive adjustments.
 - Stock leaves through issues, returns, or negative adjustments.
-- Transfers reduce one location and increase another in one server transaction.
+- Transfers reduce the active source branch and increase an accessible destination branch in one server transaction. The destination balance and trace records belong to the destination branch, and the movement is visible in both branch ledgers.
 - Direct client writes to balances and movements are denied by Firestore rules.
 - Negative location balances are rejected by the server.
 - Reservations reduce available stock without changing physical on-hand stock.
@@ -69,7 +69,7 @@ The partner sees only the Inventory area. Reports, item balances, movements, rec
 
 - `inventoryBrands`: brand and partner contact records.
 - `branches`: active administrator-managed locations used as the canonical stock-location options.
-- `inventoryLocations`: legacy/custom locations retained for compatibility with existing stock records.
+- `inventoryLocations`: legacy/custom locations retained only for historical compatibility. A legacy location with stock appears as a clearly marked cleanup source so its quantity can be transferred into an admin branch, but it can never receive new stock.
 - `inventoryBalances`: calculated item/location quantities; server-written only.
 - `inventoryMovements`: immutable audit ledger; server-written only.
 - `inventoryComments`: brand-scoped report discussion.

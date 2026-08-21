@@ -2594,28 +2594,35 @@ export const recordInventoryMovement = onCall(
       );
       if (
         offering.isDeleted === true ||
-        offering.branchId !== branchId ||
         !offering.brandId
       )
         throw new HttpsError(
           "failed-precondition",
-          "The item must be active, assigned to this branch, and linked to a brand.",
+          "The item must be active and linked to a brand.",
         );
+      const fromBranchId = String(fromLocation?.branchId ?? "");
+      const toBranchId = String(toLocation?.branchId ?? "");
       if (
         fromLocationRef &&
-        (!fromLocation || fromLocation.branchId !== branchId)
+        (!fromLocation ||
+          fromBranchId !== branchId ||
+          !canActorAccessBranch(actor, fromBranchId))
       )
         throw new HttpsError(
           "failed-precondition",
-          "Source location was not found in this branch.",
+          "Source location must belong to the active branch.",
         );
       if (
         toLocationRef &&
-        (!toLocation || toLocation.branchId !== branchId)
+        (!toLocation ||
+          !canActorAccessBranch(actor, toBranchId) ||
+          (movementType !== "transfer" && toBranchId !== branchId))
       )
         throw new HttpsError(
-          "failed-precondition",
-          "Destination location was not found in this branch.",
+          "permission-denied",
+          movementType === "transfer"
+            ? "You do not have access to the destination branch."
+            : "Destination location must belong to the active branch.",
         );
 
       const fromQuantity = Number(
@@ -2631,7 +2638,6 @@ export const recordInventoryMovement = onCall(
         );
       const commonBalance = {
         organizationId,
-        branchId,
         brandId: offering.brandId,
         brandName: offering.brandName ?? "",
         offeringId,
@@ -2646,6 +2652,7 @@ export const recordInventoryMovement = onCall(
           fromBalanceRef,
           {
             ...commonBalance,
+            branchId: fromBranchId,
             locationId: fromLocationId,
             locationName: fromLocation.name ?? "",
             quantityOnHand: fromQuantity - quantity,
@@ -2658,6 +2665,7 @@ export const recordInventoryMovement = onCall(
           toBalanceRef,
           {
             ...commonBalance,
+            branchId: toBranchId,
             locationId: toLocationId,
             locationName: toLocation.name ?? "",
             quantityOnHand:
@@ -2683,7 +2691,6 @@ export const recordInventoryMovement = onCall(
           );
         const lotCommon = {
           organizationId,
-          branchId,
           brandId: offering.brandId,
           offeringId,
           offeringName: offering.name ?? "Inventory item",
@@ -2698,6 +2705,7 @@ export const recordInventoryMovement = onCall(
             fromLotRef,
             {
               ...lotCommon,
+              branchId: fromBranchId,
               locationId: fromLocationId,
               locationName: fromLocation.name ?? "",
               quantityOnHand: fromLotQuantity - quantity,
@@ -2710,6 +2718,7 @@ export const recordInventoryMovement = onCall(
             toLotRef,
             {
               ...lotCommon,
+              branchId: toBranchId,
               locationId: toLocationId,
               locationName: toLocation.name ?? "",
               quantityOnHand:
@@ -2743,11 +2752,12 @@ export const recordInventoryMovement = onCall(
           const targetLocationName = needsTo
             ? (toLocation?.name ?? "")
             : (fromLocation?.name ?? "");
+          const targetBranchId = needsTo ? toBranchId : fromBranchId;
           transaction.set(
             serialRefs[index],
             {
               organizationId,
-              branchId,
+              branchId: targetBranchId,
               brandId: offering.brandId,
               offeringId,
               offeringName: offering.name ?? "Inventory item",
@@ -2785,8 +2795,10 @@ export const recordInventoryMovement = onCall(
         movementType,
         movementPurpose,
         quantity,
+        fromBranchId,
         fromLocationId,
         fromLocationName: fromLocation?.name ?? "",
+        toBranchId,
         toLocationId,
         toLocationName: toLocation?.name ?? "",
         externalReference:
@@ -2893,12 +2905,11 @@ export const createInventoryPurchaseOrder = onCall(
       const offering = offeringSnapshots[index].data();
       if (
         !offeringSnapshots[index].exists ||
-        offering?.branchId !== branchId ||
         !offering?.brandId
       )
         throw new HttpsError(
           "failed-precondition",
-          "Every purchase line must reference a branded item in this branch.",
+          "Every purchase line must reference an active branded item.",
         );
       return {
         ...line,
@@ -3517,7 +3528,7 @@ export const createInventoryStockCount = onCall(
       );
       const balance = snapshots[index * 4 + 3].data() ?? {};
       if (
-        offering.branchId !== branchId ||
+        !offering.brandId ||
         !location ||
         location.branchId !== branchId
       )
@@ -3804,7 +3815,7 @@ export const createInventoryReservation = onCall(
       const onHand = Number(balanceSnapshot.data()?.quantityOnHand ?? 0);
       const reserved = Number(balanceSnapshot.data()?.quantityReserved ?? 0);
       if (
-        offering.branchId !== branchId ||
+        !offering.brandId ||
         !location ||
         location.branchId !== branchId ||
         onHand - reserved < quantity

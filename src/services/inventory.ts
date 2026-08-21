@@ -181,7 +181,6 @@ export async function listInventoryBrands(
 export async function listInventoryLocations(
   organizationId: string,
   member: Member | null,
-  activeBranchId?: string,
 ) {
   const [branches, legacyLocations] = await Promise.all([
     listOrganizationBranches(organizationId),
@@ -194,7 +193,6 @@ export async function listInventoryLocations(
   const accessibleBranches = branches.filter(
     (branch) =>
       branch.status !== "closed" &&
-      (!activeBranchId || branch.id === activeBranchId) &&
       (!member ||
         member.role === "superAdmin" ||
         member.roles?.includes("superAdmin") ||
@@ -204,6 +202,7 @@ export async function listInventoryLocations(
   const branchLocations = accessibleBranches.map(
     (branch): InventoryLocation => ({
       id: branch.id,
+      isLegacy: false,
       organizationId,
       branchId: branch.id,
       name: branch.name,
@@ -216,12 +215,12 @@ export async function listInventoryLocations(
       isDeleted: false,
     }),
   );
-  const activeLegacyLocations = legacyLocations.filter(
-    (location) =>
-      location.status === "active" &&
-      location.isDeleted !== true &&
-      (!activeBranchId || location.branchId === activeBranchId),
-  );
+  const activeLegacyLocations = legacyLocations
+    .filter(
+      (location) =>
+        location.status === "active" && location.isDeleted !== true,
+    )
+    .map((location) => ({ ...location, isLegacy: true }));
 
   return Array.from(
     new Map(
@@ -233,13 +232,26 @@ export async function listInventoryLocations(
   ).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function listInventoryItems(
+export async function listInventoryItems(
   organizationId: string,
   member: Member | null,
 ) {
-  return scopedCollection<Offering>(organizationId, "offerings", member, [
-    where("isDeleted", "==", false),
-  ]);
+  const brandIds = partnerBrandIds(member);
+  if (brandIds) {
+    return scopedCollection<Offering>(organizationId, "offerings", member, [
+      where("isDeleted", "==", false),
+    ]);
+  }
+  const firestore = assertDb();
+  const snapshot = await getDocs(
+    query(
+      collection(firestore, orgCollectionPath(organizationId, "offerings")),
+      where("isDeleted", "==", false),
+    ),
+  );
+  return snapshot.docs.map(
+    (item) => ({ id: item.id, ...item.data() }) as Offering,
+  );
 }
 
 export function listInventoryBalances(
@@ -257,12 +269,41 @@ export async function listInventoryMovements(
   organizationId: string,
   member: Member | null,
 ) {
-  const records = await scopedCollection<InventoryMovement>(
-    organizationId,
-    "inventoryMovements",
-    member,
-    [where("isDeleted", "==", false)],
-  );
+  const brandIds = partnerBrandIds(member);
+  let records: InventoryMovement[];
+  if (brandIds || !member || member.branchAccess === "all" || member.role === "superAdmin" || member.roles?.includes("superAdmin")) {
+    records = await scopedCollection<InventoryMovement>(
+      organizationId,
+      "inventoryMovements",
+      member,
+      [where("isDeleted", "==", false)],
+    );
+  } else {
+    const firestore = assertDb();
+    const movementCollection = collection(
+      firestore,
+      orgCollectionPath(organizationId, "inventoryMovements"),
+    );
+    const snapshots = await Promise.all(
+      ["branchId", "fromBranchId", "toBranchId"].map((field) =>
+        getDocs(query(movementCollection, where(field, "==", member.branchId))),
+      ),
+    );
+    records = Array.from(
+      new Map(
+        snapshots
+          .flatMap((snapshot) =>
+            snapshot.docs
+              .filter((item) => item.data().isDeleted !== true)
+              .map(
+                (item) =>
+                  ({ id: item.id, ...item.data() }) as InventoryMovement,
+              ),
+          )
+          .map((item) => [item.id, item]),
+      ).values(),
+    );
+  }
   return records
     .map(
       (item) =>
@@ -326,16 +367,6 @@ export function createInventoryBrand(
     );
     return id;
   });
-}
-
-export function createInventoryLocation(
-  data: Pick<
-    InventoryLocation,
-    "name" | "code" | "address" | "locationType" | "status"
-  >,
-  context: WriteContext,
-) {
-  return createOrgRecord("inventoryLocations", data, context, "LOC");
 }
 
 export function createInventorySupplier(

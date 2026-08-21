@@ -287,22 +287,28 @@ export function InventoryDashboard() {
         listInventoryComments(activeOrganizationId, member),
         isPartner
           ? Promise.resolve([])
-          : listInventoryLocations(
-              activeOrganizationId,
-              member,
-              activeBranchId,
-            ),
+          : listInventoryLocations(activeOrganizationId, member),
       ]);
-      const branchItems = isPartner
-        ? nextItems
-        : nextItems.filter((item) => item.branchId === activeBranchId);
       const branchBalances = isPartner
         ? nextBalances
         : nextBalances.filter((balance) => balance.branchId === activeBranchId);
+      const branchOfferingIds = new Set(
+        branchBalances.map((balance) => balance.offeringId),
+      );
+      const branchItems = isPartner
+        ? nextItems
+        : nextItems.filter(
+            (item) =>
+              item.branchId === activeBranchId || branchOfferingIds.has(item.id),
+          );
       const branchMovements = isPartner
         ? nextMovements
-        : nextMovements.filter(
-            (movement) => movement.branchId === activeBranchId,
+        : nextMovements.filter((movement) =>
+            [
+              movement.branchId,
+              movement.fromBranchId,
+              movement.toBranchId,
+            ].includes(activeBranchId),
           );
       const branchComments = isPartner
         ? nextComments
@@ -376,6 +382,37 @@ export function InventoryDashboard() {
   )
     ? movement.movementType
     : (availableMovementOptions[0]?.type ?? movement.movementType);
+  const canonicalLocations = useMemo(
+    () => locations.filter((location) => !location.isLegacy),
+    [locations],
+  );
+  const currentBranchLocations = useMemo(
+    () =>
+      canonicalLocations.filter(
+        (location) => location.branchId === activeBranchId,
+      ),
+    [activeBranchId, canonicalLocations],
+  );
+  const sourceLocations = useMemo(
+    () =>
+      locations.filter(
+        (location) =>
+          location.branchId === activeBranchId &&
+          (!location.isLegacy ||
+            balances.some(
+              (balance) =>
+                balance.locationId === location.id &&
+                Number(balance.quantityOnHand || 0) > 0,
+            )),
+      ),
+    [activeBranchId, balances, locations],
+  );
+  const destinationLocations =
+    effectiveMovementType === "transfer"
+      ? canonicalLocations.filter(
+          (location) => location.id !== movement.fromLocationId,
+        )
+      : currentBranchLocations;
   const needsFrom = [
     "issue",
     "adjustmentOut",
@@ -589,7 +626,7 @@ export function InventoryDashboard() {
         </div>
       </div>
       {error ? <ErrorState message={error} /> : null}
-      {!isPartner && !locations.length ? (
+      {!isPartner && !currentBranchLocations.length ? (
         <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-sm">
           <p className="font-medium">No active stock location for this branch</p>
           <p className="mt-1 text-muted-foreground">
@@ -1039,8 +1076,9 @@ export function InventoryDashboard() {
                         }
                       >
                         <option value="">Select location</option>
-                        {locations.map((location) => (
+                        {sourceLocations.map((location) => (
                           <option key={location.id} value={location.id}>
+                            {location.isLegacy ? "Legacy cleanup — " : ""}
                             {location.name}
                           </option>
                         ))}
@@ -1060,9 +1098,9 @@ export function InventoryDashboard() {
                         }
                       >
                         <option value="">Select location</option>
-                        {locations.map((location) => (
+                        {destinationLocations.map((location) => (
                           <option key={location.id} value={location.id}>
-                            {location.name}
+                            {location.name} ({location.code})
                           </option>
                         ))}
                       </Select>
@@ -1238,7 +1276,7 @@ export function InventoryDashboard() {
         <InventoryEnterprisePanel
           balances={balances}
           items={items}
-          locations={locations}
+          locations={currentBranchLocations}
           member={member}
           mode={tab as InventoryEnterpriseMode}
           onChanged={load}
@@ -1433,7 +1471,9 @@ export function InventoryDashboard() {
                 <p className="font-medium">Managed by administrators</p>
                 <p className="mt-1 text-muted-foreground">
                   Every active location created under Settings &gt; Branches is
-                  automatically available in inventory stock dropdowns.
+                  automatically available in inventory stock dropdowns. A
+                  legacy location is shown only while it needs stock cleanup
+                  and cannot receive new inventory.
                 </p>
                 {hasPermission(member, "users.manage") ? (
                   <ButtonLink
@@ -1457,7 +1497,9 @@ export function InventoryDashboard() {
                         {location.code} · {location.address || "No address"}
                       </p>
                     </div>
-                    <Badge tone="info">{location.status}</Badge>
+                    <Badge tone={location.isLegacy ? "warning" : "info"}>
+                      {location.isLegacy ? "Legacy cleanup only" : location.status}
+                    </Badge>
                   </div>
                 ))}
               </div>

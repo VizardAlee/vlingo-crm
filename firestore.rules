@@ -81,7 +81,12 @@ service cloud.firestore {
 
     function canReadInventoryRecord(orgId) {
       return canAccessInventoryBrand(orgId, resource.data.brandId) &&
-        (isBrandPartner(orgId) || canReadRecordBranch(orgId));
+        (isBrandPartner(orgId) ||
+        canReadRecordBranch(orgId) ||
+        (resource.data.keys().hasAny(["fromBranchId"]) &&
+        canAccessBranch(orgId, resource.data.fromBranchId)) ||
+        (resource.data.keys().hasAny(["toBranchId"]) &&
+        canAccessBranch(orgId, resource.data.toBranchId)));
     }
 
     function assignedOnlySalesUser(orgId) {
@@ -371,7 +376,11 @@ service cloud.firestore {
       }
 
       match /offerings/{offeringId} {
-        allow read: if (canReadRecordBranch(orgId) && hasPermission(orgId, "offerings.read")) || canReadInventoryRecord(orgId);
+        allow read: if (canReadRecordBranch(orgId) && hasPermission(orgId, "offerings.read")) ||
+          (hasPermission(orgId, "inventory.read") &&
+          (!isBrandPartner(orgId) ||
+          (resource.data.brandId is string &&
+          partnerBrandIds(orgId).hasAny([resource.data.brandId]))));
         allow create: if hasPermission(orgId, "offerings.create") && hasMetadata(orgId) && validInventoryOfferingBrand(orgId);
         allow update: if hasPermission(orgId, "offerings.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId) && validInventoryOfferingBrand(orgId);
         allow delete: if false;
@@ -386,8 +395,7 @@ service cloud.firestore {
 
       match /inventoryLocations/{locationId} {
         allow read: if !isBrandPartner(orgId) && hasPermission(orgId, "inventory.read") && canReadRecordBranch(orgId);
-        allow create: if hasPermission(orgId, "inventory.manageCatalog") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "inventory.manageCatalog") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow create, update: if false;
         allow delete: if false;
       }
 
