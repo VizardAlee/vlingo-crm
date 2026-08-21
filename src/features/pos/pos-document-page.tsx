@@ -107,26 +107,26 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
     <section className="grid gap-5">
       <div className="flex flex-col gap-3 print:hidden sm:flex-row sm:items-center sm:justify-between">
         <Link className="inline-flex items-center gap-2 text-sm font-medium text-primary" href="/pos"><ArrowLeft className="h-4 w-4" />Back to Point of Sale</Link>
-        <Button onClick={() => window.print()} type="button"><Printer className="h-4 w-4" />Print {type}</Button>
+        <Button onClick={() => window.print()} type="button"><Printer className="h-4 w-4" />Print / Save PDF</Button>
       </div>
 
       <article className="pos-print-document mx-auto w-full max-w-[850px] overflow-hidden bg-white text-[#151915] shadow-xl print:shadow-none">
         <div className="h-2 bg-[#174f20]" />
-        <div className="px-6 py-6 sm:px-10 sm:py-8">
+        <div className="pos-document-body px-6 py-6 sm:px-10 sm:py-8">
           <header className="border-b-2 border-[#c7a13a] pb-4">
             <Image alt="Vlingo Systems Nigeria Limited" className="h-auto w-full max-w-[520px] object-contain object-left" height={92} priority src="/branding/vlingo-logo.jpeg" width={550} />
-            <div className="mt-3 grid gap-2 text-[10px] font-medium leading-4 text-[#4f574f] sm:grid-cols-2 sm:gap-5">
+            <div className="pos-document-letterhead mt-3 grid gap-2 text-[10px] font-medium leading-4 text-[#4f574f] sm:grid-cols-2 sm:gap-5">
               <p><strong className="text-[#174f20]">Kaduna Office:</strong> 27A, Isa Kaita Road, U/Sarki, Kaduna · +234 803 770 1084</p>
               <p><strong className="text-[#174f20]">Kano Office:</strong> Block 3, Shop 1D, Civic Center Ultramodern Market, Kano · 07032545288</p>
             </div>
           </header>
 
-          <div className="mt-7 flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="pos-document-title mt-7 flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
             <div><h1 className="text-2xl font-black tracking-tight text-[#174f20] sm:text-3xl">{type === "invoice" ? "SALES INVOICE" : "OFFICIAL RECEIPT"}</h1><p className="mt-2 max-w-xl text-sm font-medium text-[#515851]">{sale.lines.map((line) => line.offeringName).slice(0, 3).join(" • ")}{sale.lines.length > 3 ? ` • +${sale.lines.length - 3} more` : ""}</p></div>
             <div className="w-fit min-w-40 bg-[#174f20] px-5 py-3 text-center text-xs font-black tracking-[0.12em] text-white">{type === "receipt" ? "PAYMENT RECEIVED" : statusLabel}</div>
           </div>
 
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          <div className="pos-document-meta mt-6 grid gap-5 sm:grid-cols-2">
             <dl className="rounded-sm border border-black/10 bg-[#f7f7f3] px-4 py-1">
               <MetaItem label={type === "invoice" ? "Invoice number" : "Receipt number"} value={documentNumber} />
               <MetaItem label={type === "invoice" ? "Invoice date" : "Receipt date"} value={documentDate(receipt?.at ?? sale.soldAt)} />
@@ -159,7 +159,7 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
           </section>
 
           {type === "invoice" ? (
-            <section className="mt-7 grid gap-4 sm:grid-cols-2">
+            <section className="pos-document-payment-grid mt-7 grid gap-4 sm:grid-cols-2">
               <div className="border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[#174f20]">Payment information</h2><div className="mt-3 grid gap-1 text-xs"><p><strong>Account Name:</strong> Vlingo Systems Nig. Ltd.</p><p><strong>Bank:</strong> Lotus Bank</p><p><strong>Account Number:</strong> 1008302826</p><p><strong>Reference:</strong> {sale.invoiceNumber}</p></div></div>
               <div className="border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[#174f20]">Payment summary</h2><div className="mt-3 grid gap-1 text-xs"><p><strong>Amount paid:</strong> {formatMoney(sale.amountPaid)}</p><p><strong>Balance due:</strong> {formatMoney(sale.balanceDue)}</p><p><strong>Status:</strong> {statusLabel}</p></div></div>
             </section>
@@ -171,7 +171,7 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
 
           {type === "invoice" ? <section className="mt-5 text-[10px] leading-5 text-[#4f574f]"><h2 className="font-black uppercase tracking-[0.1em] text-[#174f20]">Terms</h2><ul className="mt-1 list-disc pl-4"><li>This invoice is valid for 14 days from the invoice date.</li><li>Prices and availability may be reviewed after the validity period.</li><li>Payment must use the invoice number as its transaction reference.</li><li>Product warranties remain subject to the applicable manufacturer or supplier conditions.</li></ul></section> : null}
 
-          <footer className="mt-8 grid gap-6 border-t-2 border-[#c7a13a] pt-5 sm:grid-cols-2 sm:items-end">
+          <footer className="pos-document-signoff mt-8 grid gap-6 border-t-2 border-[#c7a13a] pt-5 sm:grid-cols-2 sm:items-end">
             <div><p className="text-[10px] text-[#5e665e]">Prepared by:</p><p className="text-xs font-bold text-[#174f20]">Vlingo Systems Nigeria Limited</p></div>
             {type === "receipt" ? <div className="sm:text-right"><div className="ml-auto h-8 w-56 border-b border-[#151915]" /><p className="mt-1 text-[10px] font-semibold">Authorised Signatory / Date</p></div> : null}
           </footer>

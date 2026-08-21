@@ -37,6 +37,14 @@ describe("AI Guide knowledge", () => {
     expect(dashboard).toContain("eight latest completed invoices");
   });
 
+  it("explains fixed A4 printing on Android and iPhone", () => {
+    const answer = fallbackGuideAnswer("How do I save PDF with mobile print on iPhone?");
+
+    expect(answer).toContain("fixed A4 layout");
+    expect(answer).toContain("same document dimensions");
+    expect(answer).toContain("Safari on iPhone");
+  });
+
   it("exposes Inventory in AI context only with inventory access", () => {
     const inventoryContext = buildGuideMemberContext({ permissions: ["inventory.read"], role: "brandPartner" });
     const salesContext = buildGuideMemberContext({ permissions: ["leads.readAssigned"], role: "salesExecutive" });

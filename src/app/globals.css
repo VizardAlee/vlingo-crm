@@ -77,8 +77,24 @@ textarea {
   html,
   body {
     background: white !important;
+    height: auto !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  body .h-screen,
+  main {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  main {
+    padding: 0 !important;
   }
 
   .no-print {
@@ -86,28 +102,81 @@ textarea {
   }
 
   .pos-print-document {
+    margin: 0 auto !important;
+    overflow: visible !important;
     box-shadow: none !important;
-    max-width: none !important;
-    width: 100% !important;
+    max-width: 190mm !important;
+    width: 190mm !important;
   }
 
-  body:has(.inventory-print-report),
-  body:has(.inventory-print-report) main {
-    height: auto !important;
+  .pos-document-body {
+    padding: 8mm !important;
+  }
+
+  .pos-document-letterhead,
+  .pos-document-meta,
+  .pos-document-payment-grid,
+  .pos-document-signoff,
+  .finance-print-parties,
+  .finance-print-details {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .pos-document-title,
+  .finance-print-header {
+    align-items: flex-start !important;
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+  }
+
+  .pos-document-title h1 {
+    font-size: 1.875rem !important;
+    line-height: 2.25rem !important;
+  }
+
+  .finance-print-amount,
+  .pos-document-signoff > :last-child {
+    text-align: right !important;
+  }
+
+  .pos-print-document .overflow-x-auto {
     overflow: visible !important;
   }
 
-  body:has(.inventory-print-report) main {
-    padding: 0 !important;
+  .pos-print-document table {
+    min-width: 0 !important;
+  }
+
+  .pos-print-document footer,
+  .pos-print-document tr,
+  .finance-print-document,
+  .finance-print-document tr {
+    break-inside: avoid;
   }
 
   .inventory-print-report {
     display: block !important;
-    width: 100% !important;
+    margin: 0 auto !important;
+    max-width: 190mm !important;
+    width: 190mm !important;
   }
 
   .inventory-print-report tr {
     break-inside: avoid;
+  }
+
+  .finance-print-document {
+    border: 0 !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    max-width: 190mm !important;
+    width: 190mm !important;
+  }
+
+  .finance-print-body {
+    padding: 8mm !important;
   }
 }
 

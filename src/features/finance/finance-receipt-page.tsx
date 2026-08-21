@@ -69,13 +69,13 @@ export function FinanceReceiptPage({ paymentId }: { paymentId: string }) {
         </Link>
         <Button onClick={() => window.print()} type="button">
           <Printer className="h-4 w-4" />
-          Print receipt
+          Print / Save PDF
         </Button>
       </div>
 
-      <Card className="mx-auto w-full max-w-3xl print:border-0 print:shadow-none">
-        <CardContent className="grid gap-8 p-6 sm:p-8">
-          <div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
+      <Card className="finance-print-document mx-auto w-full max-w-3xl print:border-0 print:shadow-none">
+        <CardContent className="finance-print-body grid gap-8 p-6 sm:p-8">
+          <div className="finance-print-header flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase text-muted-foreground">Payment Receipt</p>
               <h1 className="mt-2 text-3xl font-semibold">{payment.receiptNumber}</h1>
@@ -84,21 +84,21 @@ export function FinanceReceiptPage({ paymentId }: { paymentId: string }) {
             <Badge className="w-fit" tone={approvalTone(payment.verificationStatus)}>{titleCase(payment.verificationStatus)}</Badge>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="finance-print-parties grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-xs font-semibold uppercase text-muted-foreground">Received from</p>
               <p className="mt-2 text-lg font-semibold">{payment.payerName ?? payment.tenantName ?? "Payer"}</p>
               <p className="mt-1 text-sm text-muted-foreground">{payment.propertyName || revenueCategoryLabel(revenueCategoryFromPayment(payment))}</p>
               <p className="mt-1 text-sm text-muted-foreground">{revenueCategoryLabel(revenueCategoryFromPayment(payment))} · {payment.sourceReference || payment.tenancyReference || payment.tenancyId || payment.sourceId}</p>
             </div>
-            <div className="sm:text-right">
+            <div className="finance-print-amount sm:text-right">
               <p className="text-xs font-semibold uppercase text-muted-foreground">Amount</p>
               <p className="mt-2 text-3xl font-semibold">{formatCurrency(Number(payment.amount ?? 0))}</p>
               <p className="mt-1 text-sm text-muted-foreground">{displayDate(payment.at)}</p>
             </div>
           </div>
 
-          <div className="grid gap-3 rounded-md border bg-muted/30 p-4 text-sm sm:grid-cols-2">
+          <div className="finance-print-details grid gap-3 rounded-md border bg-muted/30 p-4 text-sm sm:grid-cols-2">
             <div>
               <p className="font-medium">Method</p>
               <p className="mt-1 text-muted-foreground">{titleCase(payment.method)}</p>

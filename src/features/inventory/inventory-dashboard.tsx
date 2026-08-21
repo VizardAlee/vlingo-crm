@@ -685,9 +685,9 @@ export function InventoryDashboard() {
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button onClick={() => window.print()} variant="outline">
+          <Button onClick={() => window.print()} type="button" variant="outline">
             <Printer className="h-4 w-4" />
-            Print report
+            Print / Save PDF
           </Button>
           <Button onClick={load} variant="outline">
             <RefreshCw className="h-4 w-4" />

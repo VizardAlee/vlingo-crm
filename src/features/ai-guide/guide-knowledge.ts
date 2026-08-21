@@ -86,6 +86,25 @@ Permission guidance rules:
 export const guideTopics: GuideTopic[] = [
   {
     keywords: [
+      "print on phone",
+      "mobile print",
+      "save pdf",
+      "download pdf",
+      "iphone print",
+      "android print",
+      "a4 pdf",
+    ],
+    title: "Print or save an A4 document on a phone",
+    steps: [
+      "Open the invoice, receipt, or filtered inventory report, then choose Print / Save PDF.",
+      "The app switches to a fixed A4 layout for printing, so a PDF generated on Android or iPhone has the same document dimensions and desktop-style columns as one generated on a computer.",
+      "On Android, choose Save as PDF from the printer selector, confirm A4 portrait, then save or share the file.",
+      "On iPhone, use the system print preview, open the full preview, then use Share to save the PDF to Files or send it through an approved app.",
+      "If an in-app browser does not show the system print dialog, open the CRM page directly in Chrome on Android or Safari on iPhone and try again.",
+    ],
+  },
+  {
+    keywords: [
       "point of sale",
       "pos",
       "checkout",
@@ -557,6 +576,7 @@ Cross-module workflows:
 - Product/service catalogue items marked as inventory feed branch/location balances. Procurement receipts, controlled movements, counts, and reservation fulfillment update stock through server-side transactions.
 - The dashboard is inventory-first and sales-aware: it highlights stock on hand, available and reserved units, low-stock exposure, inventory value, recent movements and units sold. Users with pos.read also see transaction count, sales value, payments received, outstanding balances, today's sales, and the eight latest completed invoices for the active branch.
 - Point of Sale sells from the active branch's available balance. A user can type a full whole-number cart quantity or use plus/minus shortcuts. Checkout creates the sale, branch-coded VSL invoice number, optional numbered receipt and finance payment, inventory issues, and stock deductions atomically. It supports walk-in customers, discounts, tax, unpaid invoices, part payments, and a separate receipt for every later payment.
+- Printable POS invoices, receipts, finance receipts, and inventory reports use a fixed A4 print layout on desktop, Android, and iPhone. Mobile printing preserves the desktop-style columns and full document width; the system print dialog can print physically or save/share a PDF.
 - Printable POS invoices and receipts use the Vlingo letterhead and A4 document structure: customer/location metadata, itemized lines, totals, amount in words, and payment status. Invoices contain the configured Lotus Bank payment details; receipts contain payment acknowledgement and an authorization line. A sample signature or stamp is never automatically copied onto a new document.
 - Inventory products require a brand, use an automatically generated SKU, and may omit barcode/GTIN. Users with inventory.manageCatalog can create a missing brand from the product form. Admin-created active branches are the stock locations used for new inventory.
 - Inventory availability is on-hand quantity minus reserved quantity. Batch and serial records must stay synchronized with the balance and movement ledgers.
