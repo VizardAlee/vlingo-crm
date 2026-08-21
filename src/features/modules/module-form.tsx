@@ -1333,6 +1333,12 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                           ) : (
                             <Input placeholder={field.placeholder} readOnly={field.readOnly} {...fieldRegistration} type={field.type} />
                           )}
+                          {canCreateBrand ? (
+                            <Button className="w-fit" disabled={brandSaving} onClick={() => setBrandCreatorOpen(true)} size="sm" type="button" variant="outline">
+                              <Plus className="h-4 w-4" />
+                              Create brand
+                            </Button>
+                          ) : null}
                           {field.helpText ? <span className="text-xs font-normal text-muted-foreground">{field.helpText}</span> : null}
                         </div>
                       </Field>
