@@ -6,7 +6,6 @@ import {
   MessageSquare,
   PackageCheck,
   Plus,
-  Printer,
   RefreshCw,
   Send,
 } from "lucide-react";
@@ -22,6 +21,7 @@ import {
 } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
+import { PrintAction } from "@/components/print-action";
 import { useAuth } from "@/features/auth/auth-provider";
 import { BarcodeScanner } from "@/features/inventory/barcode-scanner";
 import {
@@ -685,10 +685,7 @@ export function InventoryDashboard() {
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button onClick={() => window.print()} type="button" variant="outline">
-            <Printer className="h-4 w-4" />
-            Print / Save PDF
-          </Button>
+          <PrintAction variant="outline" />
           <Button onClick={load} variant="outline">
             <RefreshCw className="h-4 w-4" />
             Refresh

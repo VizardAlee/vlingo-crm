@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { PrintAction } from "@/components/print-action";
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
@@ -67,10 +67,7 @@ export function FinanceReceiptPage({ paymentId }: { paymentId: string }) {
           <ArrowLeft className="h-4 w-4" />
           Back to finance
         </Link>
-        <Button onClick={() => window.print()} type="button">
-          <Printer className="h-4 w-4" />
-          Print / Save PDF
-        </Button>
+        <PrintAction />
       </div>
 
       <Card className="finance-print-document mx-auto w-full max-w-3xl print:border-0 print:shadow-none">

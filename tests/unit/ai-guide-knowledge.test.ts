@@ -42,6 +42,7 @@ describe("AI Guide knowledge", () => {
     const answer = fallbackGuideAnswer("How do I save PDF with mobile print on iPhone?");
 
     expect(answer).toContain("fixed A4 layout");
+    expect(answer).toContain("button becomes disabled");
     expect(answer).toContain("same document dimensions");
     expect(answer).toContain("Safari on iPhone");
   });

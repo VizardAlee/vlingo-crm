@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { PrintAction } from "@/components/print-action";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { AuthorizedDocumentSignature } from "@/components/authorized-document-signature";
 import { useAuth } from "@/features/auth/auth-provider";
@@ -108,7 +108,7 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
     <section className="grid gap-5">
       <div className="flex flex-col gap-3 print:hidden sm:flex-row sm:items-center sm:justify-between">
         <Link className="inline-flex items-center gap-2 text-sm font-medium text-primary" href="/pos"><ArrowLeft className="h-4 w-4" />Back to Point of Sale</Link>
-        <Button onClick={() => window.print()} type="button"><Printer className="h-4 w-4" />Print / Save PDF</Button>
+        <PrintAction />
       </div>
 
       <article className="pos-print-document mx-auto w-full max-w-[850px] overflow-hidden bg-white text-[#151915] shadow-xl print:shadow-none">

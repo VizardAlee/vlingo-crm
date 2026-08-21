@@ -230,11 +230,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const mobileAllSections = (
     <>
-      {mobileOpen ? <div className="fixed inset-0 z-40 bg-black/35 backdrop-blur-sm md:hidden" onClick={() => setMobileOpen(false)} /> : null}
+      {mobileOpen ? <div className="no-print fixed inset-0 z-40 bg-black/35 backdrop-blur-sm md:hidden" onClick={() => setMobileOpen(false)} /> : null}
       <section
         aria-label="All sections"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 max-h-[86vh] rounded-t-[1.75rem] border bg-white shadow-2xl transition-transform duration-200 md:hidden",
+          "no-print fixed inset-x-0 bottom-0 z-50 max-h-[86vh] rounded-t-[1.75rem] border bg-white shadow-2xl transition-transform duration-200 md:hidden",
           mobileOpen ? "translate-y-0" : "translate-y-full",
         )}
       >
