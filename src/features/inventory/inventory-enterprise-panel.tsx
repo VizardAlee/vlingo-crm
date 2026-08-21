@@ -179,10 +179,7 @@ export function InventoryEnterprisePanel({
   const canReserve = hasPermission(member, "inventory.reserve");
   const canApprove = hasPermission(member, "inventory.approve");
   const countableItems = useMemo(
-    () =>
-      items.filter(
-        (item) => !item.trackingMode || item.trackingMode === "none",
-      ),
+    () => items.filter((item) => item.trackingMode !== "batch"),
     [items],
   );
   const purchaseOrderTotal =
@@ -1180,7 +1177,7 @@ export function InventoryEnterprisePanel({
                             {tracking === "serial" ? (
                               <Textarea
                                 className="md:col-span-2"
-                                placeholder="One serial number per line"
+                                placeholder="Serial numbers optional; one per unit if supplied"
                                 value={draft.serialText}
                                 onChange={(e) =>
                                   setReceiptDrafts((v) => ({
@@ -1327,8 +1324,8 @@ export function InventoryEnterprisePanel({
                   </div>
                 ))}
                 <p className="text-xs text-muted-foreground">
-                  Batch- and serial-controlled items are reconciled through
-                  traceable inventory movements.
+                  Batch-controlled items are reconciled through traceable
+                  inventory movements. Serial numbers are optional for now.
                 </p>
                 <Button
                   disabled={!countableItems.length}
@@ -1521,9 +1518,9 @@ export function InventoryEnterprisePanel({
                   </Field>
                 ) : null}
                 {reservationItem?.trackingMode === "serial" ? (
-                  <Field label="Serial numbers (one per line)">
+                  <Field label="Serial numbers (optional, one per line)">
                     <Textarea
-                      required
+                      placeholder="Leave blank for now, or enter one serial per reserved unit"
                       value={reservationForm.serialText}
                       onChange={(e) =>
                         setReservationForm((v) => ({

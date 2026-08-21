@@ -2492,11 +2492,12 @@ export const recordInventoryMovement = onCall(
       );
     if (
       trackingMode === "serial" &&
+      serialNumbers.length > 0 &&
       (!Number.isInteger(quantity) || serialNumbers.length !== quantity)
     )
       throw new HttpsError(
         "invalid-argument",
-        "Enter one unique serial number for every unit.",
+        "When serial numbers are provided, enter one unique serial number for every unit.",
       );
     const traceId = (value: string) =>
       createHash("sha256").update(value).digest("hex").slice(0, 32);
@@ -3234,10 +3235,14 @@ export const receiveInventoryPurchaseOrderLine = onCall(
       : [];
     if (trackingMode === "batch" && !batchNumber)
       throw new HttpsError("invalid-argument", "Batch number is required.");
-    if (trackingMode === "serial" && serialNumbers.length !== quantity)
+    if (
+      trackingMode === "serial" &&
+      serialNumbers.length > 0 &&
+      serialNumbers.length !== quantity
+    )
       throw new HttpsError(
         "invalid-argument",
-        "Enter one serial number for every received unit.",
+        "When serial numbers are provided, enter one for every received unit.",
       );
     const lotRef =
       trackingMode === "batch"
@@ -3460,13 +3465,10 @@ export const createInventoryStockCount = onCall(
           "failed-precondition",
           "Every count line must belong to this branch.",
         );
-      if (
-        offering.trackingMode === "batch" ||
-        offering.trackingMode === "serial"
-      )
+      if (offering.trackingMode === "batch")
         throw new HttpsError(
           "failed-precondition",
-          `${offering.name ?? "This item"} is traceability-controlled. Reconcile it through batch or serial inventory movements.`,
+          `${offering.name ?? "This item"} is batch-controlled. Reconcile it through batch inventory movements.`,
         );
       const systemQuantity = Number(balance.quantityOnHand ?? 0);
       return {
@@ -3694,10 +3696,14 @@ export const createInventoryReservation = onCall(
         "invalid-argument",
         "Batch number is required for this reservation.",
       );
-    if (trackingMode === "serial" && serialNumbers.length !== quantity)
+    if (
+      trackingMode === "serial" &&
+      serialNumbers.length > 0 &&
+      serialNumbers.length !== quantity
+    )
       throw new HttpsError(
         "invalid-argument",
-        "Enter one serial number for every reserved unit.",
+        "When serial numbers are provided, enter one for every reserved unit.",
       );
     const lotRef =
       trackingMode === "batch"

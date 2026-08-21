@@ -12,7 +12,7 @@ Inventory is transaction-led. Products remain in the Products/Services catalog, 
 - Negative location balances are rejected by the server.
 - Reservations reduce available stock without changing physical on-hand stock.
 - Purchase orders and stock-count variances require a second user with approval permission.
-- Batch- and serial-tracked items maintain trace records through receipt, transfer, reservation, and issue.
+- Batch-tracked items maintain required trace records. Serial-tracked items maintain per-unit trace records when optional serial numbers are supplied.
 
 ## Enterprise workflows
 
@@ -28,11 +28,11 @@ Use Inventory > Add / move stock > **Enter existing / opening stock** to establi
 
 ### Batch and serial traceability
 
-Set each catalog item's Traceability field to `none`, `batch`, or `serial`, and optionally record a barcode/GTIN. Batch movements require a batch number and may include an expiry date. Serial movements require exactly one unique serial number per unit. Camera scanning uses the browser Barcode Detector API when available; USB/Bluetooth scanners and manual entry work in all supported browsers.
+Set each catalog item's Traceability field to `none`, `batch`, or `serial`, and optionally record a barcode/GTIN. Batch movements require a batch number and may include an expiry date. Serial numbers are currently optional; when supplied, enter exactly one unique number per unit to activate per-unit tracing. Camera scanning uses the browser Barcode Detector API when available; USB/Bluetooth scanners and manual entry work in all supported browsers.
 
 ### Stock counts
 
-Counts snapshot the current system quantity when submitted. An approver reviews the captured variance; after approval, posting the count updates the location balances and creates immutable adjustment movements for non-zero variances. Counts cannot reduce physical stock below already-reserved quantities. Batch- and serial-controlled items are reconciled with traceable inventory movements so their lot or serial register cannot diverge from the balance ledger.
+Counts snapshot the current system quantity when submitted. An approver reviews the captured variance; after approval, posting the count updates the location balances and creates immutable adjustment movements for non-zero variances. Counts cannot reduce physical stock below already-reserved quantities. Batch-controlled items are reconciled with traceable inventory movements; ordinary and serial-designated items can be counted by quantity while serial capture remains optional.
 
 ### Reservations
 

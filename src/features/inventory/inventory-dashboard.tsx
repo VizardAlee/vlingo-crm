@@ -1104,9 +1104,9 @@ export function InventoryDashboard() {
                     </>
                   ) : null}
                   {selectedMovementItem?.trackingMode === "serial" ? (
-                    <Field label="Serial numbers (one per line)">
+                    <Field label="Serial numbers (optional, one per line)">
                       <Textarea
-                        required
+                        placeholder="Leave blank for now, or enter one serial per unit"
                         value={movement.serialNumbers.join("\n")}
                         onChange={(event) =>
                           setMovement((value) => ({
