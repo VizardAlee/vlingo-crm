@@ -1,6 +1,6 @@
 "use client";
 
-import { Crosshair, MapPin, Save, Trash2 } from "lucide-react";
+import { Crosshair, MapPin, Plus, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
@@ -21,7 +21,7 @@ import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, lea
 import { effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import { listInventoryBrands } from "@/services/inventory";
+import { createInventoryBrand, listInventoryBrands } from "@/services/inventory";
 import { listMembers } from "@/services/users";
 import type { BusinessVertical, Client, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
@@ -242,6 +242,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [members, setMembers] = useState<Member[]>([]);
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [inventoryBrands, setInventoryBrands] = useState<InventoryBrand[]>([]);
+  const [brandCreatorOpen, setBrandCreatorOpen] = useState(false);
+  const [brandForm, setBrandForm] = useState({ name: "", code: "", contactName: "", contactEmail: "", description: "" });
+  const [brandSaving, setBrandSaving] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<PropertyUnit[]>([]);
   const [stakeholderForm, setStakeholderForm] = useState({ email: "", name: "", notes: "", phoneNumber: "", type: "owner" as StakeholderKind });
@@ -1144,6 +1147,73 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
   }
 
+  async function createBrand() {
+    if (!user) {
+      const message = "You must be signed in to create a brand.";
+      setError(message);
+      toast({ title: "Unable to create brand", description: message, variant: "error" });
+      return;
+    }
+
+    const name = brandForm.name.trim();
+    const code = brandForm.code.trim().toUpperCase();
+    if (!name || !code) {
+      const message = "Enter both a brand name and brand code.";
+      setError(message);
+      toast({ title: "Brand details required", description: message, variant: "error" });
+      return;
+    }
+
+    const existingBrand = inventoryBrands.find((brand) => brand.name.trim().toLowerCase() === name.toLowerCase());
+    if (existingBrand) {
+      setValue("brandId", existingBrand.id, { shouldDirty: true, shouldValidate: true });
+      setBrandCreatorOpen(false);
+      setBrandForm({ name: "", code: "", contactName: "", contactEmail: "", description: "" });
+      toast({ title: "Existing brand selected", description: `${existingBrand.name} is now selected for this product.`, variant: "success" });
+      return;
+    }
+
+    const duplicateCode = inventoryBrands.find((brand) => brand.code.trim().toLowerCase() === code.toLowerCase());
+    if (duplicateCode) {
+      const message = `Brand code ${code} is already used by ${duplicateCode.name}.`;
+      setError(message);
+      toast({ title: "Brand code already exists", description: message, variant: "error" });
+      return;
+    }
+
+    const context = {
+      branchId: activeBranchId,
+      organizationId: activeOrganizationId,
+      userEmail: member?.email || user.email || "",
+      userId: user.uid,
+      userName: member?.displayName || user.displayName || user.email || "",
+    };
+    setBrandSaving(true);
+    setError(null);
+    try {
+      const brandId = await createInventoryBrand({
+        code,
+        contactEmail: brandForm.contactEmail.trim(),
+        contactName: brandForm.contactName.trim(),
+        description: brandForm.description.trim(),
+        name,
+        status: "active",
+      }, context);
+      const nextBrands = (await listInventoryBrands(activeOrganizationId, member)).filter((brand) => brand.status === "active");
+      setInventoryBrands(nextBrands);
+      setValue("brandId", brandId, { shouldDirty: true, shouldValidate: true });
+      setBrandCreatorOpen(false);
+      setBrandForm({ name: "", code: "", contactName: "", contactEmail: "", description: "" });
+      toast({ title: "Brand created", description: `${name} was created and selected for this product.`, variant: "success" });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to create brand.";
+      setError(message);
+      toast({ title: "Unable to create brand", description: message, variant: "error" });
+    } finally {
+      setBrandSaving(false);
+    }
+  }
+
   function isFieldVisible(field: FormField) {
     if (config.collection !== "deals") {
       return config.collection === "offerings" ? shouldShowOfferingField(field, String(selectedOfferingType ?? "")) : true;
@@ -1225,16 +1295,30 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                   </div>
                 ) : null}
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {visibleFields.map((field) => (
+                  {visibleFields.map((field) => {
+                    const canCreateBrand = config.collection === "offerings" && field.name === "brandId" && hasPermission(member, "inventory.manageCatalog");
+                    const fieldRegistration = register(field.name);
+                    return (
                     <div className={cn(field.colSpan === "full" && "lg:col-span-2")} data-tour={fieldTourTarget(config.collection, field.name)} key={field.name}>
                       <Field label={field.label} error={validationErrors[field.name]}>
                         <div className="grid gap-1.5">
                           {field.type === "textarea" ? (
-                            <Textarea placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} />
+                            <Textarea placeholder={field.placeholder} readOnly={field.readOnly} {...fieldRegistration} />
                           ) : field.type === "select" ? (
-                            <Select {...register(field.name)}>
+                            <Select
+                              {...fieldRegistration}
+                              onChange={canCreateBrand ? (event) => {
+                                if (event.target.value === "__create_brand__") {
+                                  setValue("brandId", "", { shouldDirty: true });
+                                  setBrandCreatorOpen(true);
+                                  return;
+                                }
+                                void fieldRegistration.onChange(event);
+                              } : fieldRegistration.onChange}
+                            >
                               <option value="">Select {field.label.toLowerCase()}</option>
                               {optionsForField(field).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              {canCreateBrand ? <option value="__create_brand__">+ Create new brand</option> : null}
                             </Select>
                           ) : config.collection === "properties" && field.name === "agencyFee" ? (
                             <Input readOnly type="number" value={calculatedAgencyFee} />
@@ -1245,15 +1329,45 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                           ) : field.name === "totalInitialPayment" ? (
                             <Input readOnly type="number" value={totalInitialPayment} />
                           ) : field.name === "geoLatitude" || field.name === "geoLongitude" ? (
-                            <Input inputMode="decimal" placeholder={field.placeholder} readOnly={field.readOnly} step="any" {...register(field.name)} type="number" />
+                            <Input inputMode="decimal" placeholder={field.placeholder} readOnly={field.readOnly} step="any" {...fieldRegistration} type="number" />
                           ) : (
-                            <Input placeholder={field.placeholder} readOnly={field.readOnly} {...register(field.name)} type={field.type} />
+                            <Input placeholder={field.placeholder} readOnly={field.readOnly} {...fieldRegistration} type={field.type} />
                           )}
                           {field.helpText ? <span className="text-xs font-normal text-muted-foreground">{field.helpText}</span> : null}
                         </div>
                       </Field>
+                      {canCreateBrand && brandCreatorOpen ? (
+                        <div className="mt-3 grid gap-3 rounded-md border bg-muted/30 p-3">
+                          <p className="text-sm font-semibold">Create a new brand</p>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Field label="Brand name">
+                              <Input autoFocus required value={brandForm.name} onChange={(event) => setBrandForm((current) => ({ ...current, name: event.target.value }))} />
+                            </Field>
+                            <Field label="Brand code">
+                              <Input required value={brandForm.code} onChange={(event) => setBrandForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} />
+                            </Field>
+                            <Field label="Partner contact name">
+                              <Input value={brandForm.contactName} onChange={(event) => setBrandForm((current) => ({ ...current, contactName: event.target.value }))} />
+                            </Field>
+                            <Field label="Partner contact email">
+                              <Input type="email" value={brandForm.contactEmail} onChange={(event) => setBrandForm((current) => ({ ...current, contactEmail: event.target.value }))} />
+                            </Field>
+                          </div>
+                          <Field label="Description">
+                            <Textarea value={brandForm.description} onChange={(event) => setBrandForm((current) => ({ ...current, description: event.target.value }))} />
+                          </Field>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button disabled={brandSaving} onClick={() => setBrandCreatorOpen(false)} size="sm" type="button" variant="ghost">Cancel</Button>
+                            <Button disabled={brandSaving} onClick={createBrand} size="sm" type="button">
+                              <Plus className="h-4 w-4" />
+                              {brandSaving ? "Creating" : "Create and select brand"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
               );
