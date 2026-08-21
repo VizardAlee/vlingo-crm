@@ -47,6 +47,7 @@ export function PosDashboard() {
   const [balances, setBalances] = useState<InventoryBalance[]>([]);
   const [sales, setSales] = useState<PosSale[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -105,6 +106,11 @@ export function PosDashboard() {
   const todaySales = sales.filter((sale) => new Date(String(sale.soldAt)).toDateString() === new Date().toDateString() && sale.saleStatus === "completed");
 
   function addToCart(offeringId: string) {
+    setQuantityDrafts((current) => {
+      const next = { ...current };
+      delete next[offeringId];
+      return next;
+    });
     setCart((current) => {
       const existing = current.find((line) => line.offeringId === offeringId);
       const available = Number(stock.get(offeringId) ?? 0);
@@ -115,6 +121,32 @@ export function PosDashboard() {
 
   function updateCart(offeringId: string, changes: Partial<CartLine>) {
     setCart((current) => current.map((line) => line.offeringId === offeringId ? { ...line, ...changes } : line));
+  }
+
+  function stepQuantity(offeringId: string, quantity: number) {
+    setQuantityDrafts((current) => {
+      const next = { ...current };
+      delete next[offeringId];
+      return next;
+    });
+    updateCart(offeringId, { quantity });
+  }
+
+  function typeQuantity(offeringId: string, rawValue: string) {
+    setQuantityDrafts((current) => ({ ...current, [offeringId]: rawValue }));
+    if (/^\d+$/.test(rawValue) && Number(rawValue) > 0) {
+      updateCart(offeringId, { quantity: Number(rawValue) });
+    }
+  }
+
+  function finishQuantity(offeringId: string, available: number) {
+    const rawValue = quantityDrafts[offeringId];
+    if (rawValue === undefined) return;
+    const typed = Number(rawValue);
+    const quantity = Number.isInteger(typed) && typed > 0
+      ? Math.min(typed, available)
+      : 1;
+    stepQuantity(offeringId, quantity);
   }
 
   async function submitSale(event: React.FormEvent) {
@@ -240,7 +272,7 @@ export function PosDashboard() {
                 {cartDetails.map((line) => (
                   <div className="rounded-md border p-3" key={line.offeringId}>
                     <div className="flex justify-between gap-3"><div><strong className="text-sm">{line.item.name}</strong><p className="text-xs text-muted-foreground">{formatCurrency(line.item.sellingPrice)} each · {line.available} available</p></div><Button aria-label="Remove product" onClick={() => setCart((value) => value.filter((entry) => entry.offeringId !== line.offeringId))} size="icon" type="button" variant="ghost"><Trash2 className="h-4 w-4" /></Button></div>
-                    <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2"><Button disabled={line.quantity <= 1} onClick={() => updateCart(line.offeringId, { quantity: line.quantity - 1 })} size="icon" type="button" variant="outline"><Minus className="h-4 w-4" /></Button><Input aria-label="Quantity" max={line.available} min="1" onChange={(event) => updateCart(line.offeringId, { quantity: Math.max(1, Number(event.target.value)) })} type="number" value={line.quantity} /><Button disabled={line.quantity >= line.available} onClick={() => updateCart(line.offeringId, { quantity: line.quantity + 1 })} size="icon" type="button" variant="outline"><Plus className="h-4 w-4" /></Button></div>
+                    <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2"><Button disabled={line.quantity <= 1} onClick={() => stepQuantity(line.offeringId, line.quantity - 1)} size="icon" type="button" variant="outline"><Minus className="h-4 w-4" /></Button><Input aria-label="Quantity" inputMode="numeric" max={line.available} min="1" onBlur={() => finishQuantity(line.offeringId, line.available)} onChange={(event) => typeQuantity(line.offeringId, event.target.value)} onFocus={(event) => event.currentTarget.select()} step="1" type="number" value={quantityDrafts[line.offeringId] ?? String(line.quantity)} /><Button disabled={line.quantity >= line.available} onClick={() => stepQuantity(line.offeringId, line.quantity + 1)} size="icon" type="button" variant="outline"><Plus className="h-4 w-4" /></Button></div>
                     <Field className="mt-3" label="Line discount"><Input max={line.gross} min="0" onChange={(event) => updateCart(line.offeringId, { discountAmount: Math.max(0, Number(event.target.value)) })} type="number" value={line.discountAmount} /></Field>
                     <p className="mt-3 text-right text-sm font-semibold">{formatCurrency(line.total)}</p>
                   </div>

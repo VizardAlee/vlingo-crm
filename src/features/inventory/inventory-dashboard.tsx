@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import {
   Download,
   MessageSquare,
   PackageCheck,
   Plus,
+  Printer,
   RefreshCw,
   Send,
 } from "lucide-react";
@@ -128,6 +130,11 @@ function csvCell(value: unknown) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
+function inventoryDate(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function InventoryDashboard() {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
@@ -137,6 +144,9 @@ export function InventoryDashboard() {
   const [items, setItems] = useState<Offering[]>([]);
   const [balances, setBalances] = useState<InventoryBalance[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [reportItems, setReportItems] = useState<Offering[]>([]);
+  const [reportBalances, setReportBalances] = useState<InventoryBalance[]>([]);
+  const [reportMovements, setReportMovements] = useState<InventoryMovement[]>([]);
   const [comments, setComments] = useState<InventoryComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -166,6 +176,12 @@ export function InventoryDashboard() {
     brandId: "",
     message: "",
     reportPeriod: new Date().toISOString().slice(0, 7),
+  });
+  const [reportFilters, setReportFilters] = useState({
+    branchId: "all",
+    brandId: "all",
+    dateFrom: "",
+    dateTo: "",
   });
   const isPartner = memberRoles(member).includes("brandPartner");
   const canMoveStock = hasAnyPermission(member, [
@@ -255,8 +271,8 @@ export function InventoryDashboard() {
       },
       {
         target: "inventory-export",
-        title: "Export the report",
-        body: "Download the inventory data you are permitted to see as a CSV file for analysis or sharing.",
+        title: "Export or print the report",
+        body: "Filter by a permitted branch, brand, and movement date range, then download the current stock as CSV or print the full stock and movement report.",
       },
     );
     if (canSetup)
@@ -314,6 +330,9 @@ export function InventoryDashboard() {
         ? nextComments
         : nextComments.filter((comment) => comment.branchId === activeBranchId);
       setBrands(nextBrands);
+      setReportItems(nextItems.filter((item) => Boolean(item.brandId)));
+      setReportBalances(nextBalances);
+      setReportMovements(nextMovements);
       setItems(branchItems.filter((item) => Boolean(item.brandId)));
       setBalances(branchBalances);
       setMovements(branchMovements);
@@ -436,6 +455,50 @@ export function InventoryDashboard() {
     (sum, entry) => sum + Number(entry.quantity),
     0,
   );
+  const reportBranchOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    reportBalances.forEach((balance) => {
+      if (balance.branchId) options.set(balance.branchId, balance.locationName || titleCase(balance.branchId));
+    });
+    reportMovements.forEach((entry) => {
+      if (entry.branchId && !options.has(entry.branchId)) options.set(entry.branchId, titleCase(entry.branchId));
+      if (entry.fromBranchId && !options.has(entry.fromBranchId)) options.set(entry.fromBranchId, entry.fromLocationName || titleCase(entry.fromBranchId));
+      if (entry.toBranchId && !options.has(entry.toBranchId)) options.set(entry.toBranchId, entry.toLocationName || titleCase(entry.toBranchId));
+    });
+    return [...options.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [reportBalances, reportMovements]);
+  const filteredReportBalances = useMemo(
+    () => reportBalances.filter((balance) =>
+      (reportFilters.branchId === "all" || balance.branchId === reportFilters.branchId)
+      && (reportFilters.brandId === "all" || balance.brandId === reportFilters.brandId)),
+    [reportBalances, reportFilters.branchId, reportFilters.brandId],
+  );
+  const filteredReportMovements = useMemo(() => {
+    const from = reportFilters.dateFrom ? new Date(`${reportFilters.dateFrom}T00:00:00`) : null;
+    const to = reportFilters.dateTo ? new Date(`${reportFilters.dateTo}T23:59:59.999`) : null;
+    return reportMovements.filter((entry) => {
+      const occurredAt = inventoryDate(entry.occurredAt);
+      return (reportFilters.branchId === "all" || [entry.branchId, entry.fromBranchId, entry.toBranchId].includes(reportFilters.branchId))
+        && (reportFilters.brandId === "all" || entry.brandId === reportFilters.brandId)
+        && (!from || Boolean(occurredAt && occurredAt >= from))
+        && (!to || Boolean(occurredAt && occurredAt <= to));
+    });
+  }, [reportFilters, reportMovements]);
+  const reportItemMap = useMemo(() => new Map(reportItems.map((item) => [item.id, item])), [reportItems]);
+  const reportTotals = useMemo(() => filteredReportBalances.reduce((totals, balance) => {
+    const onHand = Number(balance.quantityOnHand ?? 0);
+    const reserved = Number(balance.quantityReserved ?? 0);
+    totals.onHand += onHand;
+    totals.reserved += reserved;
+    totals.value += onHand * Number(reportItemMap.get(balance.offeringId)?.costPrice ?? 0);
+    return totals;
+  }, { onHand: 0, reserved: 0, value: 0 }), [filteredReportBalances, reportItemMap]);
+  const selectedReportBranch = reportFilters.branchId === "all"
+    ? "All permitted branches"
+    : reportBranchOptions.find((branch) => branch.id === reportFilters.branchId)?.name ?? titleCase(reportFilters.branchId);
+  const selectedReportBrand = reportFilters.brandId === "all"
+    ? "All permitted brands"
+    : brands.find((brand) => brand.id === reportFilters.brandId)?.name ?? "Selected brand";
 
   async function submitMovement(event: React.FormEvent) {
     event.preventDefault();
@@ -548,35 +611,35 @@ export function InventoryDashboard() {
   }
 
   function downloadReport() {
-    const header = [
+    const baseHeader = [
       "Brand",
       "SKU",
       "Barcode",
       "Item",
+      "Branch",
       "Location",
       "On hand",
       "Reserved",
       "Available",
       "Reorder level",
-      "Unit cost",
-      "Stock value",
     ];
-    const rows = balances.map((balance) => {
-      const item = items.find((entry) => entry.id === balance.offeringId);
+    const header = isPartner ? baseHeader : [...baseHeader, "Unit cost", "Stock value"];
+    const rows = filteredReportBalances.map((balance) => {
+      const item = reportItemMap.get(balance.offeringId);
       const reserved = Number(balance.quantityReserved ?? 0);
-      return [
+      const baseRow = [
         balance.brandName,
         balance.sku,
         item?.barcode ?? "",
         balance.offeringName,
+        reportBranchOptions.find((branch) => branch.id === balance.branchId)?.name ?? balance.branchId,
         balance.locationName,
         balance.quantityOnHand,
         reserved,
         Number(balance.quantityOnHand) - reserved,
         item?.reorderLevel ?? "",
-        item?.costPrice ?? 0,
-        Number(balance.quantityOnHand) * Number(item?.costPrice ?? 0),
       ];
+      return isPartner ? baseRow : [...baseRow, item?.costPrice ?? 0, Number(balance.quantityOnHand) * Number(item?.costPrice ?? 0)];
     });
     const blob = new Blob(
       [[header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")],
@@ -584,7 +647,9 @@ export function InventoryDashboard() {
     );
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `inventory-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    const branchSuffix = reportFilters.branchId === "all" ? "all-branches" : reportFilters.branchId;
+    const brandSuffix = reportFilters.brandId === "all" ? "all-brands" : reportFilters.brandId;
+    link.download = `inventory-report-${branchSuffix}-${brandSuffix}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   }
@@ -593,7 +658,8 @@ export function InventoryDashboard() {
   if (loading) return <LoadingState label="Loading inventory" />;
 
   return (
-    <section className="grid min-w-0 gap-5">
+    <>
+    <section className="grid min-w-0 gap-5 print:hidden">
       <div
         className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none"
         data-tour="inventory-heading"
@@ -619,6 +685,10 @@ export function InventoryDashboard() {
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
+          <Button onClick={() => window.print()} variant="outline">
+            <Printer className="h-4 w-4" />
+            Print report
+          </Button>
           <Button onClick={load} variant="outline">
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -626,6 +696,32 @@ export function InventoryDashboard() {
         </div>
       </div>
       {error ? <ErrorState message={error} /> : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>Report filters</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Field label="Branch">
+            <Select value={reportFilters.branchId} onChange={(event) => setReportFilters((value) => ({ ...value, branchId: event.target.value }))}>
+              <option value="all">All permitted branches</option>
+              {reportBranchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Brand">
+            <Select value={reportFilters.brandId} onChange={(event) => setReportFilters((value) => ({ ...value, brandId: event.target.value }))}>
+              <option value="all">All permitted brands</option>
+              {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Movement date from">
+            <Input max={reportFilters.dateTo || undefined} type="date" value={reportFilters.dateFrom} onChange={(event) => setReportFilters((value) => ({ ...value, dateFrom: event.target.value }))} />
+          </Field>
+          <Field label="Movement date to">
+            <Input min={reportFilters.dateFrom || undefined} type="date" value={reportFilters.dateTo} onChange={(event) => setReportFilters((value) => ({ ...value, dateTo: event.target.value }))} />
+          </Field>
+          <p className="text-xs text-muted-foreground sm:col-span-2 xl:col-span-4">Branch and brand filters apply to the current stock table and movement ledger. Dates filter the movement ledger; current balances remain the latest recorded quantities.</p>
+        </CardContent>
+      </Card>
       {!isPartner && !currentBranchLocations.length ? (
         <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-sm">
           <p className="font-medium">No active stock location for this branch</p>
@@ -729,7 +825,7 @@ export function InventoryDashboard() {
             </Card>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <Card>
+            {!isPartner ? <Card>
               <CardContent className="p-4">
                 <p className="text-xs uppercase text-muted-foreground">
                   Units on hand
@@ -738,7 +834,7 @@ export function InventoryDashboard() {
                   {totalUnits.toLocaleString()}
                 </p>
               </CardContent>
-            </Card>
+            </Card> : null}
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs uppercase text-muted-foreground">
@@ -797,7 +893,7 @@ export function InventoryDashboard() {
                     <th className="px-4 py-3">Reserved</th>
                     <th className="px-4 py-3">Available</th>
                     <th className="px-4 py-3">Reorder</th>
-                    <th className="px-4 py-3">Value</th>
+                    {!isPartner ? <th className="px-4 py-3">Value</th> : null}
                     <th className="px-4 py-3">Status</th>
                   </tr>
                 </thead>
@@ -830,11 +926,11 @@ export function InventoryDashboard() {
                         <td className="px-4 py-3">
                           {item.reorderLevel ?? "—"}
                         </td>
-                        <td className="px-4 py-3">
+                        {!isPartner ? <td className="px-4 py-3">
                           {formatCurrency(
                             item.quantity * Number(item.costPrice ?? 0),
                           )}
-                        </td>
+                        </td> : null}
                         <td className="px-4 py-3">
                           <Badge tone={low ? "warning" : "success"}>
                             {low ? "Low stock" : "Healthy"}
@@ -847,7 +943,7 @@ export function InventoryDashboard() {
                     <tr>
                       <td
                         className="px-4 py-8 text-center text-muted-foreground"
-                        colSpan={8}
+                        colSpan={isPartner ? 7 : 8}
                       >
                         No branded inventory items are available yet.
                       </td>
@@ -1508,5 +1604,60 @@ export function InventoryDashboard() {
         </div>
       ) : null}
     </section>
+
+    <article className="inventory-print-report hidden bg-white text-[#151915] print:block">
+      <header className="border-b-2 border-[#c7a13a] pb-4">
+        <Image alt="Vlingo Systems Nigeria Limited" className="h-auto w-full max-w-[520px] object-contain object-left" height={92} priority src="/branding/vlingo-logo.jpeg" width={550} />
+        <div className="mt-2 text-[9px] font-medium text-[#4f574f]">Solar • Energy • Infrastructure Solutions &nbsp;|&nbsp; RC 1008311 &nbsp;|&nbsp; Kaduna: 27A, Isa Kaita Road, U/Sarki &nbsp;|&nbsp; +234 803 770 1084</div>
+      </header>
+
+      <div className="mt-6 flex items-start justify-between gap-6">
+        <div><h1 className="text-2xl font-black tracking-tight text-[#174f20]">INVENTORY REPORT</h1><p className="mt-1 text-xs text-[#515851]">Current stock balances and inventory movement history</p></div>
+        <div className="bg-[#174f20] px-5 py-3 text-center text-[10px] font-black tracking-[0.12em] text-white">GENERATED {new Date().toLocaleDateString("en-NG")}</div>
+      </div>
+
+      <dl className="mt-5 grid grid-cols-2 gap-x-6 border-y py-3 text-[10px]">
+        <div className="flex justify-between gap-3 py-1"><dt className="font-bold uppercase text-[#5e665e]">Branch</dt><dd className="font-semibold">{selectedReportBranch}</dd></div>
+        <div className="flex justify-between gap-3 py-1"><dt className="font-bold uppercase text-[#5e665e]">Brand</dt><dd className="font-semibold">{selectedReportBrand}</dd></div>
+        <div className="flex justify-between gap-3 py-1"><dt className="font-bold uppercase text-[#5e665e]">Movement from</dt><dd className="font-semibold">{reportFilters.dateFrom ? formatDate(reportFilters.dateFrom) : "Beginning"}</dd></div>
+        <div className="flex justify-between gap-3 py-1"><dt className="font-bold uppercase text-[#5e665e]">Movement to</dt><dd className="font-semibold">{reportFilters.dateTo ? formatDate(reportFilters.dateTo) : "Current date"}</dd></div>
+      </dl>
+
+      <section className={isPartner ? "mt-5 grid grid-cols-4 gap-2" : "mt-5 grid grid-cols-5 gap-2"}>
+        {[
+          { label: "Units on hand", value: reportTotals.onHand.toLocaleString() },
+          { label: "Reserved", value: reportTotals.reserved.toLocaleString() },
+          { label: "Available", value: (reportTotals.onHand - reportTotals.reserved).toLocaleString() },
+          { label: "Stock lines", value: filteredReportBalances.length.toLocaleString() },
+          ...(!isPartner ? [{ label: "Inventory value", value: formatCurrency(reportTotals.value) }] : []),
+        ].map((metric) => <div className="border p-2" key={metric.label}><p className="text-[8px] font-bold uppercase text-[#5e665e]">{metric.label}</p><p className="mt-1 text-sm font-black text-[#174f20]">{metric.value}</p></div>)}
+      </section>
+
+      <section className="mt-6">
+        <h2 className="border-b-2 border-[#174f20] pb-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#174f20]">Current stock balances</h2>
+        <table className="mt-2 w-full table-fixed text-[8px]">
+          <thead className="bg-[#174f20] text-left uppercase text-white"><tr><th className="w-[21%] px-2 py-2">Brand / Item</th><th className="w-[13%] px-2 py-2">SKU</th><th className="w-[18%] px-2 py-2">Branch / Location</th><th className="px-2 py-2 text-right">On hand</th><th className="px-2 py-2 text-right">Reserved</th><th className="px-2 py-2 text-right">Available</th><th className="px-2 py-2 text-right">Reorder</th>{!isPartner ? <th className="w-[13%] px-2 py-2 text-right">Value</th> : null}</tr></thead>
+          <tbody>{filteredReportBalances.map((balance) => {
+            const item = reportItemMap.get(balance.offeringId);
+            const reserved = Number(balance.quantityReserved ?? 0);
+            const available = Number(balance.quantityOnHand ?? 0) - reserved;
+            return <tr className="border-b" key={balance.id}><td className="px-2 py-2"><strong>{balance.offeringName}</strong><br /><span className="text-[#626a62]">{balance.brandName}</span></td><td className="break-all px-2 py-2">{balance.sku || "—"}</td><td className="px-2 py-2">{reportBranchOptions.find((branch) => branch.id === balance.branchId)?.name ?? titleCase(balance.branchId)}<br /><span className="text-[#626a62]">{balance.locationName}</span></td><td className="px-2 py-2 text-right font-bold">{balance.quantityOnHand}</td><td className="px-2 py-2 text-right">{reserved}</td><td className="px-2 py-2 text-right font-bold">{available}</td><td className="px-2 py-2 text-right">{item?.reorderLevel ?? "—"}</td>{!isPartner ? <td className="px-2 py-2 text-right">{formatCurrency(Number(balance.quantityOnHand ?? 0) * Number(item?.costPrice ?? 0))}</td> : null}</tr>;
+          })}</tbody>
+        </table>
+        {!filteredReportBalances.length ? <p className="border-b p-5 text-center text-[9px] text-[#626a62]">No stock balances match the selected branch and brand.</p> : null}
+      </section>
+
+      <section className="mt-6 break-before-page">
+        <h2 className="border-b-2 border-[#174f20] pb-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#174f20]">Movement ledger</h2>
+        <table className="mt-2 w-full table-fixed text-[8px]">
+          <thead className="bg-[#174f20] text-left uppercase text-white"><tr><th className="w-[11%] px-2 py-2">Date</th><th className="w-[21%] px-2 py-2">Brand / Item</th><th className="w-[12%] px-2 py-2">Type</th><th className="w-[19%] px-2 py-2">From / To</th><th className="w-[9%] px-2 py-2 text-right">Qty</th><th className="px-2 py-2">Reference</th></tr></thead>
+          <tbody>{filteredReportMovements.map((entry) => <tr className="border-b" key={entry.id}><td className="px-2 py-2">{formatDate(entry.occurredAt)}</td><td className="px-2 py-2"><strong>{entry.offeringName}</strong><br /><span className="text-[#626a62]">{entry.brandName}</span></td><td className="px-2 py-2">{titleCase(entry.movementType)}{entry.movementPurpose ? <><br /><span className="text-[#626a62]">{titleCase(entry.movementPurpose)}</span></> : null}</td><td className="px-2 py-2">{entry.fromLocationName || "—"} → {entry.toLocationName || "—"}</td><td className="px-2 py-2 text-right font-bold">{entry.quantity}</td><td className="break-all px-2 py-2">{entry.externalReference || entry.referenceNumber}</td></tr>)}</tbody>
+        </table>
+        {!filteredReportMovements.length ? <p className="border-b p-5 text-center text-[9px] text-[#626a62]">No inventory movements match the selected filters and dates.</p> : null}
+      </section>
+
+      <footer className="mt-8 border-t-2 border-[#c7a13a] pt-3 text-center text-[8px] text-[#4f574f]">Vlingo Systems Nigeria Limited &nbsp;|&nbsp; This report contains only inventory records permitted for the signed-in user.</footer>
+    </article>
+    </>
   );
 }

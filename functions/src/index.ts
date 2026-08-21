@@ -2862,6 +2862,27 @@ function money(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function officialSalesDocumentNumber(
+  branchCode: unknown,
+  documentType: "SAL" | "INV" | "RCT",
+  date: Date,
+  uniqueId: string,
+) {
+  const safeBranchCode = String(branchCode || "HQ")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8) || "HQ";
+  const dateParts = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    dateParts.find((entry) => entry.type === type)?.value ?? "";
+  return `VSL/${safeBranchCode}/${documentType}/${part("year")}/${part("month")}${part("day")}/${uniqueId.slice(0, 6).toUpperCase()}`;
+}
+
 export const createPosSale = onCall(callableOptions, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication is required.");
@@ -2920,9 +2941,10 @@ export const createPosSale = onCall(callableOptions, async (request) => {
 
   const saleRef = db.collection(`organizations/${organizationId}/posSales`).doc();
   const suffix = `${Date.now().toString(36).toUpperCase()}-${saleRef.id.slice(0, 5).toUpperCase()}`;
-  const referenceNumber = `SAL-${suffix}`;
-  const invoiceNumber = `INV-${suffix}`;
-  const receiptNumber = amountPaid > 0 ? `RCT-${suffix}` : "";
+  let referenceNumber = `SAL-${suffix}`;
+  let invoiceNumber = `INV-${suffix}`;
+  let receiptNumber = amountPaid > 0 ? `RCT-${suffix}` : "";
+  let branchCode = "HQ";
   const branchRef = db.doc(`organizations/${organizationId}/branches/${branchId}`);
   const offeringRefs = normalizedLines.map((line) => db.doc(`organizations/${organizationId}/offerings/${line.offeringId}`));
   const balanceRefs = normalizedLines.map((line) => db.doc(`organizations/${organizationId}/inventoryBalances/${line.offeringId}_${branchId}`));
@@ -2939,6 +2961,12 @@ export const createPosSale = onCall(callableOptions, async (request) => {
     if (!branchSnapshot.exists || branchSnapshot.data()?.status === "closed") {
       throw new HttpsError("failed-precondition", "The selected branch is not active.");
     }
+    branchCode = String(branchSnapshot.data()?.code || branchId);
+    referenceNumber = officialSalesDocumentNumber(branchCode, "SAL", soldAt, saleRef.id);
+    invoiceNumber = officialSalesDocumentNumber(branchCode, "INV", soldAt, saleRef.id);
+    receiptNumber = amountPaid > 0
+      ? officialSalesDocumentNumber(branchCode, "RCT", soldAt, paymentRef?.id ?? saleRef.id)
+      : "";
     const offeringSnapshots = snapshots.slice(0, normalizedLines.length);
     const balanceSnapshots = snapshots.slice(normalizedLines.length);
     const saleLines = normalizedLines.map((line, index) => {
@@ -3049,6 +3077,7 @@ export const createPosSale = onCall(callableOptions, async (request) => {
     transaction.set(saleRef, {
       organizationId,
       branchId,
+      branchCode,
       referenceNumber,
       invoiceNumber,
       receiptNumber,
@@ -3146,7 +3175,7 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
   }
   const saleRef = db.doc(`organizations/${organizationId}/posSales/${saleId}`);
   const paymentRef = db.collection(`organizations/${organizationId}/financePayments`).doc();
-  const receiptNumber = `RCT-${Date.now().toString(36).toUpperCase()}-${paymentRef.id.slice(0, 5).toUpperCase()}`;
+  let receiptNumber = `RCT-${Date.now().toString(36).toUpperCase()}-${paymentRef.id.slice(0, 5).toUpperCase()}`;
   let balanceDue = 0;
   let paymentStatus = "unpaid";
 
@@ -3162,6 +3191,12 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
     if (sale.saleStatus !== "completed") {
       throw new HttpsError("failed-precondition", "Payments cannot be added to a void sale.");
     }
+    receiptNumber = officialSalesDocumentNumber(
+      sale.branchCode || sale.branchId,
+      "RCT",
+      new Date(),
+      paymentRef.id,
+    );
     const currentBalance = money(Number(sale.balanceDue ?? 0));
     if (amount > currentBalance) {
       throw new HttpsError("invalid-argument", `Only ${currentBalance.toFixed(2)} remains due on this invoice.`);

@@ -50,7 +50,7 @@ Completing checkout is atomic: the server checks current unreserved stock, uses 
 
 Outstanding invoices remain visible in Sales history. An authorized POS or finance user can record a later payment, update the invoice balance, and issue another numbered receipt. Printable invoice and receipt views are available from every sale. Batch-controlled products remain in the controlled Inventory issue workflow until POS batch selection is introduced; optional serial capture remains consistent with the current inventory policy.
 
-The main dashboard is inventory-first. It shows units on hand, available and reserved quantities, low-stock items, inventory value, units sold, stock by brand, recent movements, POS sales value, and outstanding invoices before the CRM pipeline summary.
+The main dashboard is inventory-first. Internal users see units on hand, available and reserved quantities, low-stock items, inventory value, units sold, stock by brand, recent movements, POS sales value, and outstanding invoices before the CRM pipeline summary. Brand representatives see quantity and assigned-brand movement information without inventory value, cost, customer, or payment details.
 
 ### In-app guidance
 
@@ -73,7 +73,7 @@ The Inventory page includes a permission-aware **Guide me** tour that runs only 
 3. Select one or more brands. The invitation is rejected if no active brand is selected.
 4. Generate and share the setup link. Existing users can also be converted to a brand representative by editing their role and brand access under Settings > Users.
 
-The partner sees only the Inventory area. Reports, item balances, movements, recorded product-sale issues, exported CSV data, and comments are restricted to the member's `partnerBrandIds` across every organization branch. This brand-only restriction is enforced in both application queries and Firestore rules. A sale appears on the representative dashboard when an inventory issue is recorded with purpose `sale`, or when a deal-linked reservation is fulfilled.
+The partner sees only the Inventory area. Reports, item balances, movements, recorded product-sale issues, exported CSV data, printed A4 reports, and comments are restricted to the member's `partnerBrandIds` across every organization branch. Inventory valuation and cost information are omitted from partner views and reports. Authorized users can filter reports by permitted branch, brand, and movement date range; date filters affect the movement ledger while stock balances remain current. This brand-only restriction is enforced in both application queries and Firestore rules. A sale appears on the representative dashboard when an inventory issue is recorded with purpose `sale`, or when a deal-linked reservation is fulfilled.
 
 ## Collections
 

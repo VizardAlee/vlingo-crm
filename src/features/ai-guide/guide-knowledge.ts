@@ -17,7 +17,7 @@ interface GuideMemberContext {
 const guideAreaPermissions = [
   [
     "Dashboard",
-    ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll", "inventory.read"],
+    ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll", "inventory.read", "pos.read"],
   ],
   ["Leads and Lead Locations", ["leads.readAssigned", "leads.readAll"]],
   ["Clients", ["clients.read"]],
@@ -94,16 +94,22 @@ export const guideTopics: GuideTopic[] = [
       "sales invoice",
       "part payment",
       "customer receipt",
+      "official receipt",
+      "official invoice",
+      "invoice template",
+      "receipt template",
+      "sales quantity",
     ],
     title: "Record a sale and issue documents",
     steps: [
       "Go to Point of Sale and choose New sale. Checkout always uses available stock in the active dashboard branch.",
-      "Search by product name, SKU, barcode, or brand, then add products to the cart and confirm each quantity. Reserved units cannot be sold.",
+      "Search by product name, SKU, barcode, or brand, then add products to the cart. Type the full required whole-number quantity directly, or use minus and plus as shortcuts; the quantity cannot exceed available stock. Reserved units cannot be sold.",
       "Add the customer details when known; a blank name is saved as Walk-in customer.",
       "Apply line discounts and tax where required. The server uses the product catalogue selling price and checks stock again before completing the sale.",
       "Enter the amount received and payment method. Full, partial, and unpaid sales are supported.",
-      "Complete the sale. The system deducts stock, records sale movements, creates a numbered invoice, and creates a receipt whenever money is received—all in one transaction.",
-      "Open Sales history to print an invoice or receipt. For an outstanding invoice, choose Record payment to receive the balance and issue a new receipt.",
+      "Complete the sale. The system deducts stock, records sale movements, creates a branch-coded VSL invoice number, and creates a separate numbered receipt whenever money is received—all in one transaction.",
+      "Open Sales history to print an A4 invoice or receipt using the Vlingo letterhead template. Documents include customer and location details, itemized prices, amount in words, payment status, and company details; invoices also include Lotus Bank instructions and receipts include an authorization line.",
+      "For an outstanding invoice, choose Record payment to receive some or all of the balance. Every later payment updates the balance and gets its own printable receipt.",
       "Users need pos.read to view sales and pos.sell to process checkout or receive later payments. Brand partners do not receive POS access.",
     ],
   },
@@ -178,8 +184,9 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Go to Inventory and open Overview to see on-hand, reserved, and available quantities, stock value, low-stock items, and balances by location.",
       "Available stock is on hand minus reserved stock; use the available figure when promising stock to a customer or project.",
-      "Use Export CSV to download the currently permitted inventory report.",
-      "Internal users see records allowed by their branch access. Brand partners see only inventory belonging to their assigned brands.",
+      "Use Report filters to select any permitted branch, brand, and optional movement date range. Dates filter the movement ledger while the stock table always shows the latest balance.",
+      "Choose Export CSV for the filtered current-stock data or Print report for an A4 report containing summary totals, current balances, and the filtered movement ledger.",
+      "Internal users see records allowed by their branch access. Brand partners see only inventory belonging to their assigned brands across all branches, and their dashboard, CSV, and printed report omit inventory value and cost information.",
       "Open Comments to discuss a brand report without changing inventory quantities.",
     ],
   },
@@ -301,8 +308,8 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Create the inventory brands first under Inventory Setup.",
       "Go to Settings, then Users; create or invite the guest with the Brand Representative role, then select one or more permitted brands.",
-      "After signing in, the representative can open Inventory to view balances, movements, recorded sale issues, trace records, and reports for their assigned brands across every branch.",
-      "The partner can export the scoped report and use Comments to collaborate on the selected brand and report period.",
+      "After signing in, the representative can open Inventory to view quantities, movements, recorded sale issues, trace records, and reports for their assigned brands across every branch. Inventory cost and value are not displayed.",
+      "The partner can filter by permitted branch, brand, and movement dates, then export CSV or print the scoped report. Comments remain available for collaboration by brand and report period.",
       "Brand partners cannot access suppliers, purchase orders, stock counts, reservations, approvals, setup, or stock-changing actions.",
     ],
   },
@@ -466,18 +473,24 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Use Properties and Units for real-estate inventory.",
       "Use Products/Services for catalog items such as solar equipment, installation packages, materials, consultancy, maintenance, and services.",
-      "Enter the product details and save the record; the SKU/item code is generated automatically and cannot be entered manually.",
+      "For an inventory product, select its brand. An admin or manager with inventory.manageCatalog can use Create brand beside the Brand field when the required brand is not in the dropdown.",
+      "Enter the product details and save the record; the SKU/item code is generated automatically and cannot be entered manually. Barcode/GTIN is optional.",
+      "The product defaults to the creator's assigned branch. A user with all-branch access can select another active admin-created branch before saving.",
       "Link leads and deals to properties, units, or products/services so users do not re-enter the same information.",
       "Keep prices, status, category, stock, and service details current so sales and finance flows stay accurate.",
     ],
   },
   {
-    keywords: ["dashboard", "metric", "cards", "welcome"],
+    keywords: ["dashboard", "metric", "cards", "welcome", "sales dashboard", "sales record", "recent sales", "sales today", "dashboard sales"],
     title: "Read the dashboard",
     steps: [
       "Go to Dashboard for live operational cards based on the current user, branch, and permissions.",
+      "The inventory summary shows on-hand, available, reserved, low-stock and sold quantities, inventory value, stock by brand, and recent stock movements.",
+      "Users with pos.read see the Sales record section for the active branch: completed transactions, sales value, payments received, outstanding balances, units sold, today's sales, and the eight latest completed invoices.",
+      "Use the Invoice link on a recent sale to open its printable document, or choose View all sales to open the complete Point of Sale history.",
+      "Brand representatives do not see inventory value, cost prices, customer names, invoice values, or payment details. Their dashboard instead shows quantity metrics and recent product-sale movements for assigned brands across all branches.",
       "Use branch switching if you are a super admin or have all-branch access.",
-      "If a number looks wrong, check the date/status filters and whether records are assigned to the correct branch.",
+      "If a number looks wrong, confirm the active branch, sale status, payment balance, and inventory movement purpose. Voided POS sales are excluded from completed-sales figures.",
     ],
   },
   {
@@ -514,15 +527,15 @@ CRM concept:
 - Good CRM discipline means data should be entered once, linked to the correct records, assigned to the right owner, followed up on time, and visible to managers according to role and branch.
 
 Main routes and modules:
-- Dashboard: overview of real data scoped by user permissions and branch.
+- Dashboard: inventory-first operational overview plus permission-aware POS sales totals and recent sales records, scoped by active branch; brand representatives receive brand-scoped sale movements without customer or payment details.
 - Leads: create, import with flexible header mapping, geotag, assign, qualify, email, follow up, convert, delete when authorized, and open deals. Lead forms reveal fields based on interest category.
 - Lead Locations: map view for geotagged leads. Sales executives see assigned leads; managers see branch-scoped records; super admins can view all branches.
 - Clients: manage client records, communication, pagination, list/card views, creator attribution, and clickable WhatsApp phone links.
 - Deals: dynamic finance-facing pipeline for property sales, rentals, solar, materials, services, consultancy, installation, and custom work. Deal forms reveal fields based on category and type, inherit useful lead/client/product data, and record owner/creator attribution.
 - Properties and Units: real-estate inventory and unit management.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
-- Inventory: branch-aware stock balances, guided opening-stock entry, movement ledger, supplier master, paid/part-paid/credit purchase orders, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, CSV reports, and brand-partner collaboration.
-- Point of Sale: branch-aware checkout, customer details, discounts, tax, full/partial/unpaid sales, stock deduction, sales history, later payments, and printable invoices and receipts.
+- Inventory: branch-aware stock balances, guided opening-stock entry, movement ledger, supplier master, paid/part-paid/credit purchase orders, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, filtered CSV/A4 reports, and brand-partner collaboration.
+- Point of Sale: branch-aware checkout, directly typed whole-number quantities with plus/minus shortcuts, customer details, discounts, tax, full/partial/unpaid sales, stock deduction, sales history, later payments, and Vlingo-branded printable invoices and receipts.
 - Rentals: tenancy, rent payment, lease dates, renewal tasks, and tenant follow-up.
 - Development: property development projects, project managers, delivery details, and related operational work.
 - Marketing: campaign records connected to lead sources and sales follow-up.
@@ -542,8 +555,10 @@ Cross-module workflows:
 - Phone numbers in lead/client areas can open WhatsApp, and single or bulk email uses the organization's configured SMTP mailbox.
 - Dated assigned tasks can sync to the user's connected Google Calendar and task notifications can reach enabled browsers/PWA devices.
 - Product/service catalogue items marked as inventory feed branch/location balances. Procurement receipts, controlled movements, counts, and reservation fulfillment update stock through server-side transactions.
-- The dashboard is inventory-first: it highlights stock on hand, available and reserved units, low-stock exposure, inventory value, recent movements, units sold, POS revenue, and outstanding invoices before CRM pipeline summaries.
-- Point of Sale sells from the active branch's available balance. Checkout creates the sale, invoice, optional receipt and finance payment, inventory issues, and stock deductions atomically. It supports walk-in customers, discounts, tax, unpaid invoices, part payments, and later balance receipts.
+- The dashboard is inventory-first and sales-aware: it highlights stock on hand, available and reserved units, low-stock exposure, inventory value, recent movements and units sold. Users with pos.read also see transaction count, sales value, payments received, outstanding balances, today's sales, and the eight latest completed invoices for the active branch.
+- Point of Sale sells from the active branch's available balance. A user can type a full whole-number cart quantity or use plus/minus shortcuts. Checkout creates the sale, branch-coded VSL invoice number, optional numbered receipt and finance payment, inventory issues, and stock deductions atomically. It supports walk-in customers, discounts, tax, unpaid invoices, part payments, and a separate receipt for every later payment.
+- Printable POS invoices and receipts use the Vlingo letterhead and A4 document structure: customer/location metadata, itemized lines, totals, amount in words, and payment status. Invoices contain the configured Lotus Bank payment details; receipts contain payment acknowledgement and an authorization line. A sample signature or stamp is never automatically copied onto a new document.
+- Inventory products require a brand, use an automatically generated SKU, and may omit barcode/GTIN. Users with inventory.manageCatalog can create a missing brand from the product form. Admin-created active branches are the stock locations used for new inventory.
 - Inventory availability is on-hand quantity minus reserved quantity. Batch and serial records must stay synchronized with the balance and movement ledgers.
 
 Role behavior:
@@ -551,7 +566,7 @@ Role behavior:
 - Managers are scoped to branches unless granted all-branch access.
 - Sales executives only see their own assigned leads/workflows unless assigned by a manager.
 - Inventory managers can procure, count, reserve, receive, issue, transfer, and adjust stock but do not have approval permission. Users with inventory.approve permission approve purchase orders and stock counts, and creators cannot approve their own submissions.
-- Brand partners are read-only inventory guests scoped to assigned brands. They can export their report and comment, but cannot see internal procurement, counts, reservations, approvals, or other brands.
+- Brand partners are read-only inventory guests scoped to assigned brands across all branches. They can filter, export, print, and comment on their report, but cannot see cost prices, inventory value, customer/payment data, internal procurement, counts, reservations, approvals, or other brands.
 - Links should be hidden when a role lacks access.
 
 Answer style:
@@ -566,9 +581,15 @@ Answer style:
 
 export function fallbackGuideAnswer(question: string) {
   const normalized = question.toLowerCase();
-  const topic = guideTopics.find((item) =>
-    item.keywords.some((keyword) => normalized.includes(keyword)),
-  );
+  const topic = guideTopics
+    .map((item) => ({
+      item,
+      score: item.keywords
+        .filter((keyword) => normalized.includes(keyword))
+        .reduce((total, keyword) => total + keyword.length, 0),
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)[0]?.item;
   const selected = topic ?? {
     title: "Use the CRM effectively",
     steps: [

@@ -691,6 +691,7 @@ export interface PosPaymentEntry {
 
 export interface PosSale extends EntityMetadata {
   id: string;
+  branchCode?: string;
   referenceNumber: string;
   invoiceNumber: string;
   receiptNumber?: string;

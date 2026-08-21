@@ -22,7 +22,19 @@ describe("AI Guide knowledge", () => {
     expect(reservation).toContain("on hand but is removed from the available quantity");
     expect(partner).toContain("Give a brand partner access");
     expect(partner).toContain("assigned brands");
+    expect(partner).toContain("Inventory cost and value are not displayed");
+    expect(partner).toContain("export CSV or print");
     expect(partner).toContain("cannot access suppliers");
+  });
+
+  it("covers current POS documents, quantity entry, and dashboard sales", () => {
+    const pos = fallbackGuideAnswer("How do I type sales quantity and print an official invoice?");
+    const dashboard = fallbackGuideAnswer("What sales records are shown on the dashboard?");
+
+    expect(pos).toContain("Type the full required whole-number quantity directly");
+    expect(pos).toContain("Vlingo letterhead template");
+    expect(dashboard).toContain("Sales record section");
+    expect(dashboard).toContain("eight latest completed invoices");
   });
 
   it("exposes Inventory in AI context only with inventory access", () => {

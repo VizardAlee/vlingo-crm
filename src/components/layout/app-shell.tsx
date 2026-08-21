@@ -384,7 +384,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ) : null}
         </header>
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-5 md:px-5 md:pb-8 md:pt-6 lg:px-8">
-          <div className="mb-5 hidden text-sm text-muted-foreground md:block">
+          <div className="no-print mb-5 hidden text-sm text-muted-foreground md:block">
             {crumbs.length ? crumbs.map(titleCase).join(" / ") : "Dashboard"}
           </div>
           {firebaseReady ? (memberLoadError ? (
