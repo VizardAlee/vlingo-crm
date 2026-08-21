@@ -13,6 +13,18 @@
       "npm --prefix \"$RESOURCE_DIR\" run build"
     ]
   },
+  "apphosting": {
+    "backendId": "beacon-ops-crm",
+    "rootDir": ".",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "functions"
+    ],
+    "alwaysDeployFromSource": true
+  },
   "emulators": {
     "auth": {
       "port": 9099
