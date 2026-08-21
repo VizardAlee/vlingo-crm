@@ -46,7 +46,7 @@ const userTourSteps: GuidedTourStep[] = [
   { target: userTourTarget("identity"), title: "User identity", body: "Enter the staff member's name, email, and optional phone number. The email is used for account setup." },
   { target: userTourTarget("branch"), title: "Branch assignment", body: "Choose the user's home branch. Branch-limited users only work inside this branch." },
   { target: userTourTarget("access"), title: "Branch access", body: "Choose whether this user is restricted to their own branch or can work across all branches." },
-  { target: userTourTarget("roles"), title: "Roles", body: "Assign one or more internal roles. Brand partner is an exclusive read-only representative role; select its permitted brands and one or more representative branches." },
+  { target: userTourTarget("roles"), title: "Roles", body: "Assign one or more internal roles. Brand Representative is an exclusive read-only role; select its permitted brands and one or more representative branches." },
   { target: userTourTarget("invite"), title: "Generate setup link", body: "Generate a setup link that the admin can copy and share with the new user." },
   { target: userTourTarget("memberEdit"), title: "Edit existing users", body: "Use user cards or table rows to update roles, branch, branch access, and account status." },
 ];
@@ -61,8 +61,12 @@ function canAssignRole(currentMember: Member | null, role: RoleName) {
   return !roleIsPrivileged || hasPermission(currentMember, "roles.manage");
 }
 
+function roleLabel(role: RoleName) {
+  return role === "brandPartner" ? "Brand Representative" : titleCase(role);
+}
+
 function displayRoles(member: Member) {
-  return memberRoles(member).map((role) => titleCase(role)).join(", ");
+  return memberRoles(member).map(roleLabel).join(", ");
 }
 
 function hasUnassignableRole(target: Member, options: RoleName[]) {
@@ -109,7 +113,7 @@ function RoleSelector({
               onChange={() => onChange(toggleRole(rolesValue, role))}
               type="checkbox"
             />
-            <span>{titleCase(role)}</span>
+            <span>{roleLabel(role)}</span>
           </label>
         );
       })}
