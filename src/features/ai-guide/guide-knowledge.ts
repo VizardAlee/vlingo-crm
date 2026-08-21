@@ -177,6 +177,8 @@ export const guideTopics: GuideTopic[] = [
       "Create or select an active supplier, add the catalogue items, then choose Paid in full, Credit agreement, or Part payment. Credit and part-paid orders require a balance due date.",
       "Submit the purchase order for approval. Its creator cannot approve it, so another user with inventory.approve permission must approve or reject it from Approvals.",
       "After approval, receive each line into a stock location. Partial receipts are allowed and the order remains Part received until every line is complete.",
+      "Stock location options come from active locations created by administrators under Settings > Branches. Closed locations are not offered for new stock activity.",
+      "A new product defaults to the creator's assigned branch. A user with all-branch access can select another active branch on the product form before saving.",
       "Receiving stock and paying the supplier are separate. Authorized inventory or finance users can record later payments against the outstanding order balance.",
       "For batch items, enter the batch number and optional expiry date. Serial numbers are optional for now; if supplied, enter one unique serial number for every unit received.",
       "Receiving updates the purchase order, location balance, trace register, product total, and movement ledger together.",

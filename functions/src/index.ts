@@ -2324,6 +2324,34 @@ export const deliverNotificationPush = onDocumentCreated(
   },
 );
 
+type StockLocationSnapshot = {
+  exists: boolean;
+  id: string;
+  data(): DocumentData | undefined;
+};
+
+function resolveStockLocation(
+  branchSnapshot: StockLocationSnapshot | null,
+  legacySnapshot: StockLocationSnapshot | null,
+) {
+  if (branchSnapshot?.exists) {
+    const branch = branchSnapshot.data() ?? {};
+    if (branch.status === "closed") return null;
+    return {
+      ...branch,
+      branchId: branchSnapshot.id,
+      locationType: "store",
+      status: "active",
+    };
+  }
+  if (legacySnapshot?.exists) {
+    const location = legacySnapshot.data() ?? {};
+    if (location.status === "inactive" || location.isDeleted === true) return null;
+    return location;
+  }
+  return null;
+}
+
 const inventoryMovementPermission: Record<string, string> = {
   receipt: "inventory.receive",
   issue: "inventory.issue",
@@ -2441,10 +2469,16 @@ export const recordInventoryMovement = onCall(
           `organizations/${organizationId}/inventoryLocations/${fromLocationId}`,
         )
       : null;
+    const fromBranchRef = fromLocationId
+      ? db.doc(`organizations/${organizationId}/branches/${fromLocationId}`)
+      : null;
     const toLocationRef = toLocationId
       ? db.doc(
           `organizations/${organizationId}/inventoryLocations/${toLocationId}`,
         )
+      : null;
+    const toBranchRef = toLocationId
+      ? db.doc(`organizations/${organizationId}/branches/${toLocationId}`)
       : null;
     const fromBalanceRef = fromLocationId
       ? db.doc(
@@ -2526,7 +2560,9 @@ export const recordInventoryMovement = onCall(
       const [
         offeringSnapshot,
         fromLocationSnapshot,
+        fromBranchSnapshot,
         toLocationSnapshot,
+        toBranchSnapshot,
         fromBalanceSnapshot,
         toBalanceSnapshot,
         fromLotSnapshot,
@@ -2534,7 +2570,9 @@ export const recordInventoryMovement = onCall(
       ] = await Promise.all([
         transaction.get(offeringRef),
         fromLocationRef ? transaction.get(fromLocationRef) : null,
+        fromBranchRef ? transaction.get(fromBranchRef) : null,
         toLocationRef ? transaction.get(toLocationRef) : null,
+        toBranchRef ? transaction.get(toBranchRef) : null,
         fromBalanceRef ? transaction.get(fromBalanceRef) : null,
         toBalanceRef ? transaction.get(toBalanceRef) : null,
         fromLotRef ? transaction.get(fromLotRef) : null,
@@ -2546,6 +2584,14 @@ export const recordInventoryMovement = onCall(
       if (!offeringSnapshot.exists)
         throw new HttpsError("not-found", "Inventory item was not found.");
       const offering = offeringSnapshot.data() ?? {};
+      const fromLocation = resolveStockLocation(
+        fromBranchSnapshot,
+        fromLocationSnapshot,
+      );
+      const toLocation = resolveStockLocation(
+        toBranchSnapshot,
+        toLocationSnapshot,
+      );
       if (
         offering.isDeleted === true ||
         offering.branchId !== branchId ||
@@ -2557,8 +2603,7 @@ export const recordInventoryMovement = onCall(
         );
       if (
         fromLocationRef &&
-        (!fromLocationSnapshot?.exists ||
-          fromLocationSnapshot.data()?.branchId !== branchId)
+        (!fromLocation || fromLocation.branchId !== branchId)
       )
         throw new HttpsError(
           "failed-precondition",
@@ -2566,8 +2611,7 @@ export const recordInventoryMovement = onCall(
         );
       if (
         toLocationRef &&
-        (!toLocationSnapshot?.exists ||
-          toLocationSnapshot.data()?.branchId !== branchId)
+        (!toLocation || toLocation.branchId !== branchId)
       )
         throw new HttpsError(
           "failed-precondition",
@@ -2597,25 +2641,25 @@ export const recordInventoryMovement = onCall(
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: actor.id,
       };
-      if (fromBalanceRef && fromLocationSnapshot)
+      if (fromBalanceRef && fromLocation)
         transaction.set(
           fromBalanceRef,
           {
             ...commonBalance,
             locationId: fromLocationId,
-            locationName: fromLocationSnapshot.data()?.name ?? "",
+            locationName: fromLocation.name ?? "",
             quantityOnHand: fromQuantity - quantity,
             quantityReserved: fromReserved,
           },
           { merge: true },
         );
-      if (toBalanceRef && toLocationSnapshot)
+      if (toBalanceRef && toLocation)
         transaction.set(
           toBalanceRef,
           {
             ...commonBalance,
             locationId: toLocationId,
-            locationName: toLocationSnapshot.data()?.name ?? "",
+            locationName: toLocation.name ?? "",
             quantityOnHand:
               Number(toBalanceSnapshot?.data()?.quantityOnHand ?? 0) + quantity,
             quantityReserved: Number(
@@ -2649,25 +2693,25 @@ export const recordInventoryMovement = onCall(
             : null,
           updatedAt: FieldValue.serverTimestamp(),
         };
-        if (fromLotRef && fromLocationSnapshot)
+        if (fromLotRef && fromLocation)
           transaction.set(
             fromLotRef,
             {
               ...lotCommon,
               locationId: fromLocationId,
-              locationName: fromLocationSnapshot.data()?.name ?? "",
+              locationName: fromLocation.name ?? "",
               quantityOnHand: fromLotQuantity - quantity,
               quantityReserved: fromLotReserved,
             },
             { merge: true },
           );
-        if (toLotRef && toLocationSnapshot)
+        if (toLotRef && toLocation)
           transaction.set(
             toLotRef,
             {
               ...lotCommon,
               locationId: toLocationId,
-              locationName: toLocationSnapshot.data()?.name ?? "",
+              locationName: toLocation.name ?? "",
               quantityOnHand:
                 Number(toLotSnapshot?.data()?.quantityOnHand ?? 0) + quantity,
               quantityReserved: Number(
@@ -2697,8 +2741,8 @@ export const recordInventoryMovement = onCall(
             );
           const targetLocationId = needsTo ? toLocationId : fromLocationId;
           const targetLocationName = needsTo
-            ? (toLocationSnapshot?.data()?.name ?? "")
-            : (fromLocationSnapshot?.data()?.name ?? "");
+            ? (toLocation?.name ?? "")
+            : (fromLocation?.name ?? "");
           transaction.set(
             serialRefs[index],
             {
@@ -2742,9 +2786,9 @@ export const recordInventoryMovement = onCall(
         movementPurpose,
         quantity,
         fromLocationId,
-        fromLocationName: fromLocationSnapshot?.data()?.name ?? "",
+        fromLocationName: fromLocation?.name ?? "",
         toLocationId,
-        toLocationName: toLocationSnapshot?.data()?.name ?? "",
+        toLocationName: toLocation?.name ?? "",
         externalReference:
           typeof request.data?.externalReference === "string"
             ? request.data.externalReference.trim()
@@ -3204,6 +3248,9 @@ export const receiveInventoryPurchaseOrderLine = onCall(
     const locationRef = db.doc(
       `organizations/${organizationId}/inventoryLocations/${locationId}`,
     );
+    const locationBranchRef = db.doc(
+      `organizations/${organizationId}/branches/${locationId}`,
+    );
     const balanceRef = db.doc(
       `organizations/${organizationId}/inventoryBalances/${offeringId}_${locationId}`,
     );
@@ -3260,12 +3307,14 @@ export const receiveInventoryPurchaseOrderLine = onCall(
         poSnapshot,
         offeringSnapshot,
         locationSnapshot,
+        locationBranchSnapshot,
         balanceSnapshot,
         lotSnapshot,
       ] = await Promise.all([
         transaction.get(poRef),
         transaction.get(offeringRef),
         transaction.get(locationRef),
+        transaction.get(locationBranchRef),
         transaction.get(balanceRef),
         lotRef ? transaction.get(lotRef) : null,
       ]);
@@ -3291,10 +3340,13 @@ export const receiveInventoryPurchaseOrderLine = onCall(
           `Only ${outstanding} units remain on this line.`,
         );
       const offering = offeringSnapshot.data() ?? {};
-      const location = locationSnapshot.data() ?? {};
+      const location = resolveStockLocation(
+        locationBranchSnapshot,
+        locationSnapshot,
+      );
       if (
         !offeringSnapshot.exists ||
-        !locationSnapshot.exists ||
+        !location ||
         location.branchId !== currentPo.branchId
       )
         throw new HttpsError(
@@ -3451,16 +3503,24 @@ export const createInventoryStockCount = onCall(
         db.doc(
           `organizations/${organizationId}/inventoryLocations/${line.locationId}`,
         ),
+        db.doc(`organizations/${organizationId}/branches/${line.locationId}`),
         db.doc(
           `organizations/${organizationId}/inventoryBalances/${line.offeringId}_${line.locationId}`,
         ),
       ]),
     );
     const lines = normalized.map((line, index) => {
-      const offering = snapshots[index * 3].data() ?? {};
-      const location = snapshots[index * 3 + 1].data() ?? {};
-      const balance = snapshots[index * 3 + 2].data() ?? {};
-      if (offering.branchId !== branchId || location.branchId !== branchId)
+      const offering = snapshots[index * 4].data() ?? {};
+      const location = resolveStockLocation(
+        snapshots[index * 4 + 2],
+        snapshots[index * 4 + 1],
+      );
+      const balance = snapshots[index * 4 + 3].data() ?? {};
+      if (
+        offering.branchId !== branchId ||
+        !location ||
+        location.branchId !== branchId
+      )
         throw new HttpsError(
           "failed-precondition",
           "Every count line must belong to this branch.",
@@ -3662,6 +3722,9 @@ export const createInventoryReservation = onCall(
     const locationRef = db.doc(
       `organizations/${organizationId}/inventoryLocations/${locationId}`,
     );
+    const locationBranchRef = db.doc(
+      `organizations/${organizationId}/branches/${locationId}`,
+    );
     const balanceRef = db.doc(
       `organizations/${organizationId}/inventoryBalances/${offeringId}_${locationId}`,
     );
@@ -3717,22 +3780,32 @@ export const createInventoryReservation = onCall(
       ),
     );
     await db.runTransaction(async (transaction) => {
-      const [offeringSnapshot, locationSnapshot, balanceSnapshot, lotSnapshot] =
-        await Promise.all([
-          transaction.get(offeringRef),
-          transaction.get(locationRef),
-          transaction.get(balanceRef),
-          lotRef ? transaction.get(lotRef) : null,
-        ]);
+      const [
+        offeringSnapshot,
+        locationSnapshot,
+        locationBranchSnapshot,
+        balanceSnapshot,
+        lotSnapshot,
+      ] = await Promise.all([
+        transaction.get(offeringRef),
+        transaction.get(locationRef),
+        transaction.get(locationBranchRef),
+        transaction.get(balanceRef),
+        lotRef ? transaction.get(lotRef) : null,
+      ]);
       const serialSnapshots = await Promise.all(
         serialRefs.map((ref) => transaction.get(ref)),
       );
       const offering = offeringSnapshot.data() ?? {};
-      const location = locationSnapshot.data() ?? {};
+      const location = resolveStockLocation(
+        locationBranchSnapshot,
+        locationSnapshot,
+      );
       const onHand = Number(balanceSnapshot.data()?.quantityOnHand ?? 0);
       const reserved = Number(balanceSnapshot.data()?.quantityReserved ?? 0);
       if (
         offering.branchId !== branchId ||
+        !location ||
         location.branchId !== branchId ||
         onHand - reserved < quantity
       )

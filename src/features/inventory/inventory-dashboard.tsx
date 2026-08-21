@@ -7,11 +7,10 @@ import {
   Plus,
   RefreshCw,
   Send,
-  Warehouse,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import {
@@ -36,7 +35,6 @@ import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import {
   addInventoryComment,
   createInventoryBrand,
-  createInventoryLocation,
   listInventoryBalances,
   listInventoryBrands,
   listInventoryComments,
@@ -164,12 +162,6 @@ export function InventoryDashboard() {
     contactName: "",
     contactEmail: "",
   });
-  const [locationForm, setLocationForm] = useState({
-    name: "",
-    code: "",
-    address: "",
-    locationType: "warehouse" as InventoryLocation["locationType"],
-  });
   const [commentForm, setCommentForm] = useState({
     brandId: "",
     message: "",
@@ -271,7 +263,7 @@ export function InventoryDashboard() {
       steps.push({
         target: "inventory-tab-setup",
         title: "Inventory setup",
-        body: "Create brands and stock locations here. Configure each product's barcode and traceability mode in Products/Services.",
+        body: "Create brands here. Stock locations come from active locations configured by administrators under Settings > Branches.",
       });
     return steps;
   }, [canApprove, canCount, canProcure, canReserve, canSetup, isPartner]);
@@ -295,13 +287,31 @@ export function InventoryDashboard() {
         listInventoryComments(activeOrganizationId, member),
         isPartner
           ? Promise.resolve([])
-          : listInventoryLocations(activeOrganizationId, member),
+          : listInventoryLocations(
+              activeOrganizationId,
+              member,
+              activeBranchId,
+            ),
       ]);
+      const branchItems = isPartner
+        ? nextItems
+        : nextItems.filter((item) => item.branchId === activeBranchId);
+      const branchBalances = isPartner
+        ? nextBalances
+        : nextBalances.filter((balance) => balance.branchId === activeBranchId);
+      const branchMovements = isPartner
+        ? nextMovements
+        : nextMovements.filter(
+            (movement) => movement.branchId === activeBranchId,
+          );
+      const branchComments = isPartner
+        ? nextComments
+        : nextComments.filter((comment) => comment.branchId === activeBranchId);
       setBrands(nextBrands);
-      setItems(nextItems.filter((item) => Boolean(item.brandId)));
-      setBalances(nextBalances);
-      setMovements(nextMovements);
-      setComments(nextComments);
+      setItems(branchItems.filter((item) => Boolean(item.brandId)));
+      setBalances(branchBalances);
+      setMovements(branchMovements);
+      setComments(branchComments);
       setLocations(nextLocations);
       setCommentForm((value) => ({
         ...value,
@@ -310,7 +320,9 @@ export function InventoryDashboard() {
       setMovement((value) => ({
         ...value,
         offeringId:
-          value.offeringId || nextItems.find((item) => item.brandId)?.id || "",
+          branchItems.some((item) => item.id === value.offeringId)
+            ? value.offeringId
+            : branchItems.find((item) => item.brandId)?.id || "",
       }));
     } catch (nextError) {
       setError(
@@ -321,7 +333,7 @@ export function InventoryDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, isPartner, member]);
+  }, [activeBranchId, activeOrganizationId, isPartner, member]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -470,41 +482,6 @@ export function InventoryDashboard() {
     }
   }
 
-  async function submitLocation(event: React.FormEvent) {
-    event.preventDefault();
-    if (!user) return;
-    setSaving("location");
-    try {
-      await createInventoryLocation(
-        { ...locationForm, status: "active" },
-        {
-          organizationId: activeOrganizationId,
-          branchId: activeBranchId,
-          userId: user.uid,
-          userEmail: member?.email,
-          userName: member?.displayName,
-        },
-      );
-      setLocationForm({
-        name: "",
-        code: "",
-        address: "",
-        locationType: "warehouse",
-      });
-      toast({ title: "Location created", variant: "success" });
-      await load();
-    } catch (nextError) {
-      toast({
-        title: "Unable to create location",
-        description:
-          nextError instanceof Error ? nextError.message : "Try again.",
-        variant: "error",
-      });
-    } finally {
-      setSaving(null);
-    }
-  }
-
   async function submitComment(event: React.FormEvent) {
     event.preventDefault();
     if (!user || !commentForm.brandId || !commentForm.message.trim()) return;
@@ -612,6 +589,24 @@ export function InventoryDashboard() {
         </div>
       </div>
       {error ? <ErrorState message={error} /> : null}
+      {!isPartner && !locations.length ? (
+        <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-sm">
+          <p className="font-medium">No active stock location for this branch</p>
+          <p className="mt-1 text-muted-foreground">
+            Ask an administrator to create or activate this location under
+            Settings &gt; Branches, then refresh Inventory.
+          </p>
+          {hasPermission(member, "users.manage") ? (
+            <ButtonLink
+              className="mt-3"
+              href="/settings/branches"
+              variant="outline"
+            >
+              Manage locations
+            </ButtonLink>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {(
           [
@@ -1434,67 +1429,22 @@ export function InventoryDashboard() {
               <CardTitle>Stock locations</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <form className="grid gap-3" onSubmit={submitLocation}>
-                <Field label="Location name">
-                  <Input
-                    required
-                    value={locationForm.name}
-                    onChange={(event) =>
-                      setLocationForm((value) => ({
-                        ...value,
-                        name: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Location code">
-                  <Input
-                    required
-                    value={locationForm.code}
-                    onChange={(event) =>
-                      setLocationForm((value) => ({
-                        ...value,
-                        code: event.target.value.toUpperCase(),
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Type">
-                  <Select
-                    value={locationForm.locationType}
-                    onChange={(event) =>
-                      setLocationForm((value) => ({
-                        ...value,
-                        locationType: event.target
-                          .value as InventoryLocation["locationType"],
-                      }))
-                    }
+              <div className="rounded-md border bg-muted/30 p-4 text-sm">
+                <p className="font-medium">Managed by administrators</p>
+                <p className="mt-1 text-muted-foreground">
+                  Every active location created under Settings &gt; Branches is
+                  automatically available in inventory stock dropdowns.
+                </p>
+                {hasPermission(member, "users.manage") ? (
+                  <ButtonLink
+                    className="mt-3"
+                    href="/settings/branches"
+                    variant="outline"
                   >
-                    {["warehouse", "store", "site", "vehicle", "other"].map(
-                      (type) => (
-                        <option key={type} value={type}>
-                          {titleCase(type)}
-                        </option>
-                      ),
-                    )}
-                  </Select>
-                </Field>
-                <Field label="Address">
-                  <Textarea
-                    value={locationForm.address}
-                    onChange={(event) =>
-                      setLocationForm((value) => ({
-                        ...value,
-                        address: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Button disabled={saving === "location"} type="submit">
-                  <Warehouse className="h-4 w-4" />
-                  Create location
-                </Button>
-              </form>
+                    Manage locations
+                  </ButtonLink>
+                ) : null}
+              </div>
               <div className="grid gap-2">
                 {locations.map((location) => (
                   <div
@@ -1504,7 +1454,7 @@ export function InventoryDashboard() {
                     <div>
                       <p className="font-semibold">{location.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {location.code} · {titleCase(location.locationType)}
+                        {location.code} · {location.address || "No address"}
                       </p>
                     </div>
                     <Badge tone="info">{location.status}</Badge>

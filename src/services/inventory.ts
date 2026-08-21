@@ -15,6 +15,7 @@ import { db, functions } from "@/lib/firebase/client";
 import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
 import { createOrgRecord, type WriteContext } from "@/services/repository";
 import { orgCollectionPath } from "@/services/firestore-paths";
+import { listOrganizationBranches } from "@/services/branches";
 import type {
   InventoryBalance,
   InventoryBrand,
@@ -177,15 +178,59 @@ export async function listInventoryBrands(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function listInventoryLocations(
+export async function listInventoryLocations(
   organizationId: string,
   member: Member | null,
+  activeBranchId?: string,
 ) {
-  return scopedCollection<InventoryLocation>(
-    organizationId,
-    "inventoryLocations",
-    member,
-  ).then((items) => items.sort((a, b) => a.name.localeCompare(b.name)));
+  const [branches, legacyLocations] = await Promise.all([
+    listOrganizationBranches(organizationId),
+    scopedCollection<InventoryLocation>(
+      organizationId,
+      "inventoryLocations",
+      member,
+    ),
+  ]);
+  const accessibleBranches = branches.filter(
+    (branch) =>
+      branch.status !== "closed" &&
+      (!activeBranchId || branch.id === activeBranchId) &&
+      (!member ||
+        member.role === "superAdmin" ||
+        member.roles?.includes("superAdmin") ||
+        member.branchAccess === "all" ||
+        branch.id === member.branchId),
+  );
+  const branchLocations = accessibleBranches.map(
+    (branch): InventoryLocation => ({
+      id: branch.id,
+      organizationId,
+      branchId: branch.id,
+      name: branch.name,
+      code: branch.code,
+      address: branch.address,
+      locationType: "store",
+      status: "active",
+      createdBy: branch.createdBy ?? "",
+      updatedBy: branch.updatedBy ?? branch.createdBy ?? "",
+      isDeleted: false,
+    }),
+  );
+  const activeLegacyLocations = legacyLocations.filter(
+    (location) =>
+      location.status === "active" &&
+      location.isDeleted !== true &&
+      (!activeBranchId || location.branchId === activeBranchId),
+  );
+
+  return Array.from(
+    new Map(
+      [...activeLegacyLocations, ...branchLocations].map((location) => [
+        location.id,
+        location,
+      ]),
+    ).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function listInventoryItems(

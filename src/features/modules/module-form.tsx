@@ -18,12 +18,12 @@ import { dealCategoryFromFormValue, dealTypeFromFormValue, dealTypesForCategory,
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
-import { effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
+import { canAccessAllBranches, canAccessBranch, effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, createReference, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { createInventoryBrand, listInventoryBrands } from "@/services/inventory";
-import { listMembers } from "@/services/users";
-import type { BusinessVertical, Client, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
+import { listBranches, listMembers } from "@/services/users";
+import type { Branch, BusinessVertical, Client, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
@@ -242,6 +242,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [members, setMembers] = useState<Member[]>([]);
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [inventoryBrands, setInventoryBrands] = useState<InventoryBrand[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [offeringBranchId, setOfferingBranchId] = useState(
+    String(existing?.branchId ?? member?.branchId ?? activeBranchId),
+  );
   const [brandCreatorOpen, setBrandCreatorOpen] = useState(false);
   const [brandForm, setBrandForm] = useState({ name: "", code: "", contactName: "", contactEmail: "", description: "" });
   const [brandSaving, setBrandSaving] = useState(false);
@@ -394,13 +398,37 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   useEffect(() => {
     if (config.collection !== "offerings") return;
     let mounted = true;
-    listInventoryBrands(activeOrganizationId, member).then((items) => {
-      if (mounted) setInventoryBrands(items.filter((item) => item.status === "active"));
+    Promise.all([
+      listInventoryBrands(activeOrganizationId, member),
+      listBranches(activeOrganizationId),
+    ]).then(([brandItems, branchItems]) => {
+      if (!mounted) return;
+      setInventoryBrands(
+        brandItems.filter((item) => item.status === "active"),
+      );
+      const activeBranches = branchItems.filter(
+        (branch) => branch.status !== "closed",
+      );
+      const accessibleBranches = canAccessAllBranches(member)
+        ? activeBranches
+        : activeBranches.filter((branch) => branch.id === member?.branchId);
+      setBranches(accessibleBranches);
+      const preferredBranchId = String(
+        existing?.branchId ?? member?.branchId ?? activeBranchId,
+      );
+      setOfferingBranchId(
+        accessibleBranches.some((branch) => branch.id === preferredBranchId)
+          ? preferredBranchId
+          : (accessibleBranches[0]?.id ?? preferredBranchId),
+      );
     }).catch(() => {
-      if (mounted) setInventoryBrands([]);
+      if (mounted) {
+        setInventoryBrands([]);
+        setBranches([]);
+      }
     });
     return () => { mounted = false; };
-  }, [activeOrganizationId, config.collection, member]);
+  }, [activeBranchId, activeOrganizationId, config.collection, existing?.branchId, member]);
 
   useEffect(() => {
     if (config.collection !== "deals" && config.collection !== "leads" && config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
@@ -851,6 +879,23 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
 
     const parsedData = parsed.data as Record<string, unknown>;
+    const recordBranchId =
+      config.collection === "offerings"
+        ? offeringBranchId || member?.branchId || activeBranchId
+        : activeBranchId;
+    if (
+      config.collection === "offerings" &&
+      (!recordBranchId || !canAccessBranch(member, recordBranchId))
+    ) {
+      const message = "Select a branch you are authorized to access.";
+      setError(message);
+      toast({
+        title: "Branch access required",
+        description: message,
+        variant: "error",
+      });
+      return;
+    }
     if (config.collection === "properties") {
       parsedData.agencyFee = calculatedAgencyFee;
       parsedData.commissionAmount = commissionAmount;
@@ -1014,7 +1059,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
 
     const context = {
-      branchId: activeBranchId,
+      branchId: recordBranchId,
       organizationId: activeOrganizationId,
       userEmail: member?.email || user.email || "",
       userId: user.uid,
@@ -1110,7 +1155,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
 
     const context = {
-      branchId: activeBranchId,
+      branchId: offeringBranchId || member?.branchId || activeBranchId,
       organizationId: activeOrganizationId,
       userEmail: member?.email || user.email || "",
       userId: user.uid,
@@ -1239,6 +1284,34 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         ) : null}
         <form className="grid gap-5" onSubmit={handleSubmit(onSubmit)}>
           {error ? <ErrorState message={error} /> : null}
+          {config.collection === "offerings" ? (
+            <section className="grid gap-3 rounded-md border bg-muted/30 p-4">
+              <div>
+                <h2 className="text-base font-semibold">Inventory branch</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  New products default to your assigned branch. Users with
+                  all-branch access can choose another branch before saving.
+                </p>
+              </div>
+              <Field label="Product branch">
+                <Select
+                  disabled={Boolean(id) || !canAccessAllBranches(member)}
+                  required
+                  value={offeringBranchId}
+                  onChange={(event) => setOfferingBranchId(event.target.value)}
+                >
+                  {!branches.length && offeringBranchId ? (
+                    <option value={offeringBranchId}>{offeringBranchId}</option>
+                  ) : null}
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </section>
+          ) : null}
           <div className="grid gap-6">
             {sections.map((section) => {
               const visibleFields = section.fields.filter(isFieldVisible);
