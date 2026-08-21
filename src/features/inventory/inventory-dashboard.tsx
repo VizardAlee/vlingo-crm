@@ -1608,7 +1608,7 @@ export function InventoryDashboard() {
     <article className="inventory-print-report hidden bg-white text-[#151915] print:block">
       <header className="border-b-2 border-[#c7a13a] pb-4">
         <Image alt="Vlingo Systems Nigeria Limited" className="h-auto w-full max-w-[520px] object-contain object-left" height={92} priority src="/branding/vlingo-logo.jpeg" width={550} />
-        <div className="mt-2 text-[9px] font-medium text-[#4f574f]">Solar • Energy • Infrastructure Solutions &nbsp;|&nbsp; RC 1008311 &nbsp;|&nbsp; Kaduna: 27A, Isa Kaita Road, U/Sarki &nbsp;|&nbsp; +234 803 770 1084</div>
+        <div className="mt-2 grid grid-cols-2 gap-5 text-[9px] font-medium leading-4 text-[#4f574f]"><p><strong className="text-[#174f20]">Kaduna Office:</strong> 27A, Isa Kaita Road, U/Sarki, Kaduna · +234 803 770 1084</p><p><strong className="text-[#174f20]">Kano Office:</strong> Block 3, Shop 1D, Civic Center Ultramodern Market, Kano · 07032545288</p></div>
       </header>
 
       <div className="mt-6 flex items-start justify-between gap-6">
@@ -1656,7 +1656,7 @@ export function InventoryDashboard() {
         {!filteredReportMovements.length ? <p className="border-b p-5 text-center text-[9px] text-[#626a62]">No inventory movements match the selected filters and dates.</p> : null}
       </section>
 
-      <footer className="mt-8 border-t-2 border-[#c7a13a] pt-3 text-center text-[8px] text-[#4f574f]">Vlingo Systems Nigeria Limited &nbsp;|&nbsp; This report contains only inventory records permitted for the signed-in user.</footer>
+      <footer className="mt-8 border-t-2 border-[#c7a13a] pt-3 text-center text-[8px] text-[#4f574f]"><p>Vlingo Systems Nigeria Limited &nbsp;|&nbsp; This report contains only inventory records permitted for the signed-in user.</p><p className="mt-2 bg-[#174f20] py-2 font-semibold tracking-[0.08em] text-white">Solar • Energy • Infrastructure Solutions</p></footer>
     </article>
     </>
   );

@@ -115,8 +115,9 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
         <div className="px-6 py-6 sm:px-10 sm:py-8">
           <header className="border-b-2 border-[#c7a13a] pb-4">
             <Image alt="Vlingo Systems Nigeria Limited" className="h-auto w-full max-w-[520px] object-contain object-left" height={92} priority src="/branding/vlingo-logo.jpeg" width={550} />
-            <div className="mt-3 flex flex-col gap-1 text-[10px] font-medium text-[#4f574f] sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3">
-              <span>Solar • Energy • Infrastructure Solutions</span><span className="hidden sm:inline">|</span><span>RC 1008311</span><span className="hidden sm:inline">|</span><span>Kaduna: 27A, Isa Kaita Road, U/Sarki</span><span className="hidden sm:inline">|</span><span>+234 803 770 1084</span>
+            <div className="mt-3 grid gap-2 text-[10px] font-medium leading-4 text-[#4f574f] sm:grid-cols-2 sm:gap-5">
+              <p><strong className="text-[#174f20]">Kaduna Office:</strong> 27A, Isa Kaita Road, U/Sarki, Kaduna · +234 803 770 1084</p>
+              <p><strong className="text-[#174f20]">Kano Office:</strong> Block 3, Shop 1D, Civic Center Ultramodern Market, Kano · 07032545288</p>
             </div>
           </header>
 
@@ -175,7 +176,7 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
             {type === "receipt" ? <div className="sm:text-right"><div className="ml-auto h-8 w-56 border-b border-[#151915]" /><p className="mt-1 text-[10px] font-semibold">Authorised Signatory / Date</p></div> : null}
           </footer>
         </div>
-        <div className="bg-[#174f20] px-6 py-2 text-center text-[9px] text-white sm:px-10">Vlingo Systems Nigeria Limited &nbsp;|&nbsp; Kaduna: +234 803 770 1084 &nbsp;|&nbsp; Kano: 07032545288 &nbsp;|&nbsp; RC 1008311</div>
+        <div className="bg-[#174f20] px-6 py-2 text-center text-[9px] font-semibold tracking-[0.08em] text-white sm:px-10">Vlingo Systems Nigeria Limited &nbsp;|&nbsp; Solar • Energy • Infrastructure Solutions</div>
       </article>
     </section>
   );
