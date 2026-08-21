@@ -13,7 +13,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { BrowserNotificationListener } from "@/features/notifications/browser-notification-listener";
 import { NotificationMenu } from "@/features/notifications/notification-menu";
 import { WhatsNew } from "@/features/updates/whats-new";
-import { canAccessAllBranches, hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { canAccessAllBranches, defaultAppRoute, hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { cn, titleCase } from "@/lib/utils";
 import { listUserNotifications } from "@/services/notifications";
 import { listBranches } from "@/services/users";
@@ -49,6 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const currentAccessRule = useMemo(() => accessRuleForPath(pathname), [pathname]);
   const canViewCurrentRoute = !currentAccessRule || hasAnyPermission(member, currentAccessRule.permissions);
+  const shouldRedirectFromDashboard = pathname === "/dashboard" && Boolean(member) && !canViewCurrentRoute;
   const canCreateLead = hasPermission(member, "leads.create");
   const canViewNotifications = hasAnyPermission(member, notificationAccessPermissions);
   const visibleBranches = useMemo(() => (
@@ -56,6 +57,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   ), [branches, member]);
   const activeBranchName = visibleBranches.find((branch) => branch.id === activeBranchId)?.name ?? "Head office";
   const canSwitchBranches = canAccessAllBranches(member) && visibleBranches.length > 1;
+
+  useEffect(() => {
+    if (shouldRedirectFromDashboard) {
+      router.replace(defaultAppRoute(member));
+    }
+  }, [member, router, shouldRedirectFromDashboard]);
 
   useEffect(() => {
     const currentUserId = user?.uid;
@@ -381,7 +388,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {firebaseReady ? (memberLoadError ? (
             <ErrorState message={memberLoadError} />
-          ) : canViewCurrentRoute ? children : (
+          ) : shouldRedirectFromDashboard ? <LoadingState /> : canViewCurrentRoute ? children : (
             <PermissionDenied
               currentPermissions={member?.permissions ?? []}
               memberRole={member?.roles?.join(", ") || member?.role}

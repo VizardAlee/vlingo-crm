@@ -47,7 +47,7 @@ The Inventory page includes a permission-aware **Guide me** tour. Internal users
 3. Sign in as a super admin, operations manager, or inventory manager.
 4. Open Inventory > Setup and create brands such as Sorotec and Revo.
 5. Create the warehouses, stores, sites, or vehicles that hold stock.
-6. Edit each stock-tracked Product/Service and assign its brand, SKU, unit, cost price, and reorder level.
+6. Edit each stock-tracked Product/Service and assign its brand, unit, cost price, and reorder level. The SKU is generated automatically when the product is saved.
 7. Record an `Adjustment in` movement at each location to establish audited opening balances. Do not copy the legacy catalog `stockQuantity`; opening stock should enter through the ledger.
 
 ## Brand partner onboarding

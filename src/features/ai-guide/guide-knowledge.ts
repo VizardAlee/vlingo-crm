@@ -286,6 +286,7 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Use Properties and Units for real-estate inventory.",
       "Use Products/Services for catalog items such as solar equipment, installation packages, materials, consultancy, maintenance, and services.",
+      "Enter the product details and save the record; the SKU/item code is generated automatically and cannot be entered manually.",
       "Link leads and deals to properties, units, or products/services so users do not re-enter the same information.",
       "Keep prices, status, category, stock, and service details current so sales and finance flows stay accurate.",
     ],

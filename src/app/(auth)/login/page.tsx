@@ -26,6 +26,7 @@ import { Field, Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { AuthProvider, useAuth } from "@/features/auth/auth-provider";
+import { defaultAppRoute } from "@/lib/permissions";
 
 const featureRows = [
   { icon: Users, title: "Lead capture", text: "Real estate, building materials, solar, and service enquiries." },
@@ -55,9 +56,9 @@ function LoginContent() {
     setSubmitting(true);
     setError(null);
     try {
-      await signIn(email, password);
+      const member = await signIn(email, password);
       toast({ title: "Signed in", description: "Welcome back.", variant: "success" });
-      router.push("/dashboard");
+      router.push(defaultAppRoute(member));
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to sign in.";
       setError(message);

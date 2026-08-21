@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accessRuleForPath, navigation, reportsAccessPermissions } from "../../src/components/layout/navigation";
-import { hasAnyPermission, hasNotificationOversight, hasOrganizationReportAccess, hasPermission, rolePermissions } from "../../src/lib/permissions";
+import { defaultAppRoute, hasAnyPermission, hasNotificationOversight, hasOrganizationReportAccess, hasPermission, rolePermissions } from "../../src/lib/permissions";
 import type { Member } from "../../src/types/crm";
 
 describe("route access rules", () => {
@@ -119,6 +119,17 @@ describe("route access rules", () => {
     expect(accessRuleForPath("/inventory")?.permissions).toEqual(["inventory.read"]);
     expect(rolePermissions.brandPartner).toEqual(["inventory.read", "inventory.viewReports", "inventory.comment"]);
     expect(rolePermissions.brandPartner).not.toEqual(expect.arrayContaining(["offerings.read", "reports.viewFinancial"]));
+    const brandPartner = {
+      branchId: "head-office",
+      displayName: "Brand Partner",
+      email: "partner@example.com",
+      id: "partner-1",
+      organizationId: "org-a",
+      permissions: rolePermissions.brandPartner,
+      role: "brandPartner" as const,
+      status: "active" as const,
+    } as Member;
+    expect(defaultAppRoute(brandPartner)).toBe("/inventory");
   });
 
   it("separates enterprise inventory duties", () => {

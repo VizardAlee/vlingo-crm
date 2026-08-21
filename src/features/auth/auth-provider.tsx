@@ -21,7 +21,7 @@ interface AuthState {
   memberLoadError: string | null;
   resetPassword: (email: string) => Promise<void>;
   setActiveBranchId: (branchId: string) => void;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<Member | null>;
   signOutUser: () => Promise<void>;
   user: User | null;
 }
@@ -99,7 +99,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("Firebase Authentication is not configured.");
     }
 
-    await signInWithEmailAndPassword(auth, email, password);
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    if (!db) {
+      return null;
+    }
+
+    const memberPath = `organizations/${defaultOrganizationId}/members/${credential.user.uid}`;
+    const snapshot = await getDoc(doc(db, memberPath));
+    return snapshot.exists() ? normalizeMember(snapshot.id, snapshot.data()) : null;
   }, []);
 
   const resetPassword = useCallback(async (email: string) => {

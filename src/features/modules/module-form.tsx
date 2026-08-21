@@ -19,7 +19,7 @@ import { type FormField, type ModuleConfig } from "@/features/modules/module-con
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
 import { effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
-import { cn, titleCase } from "@/lib/utils";
+import { cn, createReference, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { createInventoryBrand, listInventoryBrands } from "@/services/inventory";
 import { listMembers } from "@/services/users";
@@ -859,6 +859,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     if (config.collection === "offerings") {
       const brand = inventoryBrands.find((item) => item.id === parsedData.brandId);
       parsedData.brandName = brand?.name ?? "";
+      if (!String(parsedData.sku ?? "").trim()) {
+        parsedData.sku = createReference("SKU");
+      }
       const offeringType = String(parsedData.type ?? "");
       const isInventoryOffering = ["material", "solarEquipment"].includes(offeringType);
       const isServiceOffering = ["solarService", "installationProject", "consultancy", "maintenance", "service"].includes(offeringType);
@@ -1157,8 +1160,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     const name = brandForm.name.trim();
     const code = brandForm.code.trim().toUpperCase();
-    if (!name || !code) {
-      const message = "Enter both a brand name and brand code.";
+    if (!name) {
+      const message = "Enter a brand name.";
       setError(message);
       toast({ title: "Brand details required", description: message, variant: "error" });
       return;
@@ -1173,7 +1176,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return;
     }
 
-    const duplicateCode = inventoryBrands.find((brand) => brand.code.trim().toLowerCase() === code.toLowerCase());
+    const duplicateCode = code
+      ? inventoryBrands.find((brand) => brand.code?.trim().toLowerCase() === code.toLowerCase())
+      : undefined;
     if (duplicateCode) {
       const message = `Brand code ${code} is already used by ${duplicateCode.name}.`;
       setError(message);
@@ -1349,8 +1354,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                             <Field label="Brand name">
                               <Input autoFocus required value={brandForm.name} onChange={(event) => setBrandForm((current) => ({ ...current, name: event.target.value }))} />
                             </Field>
-                            <Field label="Brand code">
-                              <Input required value={brandForm.code} onChange={(event) => setBrandForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} />
+                            <Field label="Brand code (optional)">
+                              <Input value={brandForm.code} onChange={(event) => setBrandForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} />
                             </Field>
                             <Field label="Partner contact name">
                               <Input value={brandForm.contactName} onChange={(event) => setBrandForm((current) => ({ ...current, contactName: event.target.value }))} />

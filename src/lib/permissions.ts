@@ -159,6 +159,30 @@ export function hasAnyPermission(member: Member | null, permissions: Permission[
   return permissions.some((permission) => hasPermission(member, permission));
 }
 
+export function defaultAppRoute(member: Member | null) {
+  if (hasAnyPermission(member, ["dashboard.viewExecutive", "leads.readAssigned", "leads.readAll"])) {
+    return "/dashboard";
+  }
+
+  if (hasPermission(member, "inventory.read")) {
+    return "/inventory";
+  }
+
+  if (hasPermission(member, "properties.read")) {
+    return "/properties";
+  }
+
+  if (hasPermission(member, "clients.read")) {
+    return "/clients";
+  }
+
+  if (hasPermission(member, "tasks.read")) {
+    return "/tasks";
+  }
+
+  return "/dashboard";
+}
+
 export function hasOrganizationReportAccess(member: Member | null) {
   return hasAnyPermission(member, ["reports.viewFinancial", "dashboard.viewExecutive"]) || (
     hasPermission(member, "leads.readAll") && hasPermission(member, "leads.assign")
