@@ -138,6 +138,7 @@ export const routeAccessRules: RouteAccessRule[] = [
   { pattern: /^\/units(\/[^/]+)?$/, permissions: ["units.read"] },
 
   { exact: "/offerings/new", permissions: ["offerings.create"] },
+  { exact: "/offerings/import", permissions: ["offerings.create"] },
   { pattern: /^\/offerings\/[^/]+\/edit$/, permissions: ["offerings.update"] },
   { pattern: /^\/offerings(\/[^/]+)?$/, permissions: ["offerings.read"] },
   { pattern: /^\/inventory(\/.*)?$/, permissions: ["inventory.read"] },

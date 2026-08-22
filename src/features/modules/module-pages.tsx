@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, Trash2, XCircle } from "lucide-react";
+import { Banknote, Building2, CalendarClock, CheckCircle2, CircleCheck, Clock, FileClock, FileSpreadsheet, Flame, GitBranch, Handshake, Home, ListTodo, Mail, MessageSquarePlus, PhoneCall, Plus, ReceiptText, Repeat2, Send, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -2260,6 +2260,12 @@ export function ModuleListPage({
               <Mail className="h-4 w-4" />
               Bulk email
             </Button>
+          ) : null}
+          {config.collection === "offerings" && canCreateRecord ? (
+            <ButtonLink className="h-11 w-full md:h-10 md:w-auto" href="/offerings/import" variant="outline">
+              <FileSpreadsheet className="h-4 w-4" />
+              Import CSV/Excel
+            </ButtonLink>
           ) : null}
           {canCreateRecord ? (
             <ButtonLink className={cn("h-11 w-full md:h-10 md:w-auto", config.collection === "tasks" && "hidden lg:inline-flex")} href={createHref ?? `${config.route}/new`}>

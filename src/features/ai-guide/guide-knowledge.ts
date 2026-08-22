@@ -484,6 +484,10 @@ export const guideTopics: GuideTopic[] = [
       "offering",
       "catalog",
       "product",
+      "import products",
+      "product spreadsheet",
+      "csv",
+      "excel",
       "service",
       "solar",
       "materials",
@@ -495,6 +499,8 @@ export const guideTopics: GuideTopic[] = [
       "Use Products/Services for catalog items such as solar equipment, installation packages, materials, consultancy, maintenance, and services.",
       "For an inventory product, select its brand. An admin or manager with inventory.manageCatalog can use Create brand beside the Brand field when the required brand is not in the dropdown.",
       "Enter the product details and save the record; the SKU/item code is generated automatically and cannot be entered manually. Barcode/GTIN is optional.",
+      "To create many products, open Products/Services and choose Import CSV/Excel. Upload a file, map each file column to a system field, review valid and rejected rows, and import the valid rows. A downloadable CSV template is available.",
+      "The importer can match an existing brand by name, code, or ID. Users with all-branch access can map a branch column or choose a default branch; branch-limited users always import to their assigned branch.",
       "The product form does not accept a stock quantity. After saving the product, use Inventory > Add / move stock to enter existing opening stock or receive new stock so every quantity has a location and an audit trail.",
       "The product defaults to the creator's assigned branch. A user with all-branch access can select another active admin-created branch before saving.",
       "Link leads and deals to properties, units, or products/services so users do not re-enter the same information.",
@@ -580,7 +586,7 @@ Cross-module workflows:
 - Point of Sale sells from the active branch's available balance. A user can type a full whole-number cart quantity or use plus/minus shortcuts. Checkout creates the sale, branch-coded VSL invoice number, optional numbered receipt and finance payment, inventory issues, and stock deductions atomically. It supports walk-in customers, discounts, tax, unpaid invoices, part payments, and a separate receipt for every later payment.
 - Printable POS invoices, receipts, finance receipts, and inventory reports use a fixed A4 print layout on desktop, Android, and iPhone. Print actions show a blocking preparation dialog and disable the button before opening the native print sheet. Mobile navigation, drawers, overlays, and loading UI are excluded from the printed document. Mobile printing preserves the desktop-style columns and full document width; the system print dialog can print physically or save/share a PDF.
 - Printable POS invoices and receipts use the Vlingo letterhead and A4 document structure: customer/location metadata, itemized lines, totals, amount in words, and payment status. Invoices contain the configured Lotus Bank payment details; receipts contain payment acknowledgement, the approved authorised signature, the official company stamp, and the current Lagos date.
-- Inventory products require a brand, use an automatically generated SKU, and may omit barcode/GTIN. The product form never accepts stock quantity; opening and procured stock enter through Inventory so location balances and the movement ledger remain authoritative. Users with inventory.manageCatalog can create a missing brand from the product form. Admin-created active branches are the stock locations used for new inventory.
+- Products can be created individually or imported from CSV/XLS/XLSX through a column-mapping and validation preview. Inventory products require an existing active brand, use an automatically generated SKU, and may omit barcode/GTIN. Product creation and import never accept stock quantity; opening and procured stock enter through Inventory so location balances and the movement ledger remain authoritative. Users with inventory.manageCatalog can create a missing brand from the product form. Admin-created active branches are the stock locations used for new inventory.
 - Inventory availability is on-hand quantity minus reserved quantity. Batch and serial records must stay synchronized with the balance and movement ledgers.
 
 Role behavior:

@@ -22,6 +22,7 @@ describe("route access rules", () => {
     expect(accessRuleForPath("/ai-guide")?.permissions).toEqual(expect.arrayContaining(["leads.readAssigned", "users.manage"]));
     expect(accessRuleForPath("/offerings")?.permissions).toEqual(["offerings.read"]);
     expect(accessRuleForPath("/offerings/new")?.permissions).toEqual(["offerings.create"]);
+    expect(accessRuleForPath("/offerings/import")?.permissions).toEqual(["offerings.create"]);
     expect(accessRuleForPath("/reports")?.permissions).toEqual(expect.arrayContaining(["leads.readAssigned", "reports.viewFinancial"]));
     expect(accessRuleForPath("/finance")?.permissions).toEqual(["reports.viewFinancial"]);
     expect(accessRuleForPath("/pos")?.permissions).toEqual(["pos.read"]);
