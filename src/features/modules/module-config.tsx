@@ -154,9 +154,9 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "expectedCloseDate", label: "Expected close date", section: "Deal basics", type: "date" },
       { name: "closeProbability", label: "Close probability %", section: "Deal basics", type: "number" },
 
-      { helpText: "Optional: link the original lead so history and source context are preserved.", name: "leadId", label: "Linked lead", optionSource: "leads", section: "Linked records", type: "select" },
-      { helpText: "Optional until the customer has a client record.", name: "clientId", label: "Client", optionSource: "clients", section: "Linked records", type: "select" },
-      { helpText: "Connect this deal to its product, material, service, or installation package.", name: "offeringId", label: "Product/service", optionSource: "offerings", section: "Linked records", type: "select" },
+      { helpText: "Optional: choose the original lead to preserve its history and customer details.", name: "leadId", label: "Lead (optional)", optionSource: "leads", section: "Customer", type: "select" },
+      { helpText: "Optional: choose an existing client if this customer is already registered.", name: "clientId", label: "Existing client (optional)", optionSource: "clients", section: "Customer", type: "select" },
+      { helpText: "Connect this deal to its product, material, service, or installation package.", name: "offeringId", label: "Product/service", optionSource: "offerings", section: "Product or service", type: "select" },
 
       { name: "offerAmount", label: "Offer amount", section: "Commercial terms", type: "number" },
       { name: "agreedAmount", label: "Agreed amount", section: "Commercial terms", type: "number" },
@@ -171,7 +171,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "proposalStatus", label: "Proposal status", options: dealProposalStatuses, section: "Proposal and fulfillment", type: "select" },
       { name: "fulfillmentStatus", label: "Fulfillment status", options: dealFulfillmentStatuses, section: "Proposal and fulfillment", type: "select" },
       { name: "fulfillmentDueDate", label: "Fulfillment due date", section: "Proposal and fulfillment", type: "date" },
-      { colSpan: "full", name: "scopeOfWork", label: "Scope of work / order details", section: "Proposal and fulfillment", type: "textarea" },
+      { colSpan: "full", name: "scopeOfWork", label: "Scope of work / order details", section: "Project details", type: "textarea" },
       { colSpan: "full", name: "deliveryNotes", label: "Delivery / installation notes", section: "Proposal and fulfillment", type: "textarea" },
 
       { name: "legalStatus", label: "Legal status", options: dealLegalStatuses, section: "Legal and closing", type: "select" },
@@ -179,7 +179,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "commissionValue", label: "Commission value", section: "Legal and closing", type: "number" },
       { helpText: "Calculated from agreed amount first, then quote subtotal or offer amount.", name: "commissionAmount", label: "Calculated commission amount", readOnly: true, section: "Legal and closing", type: "number" },
       { name: "lostReason", label: "Lost reason", section: "Legal and closing", type: "text" },
-      { colSpan: "full", name: "notes", label: "Deal notes", section: "Legal and closing", type: "textarea" },
+      { colSpan: "full", name: "notes", label: "Deal notes", section: "Additional details", type: "textarea" },
     ],
   },
   properties: {

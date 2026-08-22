@@ -16,7 +16,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { AiGuideLink } from "@/features/ai-guide/ai-guide-link";
 import { DealQuoteLinesEditor } from "@/features/modules/deal-quote-lines-editor";
 import { summarizeDealQuote } from "@/features/modules/deal-quote-utils";
-import { dealCategoryFromFormValue, dealTypeFromFormValue, dealTypesForCategory, dealVisibleFieldNames } from "@/features/modules/deal-form-logic";
+import { dealCategoryFromFormValue, dealCreateVisibleFieldNames, dealTypeFromFormValue, dealTypesForCategory, dealVisibleFieldNames } from "@/features/modules/deal-form-logic";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
@@ -128,8 +128,11 @@ function isBlankFormValue(value: FormValue) {
   return value === "" || value === null || value === undefined || (Array.isArray(value) && value.length === 0);
 }
 
-function shouldShowDealField(field: FormField, category: BusinessVertical | "", dealType: DealType | "") {
-  return dealVisibleFieldNames(category, dealType).has(field.name);
+function shouldShowDealField(field: FormField, category: BusinessVertical | "", dealType: DealType | "", creating: boolean) {
+  const visibleFields = creating
+    ? dealCreateVisibleFieldNames(category, dealType)
+    : dealVisibleFieldNames(category, dealType);
+  return visibleFields.has(field.name);
 }
 
 function clearHiddenDealFields(parsedData: Record<string, unknown>, fields: FormField[], category: BusinessVertical | "", dealType: DealType | "") {
@@ -1355,7 +1358,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return false;
     }
 
-    return shouldShowDealField(field, effectiveDealCategory, effectiveDealType);
+    return shouldShowDealField(field, effectiveDealCategory, effectiveDealType, !id);
   }
   const tourSteps = formTourSteps(config, config.fields.filter(isFieldVisible));
 
@@ -1365,7 +1368,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         {tourSteps.length ? (
           <div className="mb-4 flex flex-wrap justify-end gap-2">
             <AiGuideLink question={`How do I fill the ${config.title} form in Vlingo Systems CRM? Explain the important fields, required permissions, and common mistakes.`} size="sm" />
-            <GuidedTour autoStart={!id && config.collection === "deals"} storageKey={`beacon-tour:${config.collection}:form`} steps={tourSteps} />
+            <GuidedTour storageKey={`beacon-tour:${config.collection}:form`} steps={tourSteps} />
           </div>
         ) : null}
         <form className="grid gap-5" onSubmit={handleSubmit(onSubmit)}>
@@ -1405,7 +1408,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           <div className="grid gap-6">
             {sections.map((section) => {
               const visibleFields = section.fields.filter(isFieldVisible);
-              if (!visibleFields.length) {
+              const showsDealQuoteEditor = usesDealQuoteBuilder && section.title === "Commercial terms";
+              if (!visibleFields.length && !showsDealQuoteEditor) {
                 return null;
               }
 
@@ -1432,7 +1436,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                     <span>Capture or edit the coordinates used by the Lead Locations map. Browser location requires HTTPS or localhost.</span>
                   </div>
                 ) : null}
-                {usesDealQuoteBuilder && section.title === "Commercial terms" ? (
+                {showsDealQuoteEditor ? (
                   <DealQuoteLinesEditor
                     disabled={isSubmitting || Boolean(existing?.installationProjectId)}
                     locked={Boolean(existing?.installationProjectId)}

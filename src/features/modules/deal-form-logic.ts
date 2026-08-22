@@ -57,6 +57,50 @@ export function dealVisibleFieldNames(category: BusinessVertical | "", dealType:
   return fields;
 }
 
+export function dealCreateVisibleFieldNames(category: BusinessVertical | "", dealType: DealType | "") {
+  const initialFields = new Set(["dealCategory", "leadId", "clientId"]);
+  if (!category || category === "realEstate") {
+    return initialFields;
+  }
+
+  const fields = new Set([
+    "title",
+    "dealCategory",
+    "dealType",
+    "dealOwnerId",
+    "expectedCloseDate",
+    "leadId",
+    "clientId",
+    "scopeOfWork",
+    "notes",
+  ]);
+
+  function add(names: Iterable<string>) {
+    for (const name of names) {
+      fields.add(name);
+    }
+  }
+
+  if (dealType === "reservation") {
+    add(["offeringId", "reservationAmount", "depositAmount", "paymentPlan"]);
+    return fields;
+  }
+
+  // Solar quotations use the multi-line quotation builder, so the legacy
+  // single-product and manually repeated commercial totals stay hidden.
+  if (category === "solar") {
+    return fields;
+  }
+
+  if (dealType === "sale") {
+    add(["offeringId", "offeringQuantity", "offeringUnitPrice", "quoteSubtotal"]);
+    return fields;
+  }
+
+  add(["offeringId", "agreedAmount", "paymentPlan"]);
+  return fields;
+}
+
 export function dealTypesForCategory(category: BusinessVertical | "") {
   if (category === "realEstate") {
     return [];

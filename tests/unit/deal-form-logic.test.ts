@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dealTypesForCategory, dealVisibleFieldNames } from "../../src/features/modules/deal-form-logic";
+import { dealCreateVisibleFieldNames, dealTypesForCategory, dealVisibleFieldNames } from "../../src/features/modules/deal-form-logic";
 
 function visible(category: Parameters<typeof dealVisibleFieldNames>[0], dealType: Parameters<typeof dealVisibleFieldNames>[1]) {
   return dealVisibleFieldNames(category, dealType);
@@ -46,5 +46,38 @@ describe("deal form visibility rules", () => {
     expect(dealTypesForCategory("buildingMaterials")).toEqual(["sale", "reservation", "other"]);
     expect(dealTypesForCategory("generalServices")).toEqual(["sale", "lease", "reservation", "other"]);
     expect(dealTypesForCategory("realEstate")).toEqual([]);
+  });
+
+  it("keeps solar deal creation focused on customer, ownership, and quotation inputs", () => {
+    const fields = dealCreateVisibleFieldNames("solar", "sale");
+
+    expect([...fields]).toEqual(expect.arrayContaining([
+      "title",
+      "dealCategory",
+      "dealType",
+      "dealOwnerId",
+      "leadId",
+      "clientId",
+      "scopeOfWork",
+      "notes",
+    ]));
+    expect(fields.has("status")).toBe(false);
+    expect(fields.has("closeProbability")).toBe(false);
+    expect(fields.has("financeStatus")).toBe(false);
+    expect(fields.has("proposalStatus")).toBe(false);
+    expect(fields.has("fulfillmentStatus")).toBe(false);
+    expect(fields.has("commissionType")).toBe(false);
+    expect(fields.has("agreedAmount")).toBe(false);
+    expect(fields.has("offeringId")).toBe(false);
+  });
+
+  it("retains the minimum commercial inputs for a non-solar product sale", () => {
+    const fields = dealCreateVisibleFieldNames("buildingMaterials", "sale");
+
+    expect(fields.has("offeringId")).toBe(true);
+    expect(fields.has("offeringQuantity")).toBe(true);
+    expect(fields.has("offeringUnitPrice")).toBe(true);
+    expect(fields.has("quoteSubtotal")).toBe(true);
+    expect(fields.has("financeStatus")).toBe(false);
   });
 });

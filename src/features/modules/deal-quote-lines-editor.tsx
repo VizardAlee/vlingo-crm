@@ -1,6 +1,7 @@
 "use client";
 
-import { PackagePlus, Trash2 } from "lucide-react";
+import { ChevronDown, PackagePlus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { calculateDealQuoteLine, summarizeDealQuote } from "@/features/modules/deal-quote-utils";
@@ -64,7 +65,17 @@ export function DealQuoteLinesEditor({
   offerings: Offering[];
   onChange: (lines: DealQuoteLine[]) => void;
 }) {
+  const [expandedLines, setExpandedLines] = useState<Set<string>>(() => new Set());
   const activeOfferings = offerings.filter((item) => item.status === "active" && item.vertical === "solar");
+
+  function toggleLineOptions(id: string) {
+    setExpandedLines((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function updateLine(id: string, updates: Partial<DealQuoteLine>) {
     onChange(lines.map((line) => line.id === id ? calculateDealQuoteLine({ ...line, ...updates }) : line));
@@ -128,10 +139,16 @@ export function DealQuoteLinesEditor({
         <div className="grid gap-3 rounded-md border bg-white p-3" key={line.id}>
           <div className="flex items-center justify-between gap-3">
             <strong className="text-sm">Line {index + 1}</strong>
-            <Button aria-label={`Remove line ${index + 1}`} disabled={disabled} onClick={() => onChange(lines.filter((item) => item.id !== line.id))} size="sm" type="button" variant="ghost">
-              <Trash2 className="h-4 w-4" />
-              Remove
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button aria-expanded={expandedLines.has(line.id)} onClick={() => toggleLineOptions(line.id)} size="sm" type="button" variant="ghost">
+                More options
+                <ChevronDown className={`h-4 w-4 transition-transform ${expandedLines.has(line.id) ? "rotate-180" : ""}`} />
+              </Button>
+              <Button aria-label={`Remove line ${index + 1}`} disabled={disabled} onClick={() => onChange(lines.filter((item) => item.id !== line.id))} size="sm" type="button" variant="ghost">
+                <Trash2 className="h-4 w-4" />
+                Remove
+              </Button>
+            </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Field label="Line type">
@@ -153,32 +170,36 @@ export function DealQuoteLinesEditor({
             <Field label="Quantity">
               <Input disabled={disabled} min="0.01" required step="any" type="number" value={line.quantity || ""} onChange={(event) => updateLine(line.id, { quantity: Number(event.target.value) })} />
             </Field>
-            <Field label="Unit">
-              <Input disabled={disabled} placeholder="unit, job, trip…" value={line.unitOfMeasure ?? ""} onChange={(event) => updateLine(line.id, { unitOfMeasure: event.target.value })} />
-            </Field>
             <Field label="Selling unit price">
               <Input disabled={disabled} min="0" required step="any" type="number" value={line.unitPrice || ""} onChange={(event) => updateLine(line.id, { unitPrice: Number(event.target.value) })} />
             </Field>
-            <Field label="Estimated unit cost">
-              <Input disabled={disabled} min="0" step="any" type="number" value={line.estimatedUnitCost || ""} onChange={(event) => updateLine(line.id, { estimatedUnitCost: Number(event.target.value) })} />
-            </Field>
-            <Field label="Line discount">
-              <Input disabled={disabled} min="0" step="any" type="number" value={line.discountAmount || ""} onChange={(event) => updateLine(line.id, { discountAmount: Number(event.target.value) })} />
-            </Field>
-            <Field label="VAT / tax %">
-              <Input disabled={disabled} max="100" min="0" step="any" type="number" value={line.taxRate || ""} onChange={(event) => updateLine(line.id, { taxRate: Number(event.target.value) })} />
-            </Field>
-            {line.lineType === "inventoryProduct" ? (
-              <Field className="md:col-span-2" label="Planned fulfillment">
-                <Select disabled={disabled} value={line.fulfillment} onChange={(event) => updateLine(line.id, { fulfillment: event.target.value as DealQuoteFulfillment })}>
-                  {(["checkStock", "procureToStock", "directToSite"] as DealQuoteFulfillment[]).map((value) => <option key={value} value={value}>{fulfillmentLabels[value]}</option>)}
-                </Select>
-              </Field>
-            ) : null}
             <div className="grid content-end rounded-md bg-muted px-3 py-2 text-sm">
               <span className="text-xs text-muted-foreground">Line total</span>
               <strong>{formatCurrency(line.totalAmount)}</strong>
             </div>
+            {expandedLines.has(line.id) ? (
+              <>
+                <Field label="Unit">
+                  <Input disabled={disabled} placeholder="unit, job, trip…" value={line.unitOfMeasure ?? ""} onChange={(event) => updateLine(line.id, { unitOfMeasure: event.target.value })} />
+                </Field>
+                <Field label="Estimated unit cost">
+                  <Input disabled={disabled} min="0" step="any" type="number" value={line.estimatedUnitCost || ""} onChange={(event) => updateLine(line.id, { estimatedUnitCost: Number(event.target.value) })} />
+                </Field>
+                <Field label="Line discount">
+                  <Input disabled={disabled} min="0" step="any" type="number" value={line.discountAmount || ""} onChange={(event) => updateLine(line.id, { discountAmount: Number(event.target.value) })} />
+                </Field>
+                <Field label="VAT / tax %">
+                  <Input disabled={disabled} max="100" min="0" step="any" type="number" value={line.taxRate || ""} onChange={(event) => updateLine(line.id, { taxRate: Number(event.target.value) })} />
+                </Field>
+                {line.lineType === "inventoryProduct" ? (
+                  <Field className="md:col-span-2" label="Planned fulfillment">
+                    <Select disabled={disabled} value={line.fulfillment} onChange={(event) => updateLine(line.id, { fulfillment: event.target.value as DealQuoteFulfillment })}>
+                      {(["checkStock", "procureToStock", "directToSite"] as DealQuoteFulfillment[]).map((value) => <option key={value} value={value}>{fulfillmentLabels[value]}</option>)}
+                    </Select>
+                  </Field>
+                ) : null}
+              </>
+            ) : null}
           </div>
         </div>
       ))}
