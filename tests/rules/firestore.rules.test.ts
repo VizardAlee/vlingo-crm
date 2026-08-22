@@ -116,6 +116,22 @@ describe("Beacon Firestore rules", () => {
     await assertFails(getDoc(doc(db, "organizations/org-b/leads/lead-1")));
   });
 
+  it("requires server-validated branch lifecycle actions", async () => {
+    await seedMember("manager-1", "org-a", ["users.manage"], "operationsManager");
+    const managerDb = testEnv.authenticatedContext("manager-1").firestore();
+    const branchRef = doc(managerDb, "organizations/org-a/branches/kano");
+    await assertSucceeds(setDoc(branchRef, {
+      address: "Kano",
+      code: "KAN",
+      name: "Kano",
+      organizationId: "org-a",
+      status: "active",
+    }));
+    await assertSucceeds(updateDoc(branchRef, { name: "Kano Branch" }));
+    await assertFails(updateDoc(branchRef, { status: "closed" }));
+    await assertFails(deleteDoc(branchRef));
+  });
+
   it("scopes brand partners to their assigned inventory brands", async () => {
     await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
     await testEnv.withSecurityRulesDisabled(async (context) => {

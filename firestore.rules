@@ -314,7 +314,14 @@ service cloud.firestore {
 
       match /branches/{branchId} {
         allow read: if isActiveMember(orgId);
-        allow write: if hasPermission(orgId, "users.manage") && request.resource.data.organizationId == orgId;
+        allow create: if hasPermission(orgId, "users.manage") &&
+          request.resource.data.organizationId == orgId &&
+          request.resource.data.status == "active";
+        allow update: if hasPermission(orgId, "users.manage") &&
+          resource.data.organizationId == orgId &&
+          request.resource.data.organizationId == orgId &&
+          request.resource.data.status == resource.data.status;
+        allow delete: if false;
       }
 
       match /leads/{leadId} {

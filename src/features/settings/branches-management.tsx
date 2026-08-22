@@ -1,20 +1,22 @@
 "use client";
 
-import { Building2, CheckCircle2, MapPin, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Ban, Building2, CheckCircle2, MapPin, Pencil, Plus, Power, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission } from "@/lib/permissions";
-import { formatDate, statusTone, titleCase } from "@/lib/utils";
+import { formatDate, statusTone } from "@/lib/utils";
 import {
   createOrganizationBranch,
+  deleteOrganizationBranch,
   listOrganizationBranches,
+  setOrganizationBranchStatus,
   updateOrganizationBranch,
   type BranchRecord,
   type BranchStatus,
@@ -24,14 +26,12 @@ interface BranchFormState {
   address: string;
   code: string;
   name: string;
-  status: BranchStatus;
 }
 
 const defaultBranch: BranchFormState = {
   address: "",
   code: "",
   name: "",
-  status: "active",
 };
 
 function branchTourTarget(name: string) {
@@ -39,13 +39,13 @@ function branchTourTarget(name: string) {
 }
 
 const branchTourSteps: GuidedTourStep[] = [
-  { target: branchTourTarget("create"), title: "Create branch", body: "Add branch name, code, status, and address to create a new location for users and records." },
+  { target: branchTourTarget("create"), title: "Create branch", body: "Add branch name, code, and address to create an active location for users and records." },
   { target: branchTourTarget("name"), title: "Branch name", body: "Use the clear office or location name that staff recognize." },
   { target: branchTourTarget("code"), title: "Branch code", body: "Use a short unique code. It becomes part of branch identity and reporting." },
-  { target: branchTourTarget("status"), title: "Branch status", body: "Use active for open offices and closed when the branch should no longer be used for new work." },
+  { target: branchTourTarget("status"), title: "Branch lifecycle", body: "Disable a branch to stop it being selected for new work. Enable it later, or delete it only when it has no users or linked records." },
   { target: branchTourTarget("address"), title: "Address", body: "Record the physical branch address for operations and administration." },
   { target: branchTourTarget("save"), title: "Save branch", body: "Create or update the branch after checking the details." },
-  { target: branchTourTarget("edit"), title: "Edit existing branches", body: "Existing branch cards let you update name, code, status, address, and save the changes." },
+  { target: branchTourTarget("edit"), title: "Edit existing branches", body: "Existing branch cards let you update details, disable or enable a location, and safely delete an unused disabled branch." },
 ];
 
 function branchToForm(branch: BranchRecord): BranchFormState {
@@ -53,7 +53,6 @@ function branchToForm(branch: BranchRecord): BranchFormState {
     address: branch.address ?? "",
     code: branch.code ?? "",
     name: branch.name ?? "",
-    status: branch.status,
   };
 }
 
@@ -156,6 +155,63 @@ export function BranchesManagement() {
     }
   }
 
+  async function changeBranchStatus(branch: BranchRecord) {
+    const nextStatus: BranchStatus = branch.status === "active" ? "closed" : "active";
+    if (nextStatus === "closed" && !window.confirm(
+      `Disable ${branch.name}? It will no longer appear as a location for new work. Reassign its users first.`,
+    )) {
+      return;
+    }
+
+    setSaving(`status-${branch.id}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      await setOrganizationBranchStatus(activeOrganizationId, branch.id, nextStatus);
+      const message = `${branch.name} was ${nextStatus === "closed" ? "disabled" : "enabled"}.`;
+      setSuccess(message);
+      toast({ title: `Branch ${nextStatus === "closed" ? "disabled" : "enabled"}`, description: message, variant: "success" });
+      await loadBranches();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to change branch status.";
+      setError(message);
+      toast({ title: "Unable to change branch status", description: message, variant: "error" });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function removeBranch(branch: BranchRecord) {
+    if (branch.status !== "closed") {
+      const message = "Disable the branch before deleting it.";
+      setError(message);
+      toast({ title: "Branch must be disabled", description: message, variant: "error" });
+      return;
+    }
+    if (!window.confirm(
+      `Delete ${branch.name}? This is allowed only when the branch has no assigned users or linked business records.`,
+    )) {
+      return;
+    }
+
+    setSaving(`delete-${branch.id}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      await deleteOrganizationBranch(activeOrganizationId, branch.id);
+      const message = `${branch.name} was deleted.`;
+      setSuccess(message);
+      toast({ title: "Branch deleted", description: message, variant: "success" });
+      await loadBranches();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to delete branch.";
+      setError(message);
+      toast({ title: "Unable to delete branch", description: message, variant: "error" });
+    } finally {
+      setSaving(null);
+    }
+  }
+
   function updateEdit(branch: BranchRecord, updates: Partial<BranchFormState>) {
     setEditing((value) => ({
       ...value,
@@ -179,7 +235,7 @@ export function BranchesManagement() {
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
           <h1 className="text-xl font-semibold md:text-2xl">Branches</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Create branch offices, update branch details, and close branches without removing historic records.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Create and manage locations. Disable closed offices, or delete an unused branch without orphaning users or business records.</p>
         </div>
         <div className="mt-4 grid gap-2 md:mt-0 md:flex">
           <GuidedTour className="h-11 w-full md:w-auto" storageKey="beacon-tour:branches" steps={branchTourSteps} />
@@ -203,7 +259,7 @@ export function BranchesManagement() {
           <CardTitle>Create Branch</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4 lg:grid-cols-[1fr_160px_160px]" data-tour={branchTourTarget("create")} onSubmit={submitCreate}>
+          <form className="grid gap-4 lg:grid-cols-[1fr_160px]" data-tour={branchTourTarget("create")} onSubmit={submitCreate}>
             <div data-tour={branchTourTarget("name")}>
             <Field label="Branch name">
               <Input required value={draft.name} onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))} />
@@ -214,15 +270,7 @@ export function BranchesManagement() {
               <Input required value={draft.code} onChange={(event) => setDraft((value) => ({ ...value, code: event.target.value }))} />
             </Field>
             </div>
-            <div data-tour={branchTourTarget("status")}>
-            <Field label="Status">
-              <Select value={draft.status} onChange={(event) => setDraft((value) => ({ ...value, status: event.target.value as BranchStatus }))}>
-                <option value="active">Active</option>
-                <option value="closed">Closed</option>
-              </Select>
-            </Field>
-            </div>
-            <div data-tour={branchTourTarget("address")}>
+            <div className="lg:col-span-2" data-tour={branchTourTarget("address")}>
             <Field label="Address">
               <Textarea required value={draft.address} onChange={(event) => setDraft((value) => ({ ...value, address: event.target.value }))} />
             </Field>
@@ -253,7 +301,7 @@ export function BranchesManagement() {
                     <p className="truncate font-semibold">{branch.name}</p>
                     <p className="truncate text-sm text-muted-foreground">{branch.code}</p>
                   </div>
-                  <Badge tone={statusTone(branch.status)}>{titleCase(branch.status)}</Badge>
+                  <Badge data-tour={branchTourTarget("status")} tone={statusTone(branch.status)}>{branch.status === "closed" ? "Disabled" : "Active"}</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Name">
@@ -262,12 +310,6 @@ export function BranchesManagement() {
                   <Field label="Code">
                     <Input value={edit.code} onChange={(event) => updateEdit(branch, { code: event.target.value })} />
                   </Field>
-                  <Field label="Status">
-                    <Select value={edit.status} onChange={(event) => updateEdit(branch, { status: event.target.value as BranchStatus })}>
-                      <option value="active">Active</option>
-                      <option value="closed">Closed</option>
-                    </Select>
-                  </Field>
                   <div className="grid content-end text-xs text-muted-foreground">
                     Updated {formatDate(branch.updatedAt ?? branch.createdAt)}
                   </div>
@@ -275,10 +317,20 @@ export function BranchesManagement() {
                 <Field label="Address">
                   <Textarea value={edit.address} onChange={(event) => updateEdit(branch, { address: event.target.value })} />
                 </Field>
-                <Button disabled={saving === `update-${branch.id}`} onClick={() => submitUpdate(branch)} type="button" variant="outline">
-                  <Pencil className="h-4 w-4" />
-                  Save branch
-                </Button>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button disabled={saving === `update-${branch.id}`} onClick={() => submitUpdate(branch)} type="button" variant="outline">
+                    <Pencil className="h-4 w-4" />
+                    Save
+                  </Button>
+                  <Button disabled={saving === `status-${branch.id}`} onClick={() => changeBranchStatus(branch)} type="button" variant="outline">
+                    {branch.status === "active" ? <Ban className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                    {branch.status === "active" ? "Disable" : "Enable"}
+                  </Button>
+                  <Button disabled={branch.status !== "closed" || saving === `delete-${branch.id}`} onClick={() => removeBranch(branch)} title={branch.status !== "closed" ? "Disable this branch before deleting it" : "Delete unused branch"} type="button" variant="danger">
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );
@@ -291,7 +343,7 @@ export function BranchesManagement() {
             <CardTitle>Branch Offices</CardTitle>
           </CardHeader>
           <CardContent className="max-w-full overflow-x-auto p-0">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Branch</th>
@@ -320,17 +372,24 @@ export function BranchesManagement() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Select className="w-32" value={edit.status} onChange={(event) => updateEdit(branch, { status: event.target.value as BranchStatus })}>
-                          <option value="active">Active</option>
-                          <option value="closed">Closed</option>
-                        </Select>
+                        <Badge data-tour={branchTourTarget("status")} tone={statusTone(branch.status)}>{branch.status === "closed" ? "Disabled" : "Active"}</Badge>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(branch.updatedAt ?? branch.createdAt)}</td>
                       <td className="px-4 py-3">
-                        <Button disabled={saving === `update-${branch.id}`} onClick={() => submitUpdate(branch)} size="sm" type="button" variant="outline">
-                          <Pencil className="h-4 w-4" />
-                          Save
-                        </Button>
+                        <div className="grid min-w-32 gap-2">
+                          <Button disabled={saving === `update-${branch.id}`} onClick={() => submitUpdate(branch)} size="sm" type="button" variant="outline">
+                            <Pencil className="h-4 w-4" />
+                            Save
+                          </Button>
+                          <Button disabled={saving === `status-${branch.id}`} onClick={() => changeBranchStatus(branch)} size="sm" type="button" variant="outline">
+                            {branch.status === "active" ? <Ban className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                            {branch.status === "active" ? "Disable" : "Enable"}
+                          </Button>
+                          <Button disabled={branch.status !== "closed" || saving === `delete-${branch.id}`} onClick={() => removeBranch(branch)} size="sm" title={branch.status !== "closed" ? "Disable this branch before deleting it" : "Delete unused branch"} type="button" variant="danger">
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

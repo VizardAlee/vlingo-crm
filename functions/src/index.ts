@@ -2112,6 +2112,220 @@ export const reactivateOrganizationMember = onCall(
   },
 );
 
+const branchUsageCollections = [
+  "activities",
+  "clients",
+  "deals",
+  "developmentProjects",
+  "documents",
+  "financeCommissions",
+  "financeExpenses",
+  "financePayments",
+  "installationInvoices",
+  "installationProjects",
+  "inventoryBalances",
+  "inventoryBrands",
+  "inventoryComments",
+  "inventoryLocations",
+  "inventoryLots",
+  "inventoryMovements",
+  "inventoryPurchaseOrders",
+  "inventoryReservations",
+  "inventorySerials",
+  "inventoryStockCounts",
+  "inventorySuppliers",
+  "leads",
+  "marketingCampaigns",
+  "notifications",
+  "offerings",
+  "posSales",
+  "properties",
+  "propertyStakeholders",
+  "propertyUnits",
+  "rentalTenancies",
+  "tasks",
+] as const;
+
+async function firstBranchUsage(organizationId: string, branchId: string) {
+  const organizationPath = `organizations/${organizationId}`;
+  const checks = await Promise.all(
+    branchUsageCollections.map(async (collectionName) => ({
+      collectionName,
+      snapshot: await db
+        .collection(`${organizationPath}/${collectionName}`)
+        .where("branchId", "==", branchId)
+        .limit(1)
+        .get(),
+    })),
+  );
+  const directUsage = checks.find((check) => !check.snapshot.empty);
+  if (directUsage) return directUsage.collectionName;
+
+  const movementChecks = await Promise.all(
+    ["fromBranchId", "toBranchId"].map((field) =>
+      db
+        .collection(`${organizationPath}/inventoryMovements`)
+        .where(field, "==", branchId)
+        .limit(1)
+        .get(),
+    ),
+  );
+  return movementChecks.some((snapshot) => !snapshot.empty)
+    ? "inventoryMovements"
+    : null;
+}
+
+export const setOrganizationBranchStatus = onCall(
+  callableOptions,
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const organizationId = requireString(
+      request.data?.organizationId,
+      "organizationId",
+    );
+    const branchId = requireString(request.data?.branchId, "branchId");
+    const status = requireString(request.data?.status, "status");
+    if (!(["active", "closed"] as string[]).includes(status)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Branch status must be active or closed.",
+      );
+    }
+
+    const actor = await getActor(request.auth.uid, organizationId);
+    const branchRef = db.doc(
+      `organizations/${organizationId}/branches/${branchId}`,
+    );
+    const previous = await branchRef.get();
+    if (!previous.exists) {
+      throw new HttpsError("not-found", "Branch not found.");
+    }
+    if (previous.data()?.status === status) return { ok: true };
+
+    if (status === "closed") {
+      const [assignedMembers, activeBranches] = await Promise.all([
+        db
+          .collection(`organizations/${organizationId}/members`)
+          .where("branchId", "==", branchId)
+          .limit(1)
+          .get(),
+        db
+          .collection(`organizations/${organizationId}/branches`)
+          .where("status", "==", "active")
+          .limit(10)
+          .get(),
+      ]);
+      if (!assignedMembers.empty) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Reassign every user from this branch before disabling it.",
+        );
+      }
+      if (!activeBranches.docs.some((branch) => branch.id !== branchId)) {
+        throw new HttpsError(
+          "failed-precondition",
+          "At least one other active branch is required.",
+        );
+      }
+    }
+
+    await branchRef.update({
+      status,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: request.auth.uid,
+    });
+    await writeAuditLog({
+      action: status === "closed" ? "branch.disable" : "branch.enable",
+      actorId: request.auth.uid,
+      actorName: actor.displayName,
+      branchId: actor.branchId,
+      entityId: branchId,
+      entityType: "branch",
+      newValue: { status },
+      organizationId,
+      previousValue: previous.data(),
+    });
+
+    return { ok: true };
+  },
+);
+
+export const deleteOrganizationBranch = onCall(
+  callableOptions,
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const organizationId = requireString(
+      request.data?.organizationId,
+      "organizationId",
+    );
+    const branchId = requireString(request.data?.branchId, "branchId");
+    const actor = await getActor(request.auth.uid, organizationId);
+    const branchRef = db.doc(
+      `organizations/${organizationId}/branches/${branchId}`,
+    );
+    const previous = await branchRef.get();
+    if (!previous.exists) {
+      throw new HttpsError("not-found", "Branch not found.");
+    }
+    if (previous.data()?.status !== "closed") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Disable the branch before deleting it.",
+      );
+    }
+
+    const assignedMembers = await db
+      .collection(`organizations/${organizationId}/members`)
+      .where("branchId", "==", branchId)
+      .limit(1)
+      .get();
+    if (!assignedMembers.empty) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Reassign every user from this branch before deleting it.",
+      );
+    }
+
+    const blockingCollection = await firstBranchUsage(
+      organizationId,
+      branchId,
+    );
+    if (blockingCollection) {
+      throw new HttpsError(
+        "failed-precondition",
+        "This branch has linked business records and cannot be deleted. Keep it disabled to preserve reporting history.",
+      );
+    }
+
+    const auditRef = db
+      .collection(`organizations/${organizationId}/auditLogs`)
+      .doc();
+    const batch = db.batch();
+    batch.delete(branchRef);
+    batch.set(auditRef, {
+      action: "branch.delete",
+      actorId: request.auth.uid,
+      actorName: actor.displayName,
+      branchId: actor.branchId,
+      createdAt: FieldValue.serverTimestamp(),
+      entityId: branchId,
+      entityType: "branch",
+      newValue: null,
+      organizationId,
+      previousValue: previous.data() ?? null,
+    });
+    await batch.commit();
+
+    return { ok: true };
+  },
+);
+
 export const convertLeadToClient = onCall(callableOptions, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication is required.");

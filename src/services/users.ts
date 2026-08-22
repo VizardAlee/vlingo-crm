@@ -92,7 +92,9 @@ export async function listBranches(organizationId: string) {
   } catch (error) {
     throw enrichFirestoreError(error, { action: "list", organizationId, path: `organizations/${organizationId}/branches`, requiredPermission: "active organization membership" });
   }
-  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as Branch);
+  return snapshot.docs
+    .map((item) => ({ id: item.id, ...item.data() }) as Branch)
+    .filter((branch) => branch.status === "active");
 }
 
 export async function inviteOrganizationMember(input: InviteUserInput) {

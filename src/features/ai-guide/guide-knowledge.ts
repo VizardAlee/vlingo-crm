@@ -473,6 +473,25 @@ export const guideTopics: GuideTopic[] = [
   },
   {
     keywords: [
+      "branch",
+      "branches",
+      "disable branch",
+      "enable branch",
+      "delete branch",
+      "close office",
+      "location settings",
+    ],
+    title: "Disable or delete a branch",
+    steps: [
+      "Go to Settings, then Branches; this requires user-management permission.",
+      "Choose Disable when a location should stop being available for new users, stock, sales, and operational work. Reassign every user from that branch first, and keep at least one other branch active.",
+      "A disabled branch can be enabled again from the same Branches screen.",
+      "Delete is available only after the branch is disabled. The server permits deletion only when no users or business records refer to that branch.",
+      "If deletion is blocked because records exist, leave the branch disabled so historical reports and audit context remain intact.",
+    ],
+  },
+  {
+    keywords: [
       "role",
       "permission",
       "branch",

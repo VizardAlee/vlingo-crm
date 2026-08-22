@@ -1,7 +1,8 @@
 "use client";
 
 import { collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc, type Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
 import { orgCollectionPath } from "@/services/firestore-paths";
 import type { Branch } from "@/types/crm";
 
@@ -19,7 +20,6 @@ export interface SaveBranchInput {
   code: string;
   name: string;
   organizationId: string;
-  status: BranchStatus;
   userId: string;
 }
 
@@ -101,7 +101,7 @@ export async function createOrganizationBranch(input: SaveBranchInput) {
     createdBy: input.userId,
     name: normalized.name,
     organizationId: input.organizationId,
-    status: input.status,
+    status: "active",
     updatedAt: serverTimestamp(),
     updatedBy: input.userId,
   });
@@ -118,8 +118,42 @@ export async function updateOrganizationBranch(input: UpdateBranchInput) {
     code: normalized.code,
     name: normalized.name,
     organizationId: input.organizationId,
-    status: input.status,
     updatedAt: serverTimestamp(),
     updatedBy: input.userId,
+  });
+}
+
+function assertFunctions() {
+  if (!functions) {
+    throw new Error("Firebase Functions are not configured.");
+  }
+  return functions;
+}
+
+export async function setOrganizationBranchStatus(
+  organizationId: string,
+  branchId: string,
+  status: BranchStatus,
+) {
+  await httpsCallable<
+    { branchId: string; organizationId: string; status: BranchStatus },
+    { ok: boolean }
+  >(assertFunctions(), "setOrganizationBranchStatus")({
+    branchId,
+    organizationId,
+    status,
+  });
+}
+
+export async function deleteOrganizationBranch(
+  organizationId: string,
+  branchId: string,
+) {
+  await httpsCallable<
+    { branchId: string; organizationId: string },
+    { ok: boolean }
+  >(assertFunctions(), "deleteOrganizationBranch")({
+    branchId,
+    organizationId,
   });
 }
