@@ -57,6 +57,7 @@ export const documentAccessPermissions: Permission[] = [
   "units.read",
   "rentals.read",
   "development.read",
+  "installations.read",
   "marketing.read",
   "offerings.read",
   "tasks.read",
@@ -89,6 +90,7 @@ export const aiGuideAccessPermissions: Permission[] = [
   "units.read",
   "rentals.read",
   "development.read",
+  "installations.read",
   "marketing.read",
   "offerings.read",
   "tasks.read",
@@ -142,6 +144,9 @@ export const routeAccessRules: RouteAccessRule[] = [
   { pattern: /^\/offerings\/[^/]+\/edit$/, permissions: ["offerings.update"] },
   { pattern: /^\/offerings(\/[^/]+)?$/, permissions: ["offerings.read"] },
   { pattern: /^\/inventory(\/.*)?$/, permissions: ["inventory.read"] },
+  { exact: "/installations/new", permissions: ["installations.create"] },
+  { pattern: /^\/installations(\/.*)?$/, permissions: ["installations.read"] },
+  { pattern: /^\/installation-invoices(\/.*)?$/, permissions: ["installations.read", "reports.viewFinancial"] },
   { pattern: /^\/pos(\/.*)?$/, permissions: ["pos.read"] },
 
   { exact: "/rentals/new", permissions: ["rentals.create"] },
@@ -212,6 +217,7 @@ export const navigation: NavSection[] = [
   {
     label: "Operations",
     items: [
+      { href: "/installations", icon: FolderKanban, label: "Installation Projects", permissions: ["installations.read"] },
       { href: "/tasks", icon: ListTodo, label: "Tasks", permissions: ["tasks.read"] },
       { href: "/settings/calendar", icon: CalendarDays, label: "Google Calendar", permissions: ["tasks.read", "tasks.create"] },
       { href: "/documents", icon: FileText, label: "Documents", permissions: documentAccessPermissions },

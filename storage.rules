@@ -39,6 +39,7 @@ service firebase.storage {
         "units.read",
         "rentals.read",
         "development.read",
+        "installations.read",
         "marketing.read",
         "offerings.read",
         "tasks.read",

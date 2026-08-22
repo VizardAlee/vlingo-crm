@@ -466,6 +466,8 @@ export function createPurchaseOrder(input: {
   organizationId: string;
   branchId: string;
   supplierId: string;
+  installationProjectId?: string;
+  installationProjectName?: string;
   lines: Array<{ offeringId: string; quantity: number; unitCost: number }>;
   taxAmount?: number;
   expectedAt?: string;

@@ -39,6 +39,7 @@ const relatedConfigs: RelatedConfig[] = [
   { collection: "tasks", label: "Task", permissions: ["tasks.read"], type: "task" },
   { collection: "rentalTenancies", label: "Tenancy", permissions: ["rentals.read"], type: "tenancy" },
   { collection: "developmentProjects", label: "Development project", permissions: ["development.read"], type: "development" },
+  { collection: "installationProjects", label: "Installation project", permissions: ["installations.read"], type: "installationProject" },
   { collection: "marketingCampaigns", label: "Marketing campaign", permissions: ["marketing.read"], type: "marketing" },
   { collection: "offerings", label: "Product/service", permissions: ["offerings.read"], type: "offering" },
   { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", permissions: ["properties.read"], type: "owner" },
@@ -95,6 +96,11 @@ function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
     return detail ? `${String(record.name ?? "Development project")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
   }
 
+  if (type === "installationProject") {
+    const detail = [record.clientName, record.siteAddress, record.referenceNumber].filter(Boolean).join(" · ");
+    return detail ? `${String(record.name ?? "Installation project")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
+  }
+
   if (type === "marketing") {
     const detail = [record.channel, record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.name ?? "Marketing campaign")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
@@ -144,6 +150,10 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
 
   if (type === "development") {
     return `/development/${id}`;
+  }
+
+  if (type === "installationProject") {
+    return `/installations/${id}`;
   }
 
   if (type === "marketing") {

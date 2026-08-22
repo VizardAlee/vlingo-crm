@@ -27,6 +27,9 @@ describe("route access rules", () => {
     expect(accessRuleForPath("/finance")?.permissions).toEqual(["reports.viewFinancial"]);
     expect(accessRuleForPath("/pos")?.permissions).toEqual(["pos.read"]);
     expect(accessRuleForPath("/pos/sales/sale-1/invoice")?.permissions).toEqual(["pos.read"]);
+    expect(accessRuleForPath("/installations")?.permissions).toEqual(["installations.read"]);
+    expect(accessRuleForPath("/installations/new")?.permissions).toEqual(["installations.create"]);
+    expect(accessRuleForPath("/installations/project-1")?.permissions).toEqual(["installations.read"]);
   });
 
   it("keeps navigation links aligned with direct route access rules", () => {
@@ -152,5 +155,8 @@ describe("route access rules", () => {
     expect(rolePermissions.salesManager).toEqual(expect.arrayContaining(["clients.update", "leads.assign"]));
     expect(rolePermissions.auditor).toEqual(expect.arrayContaining(["reports.viewFinancial", "auditLogs.read"]));
     expect(rolePermissions.auditor).not.toEqual(expect.arrayContaining(["finance.create", "finance.update", "finance.approve"]));
+    expect(rolePermissions.projectManager).toEqual(expect.arrayContaining(["installations.create", "installations.read", "installations.update", "inventory.reserve", "inventory.issue"]));
+    expect(rolePermissions.salesExecutive).toEqual(expect.arrayContaining(["installations.create", "installations.read"]));
+    expect(rolePermissions.salesExecutive).not.toContain("installations.update");
   });
 });

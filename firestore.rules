@@ -162,6 +162,7 @@ service cloud.firestore {
         "units.read",
         "rentals.read",
         "development.read",
+        "installations.read",
         "marketing.read",
         "offerings.read",
         "tasks.read",
@@ -351,6 +352,20 @@ service cloud.firestore {
           canReadRecordBranch(orgId) &&
           assignedOnlyDealAccess(orgId)) ||
           canUpdateDealFinanceSummary(orgId);
+        allow delete: if false;
+      }
+
+      match /installationProjects/{projectId} {
+        allow read: if canReadRecordBranch(orgId) && hasPermission(orgId, "installations.read");
+        allow create: if hasPermission(orgId, "installations.create") && hasMetadata(orgId);
+        allow update: if hasPermission(orgId, "installations.update") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow delete: if false;
+      }
+
+      match /installationInvoices/{invoiceId} {
+        allow read: if canReadRecordBranch(orgId) && hasAnyPermission(orgId, ["installations.read", "reports.viewFinancial"]);
+        allow create: if hasPermission(orgId, "finance.create") && hasMetadata(orgId);
+        allow update: if canUpdateFinanceRecord(orgId);
         allow delete: if false;
       }
 

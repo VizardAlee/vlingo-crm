@@ -352,7 +352,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { colSpan: "full", name: "location", label: "Location / meeting point", section: "Schedule", type: "text" },
 
       { helpText: "The saved task keeps the selected user's ID for secure assignment.", name: "assignedTo", label: "Assigned to", optionSource: "internalManagers", section: "Ownership and link", type: "select" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing", "offering"], section: "Ownership and link", type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "tenancy", "development", "installationProject", "marketing", "offering"], section: "Ownership and link", type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", section: "Ownership and link", type: "text" },
     ],
   },
@@ -482,7 +482,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "subject", label: "Subject", required: true, type: "text" },
       { name: "body", label: "Details", type: "textarea" },
       { name: "status", label: "Status", type: "text" },
-      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing", "offering"], type: "select" },
+      { name: "relatedEntityType", label: "Related entity type", options: ["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "installationProject", "marketing", "offering"], type: "select" },
       { name: "relatedEntityId", label: "Related entity ID", type: "text" },
     ],
   },

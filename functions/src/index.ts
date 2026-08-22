@@ -78,6 +78,9 @@ const rolePermissions = {
     "development.create",
     "development.read",
     "development.update",
+    "installations.create",
+    "installations.read",
+    "installations.update",
     "marketing.create",
     "marketing.read",
     "marketing.update",
@@ -120,6 +123,7 @@ const rolePermissions = {
     "units.read",
     "rentals.read",
     "development.read",
+    "installations.read",
     "marketing.read",
     "offerings.read",
     "inventory.read",
@@ -156,6 +160,9 @@ const rolePermissions = {
     "development.create",
     "development.read",
     "development.update",
+    "installations.create",
+    "installations.read",
+    "installations.update",
     "marketing.create",
     "marketing.read",
     "marketing.update",
@@ -194,6 +201,8 @@ const rolePermissions = {
     "deals.create",
     "deals.read",
     "deals.update",
+    "installations.create",
+    "installations.read",
     "properties.read",
     "units.read",
     "marketing.read",
@@ -217,6 +226,8 @@ const rolePermissions = {
     "deals.create",
     "deals.read",
     "deals.update",
+    "installations.create",
+    "installations.read",
     "properties.read",
     "units.read",
     "offerings.read",
@@ -252,6 +263,7 @@ const rolePermissions = {
     "properties.read",
     "units.read",
     "deals.read",
+    "installations.read",
     "rentals.read",
     "rentals.update",
     "offerings.read",
@@ -272,6 +284,7 @@ const rolePermissions = {
     "clients.read",
     "properties.read",
     "deals.read",
+    "installations.read",
     "rentals.read",
     "rentals.update",
     "offerings.read",
@@ -298,10 +311,14 @@ const rolePermissions = {
     "development.create",
     "development.read",
     "development.update",
+    "installations.create",
+    "installations.read",
+    "installations.update",
     "offerings.read",
     "inventory.read",
     "inventory.issue",
     "inventory.reserve",
+    "inventory.procure",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -349,6 +366,7 @@ const rolePermissions = {
     "leads.readAll",
     "clients.read",
     "deals.read",
+    "installations.read",
     "properties.read",
     "units.read",
     "rentals.read",
@@ -364,6 +382,7 @@ const rolePermissions = {
     "auditLogs.read",
   ],
   inventoryManager: [
+    "installations.read",
     "offerings.create",
     "offerings.read",
     "offerings.update",
@@ -3280,6 +3299,14 @@ export const createInventoryPurchaseOrder = onCall(
     );
     const branchId = requireString(request.data?.branchId, "branchId");
     const supplierId = requireString(request.data?.supplierId, "supplierId");
+    const installationProjectId =
+      typeof request.data?.installationProjectId === "string"
+        ? request.data.installationProjectId.trim()
+        : "";
+    const installationProjectName =
+      typeof request.data?.installationProjectName === "string"
+        ? request.data.installationProjectName.trim().slice(0, 180)
+        : "";
     const actor = await getActiveMember(request.auth.uid, organizationId);
     if (
       !hasActorPermission(actor, "inventory.procure") ||
@@ -3425,6 +3452,8 @@ export const createInventoryPurchaseOrder = onCall(
       referenceNumber,
       supplierId,
       supplierName: supplierSnapshot.data()?.name ?? "Supplier",
+      installationProjectId,
+      installationProjectName,
       lines,
       subtotal,
       taxAmount,

@@ -21,6 +21,8 @@ export type OrgCollection =
   | "inventorySerials"
   | "inventoryStockCounts"
   | "inventorySuppliers"
+  | "installationProjects"
+  | "installationInvoices"
   | "leads"
   | "marketingCampaigns"
   | "members"

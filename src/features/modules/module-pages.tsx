@@ -2594,6 +2594,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
               Create receipt
             </ButtonLink>
           ) : null}
+          {config.collection === "deals" && hasPermission(member, "installations.create") ? (
+            <ButtonLink href={`/installations/new?dealId=${id}`} variant="outline">
+              <GitBranch className="h-4 w-4" />
+              Create installation project
+            </ButtonLink>
+          ) : null}
           {config.collection === "properties" && hasPermission(member, "units.create") ? (
             <ButtonLink href={`/units/new?propertyId=${id}`} variant="outline">
               <Building2 className="h-4 w-4" />

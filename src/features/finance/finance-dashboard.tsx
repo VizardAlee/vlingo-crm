@@ -16,13 +16,14 @@ import { approvalTone, createReceiptNumber, dealPaymentSummary, dealTargetAmount
 import { effectiveBranchId, hasPermission } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import type { Deal, FinanceApprovalStatus, FinanceCommission, FinanceExpense, FinancePayment, FinancePaymentSourceType, FinanceRevenueCategory, Lead, PaymentVerificationStatus, Property, PropertyUnit, RentalPaymentMethod, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
+import type { Deal, FinanceApprovalStatus, FinanceCommission, FinanceExpense, FinancePayment, FinancePaymentSourceType, FinanceRevenueCategory, InstallationProject, Lead, PaymentVerificationStatus, Property, PropertyUnit, RentalPaymentMethod, RentalPaymentRecord, RentalTenancy } from "@/types/crm";
 
 type FinanceRental = RentalTenancy & { id: string };
 type FinanceProperty = Property & { id: string };
 type FinanceUnit = PropertyUnit & { id: string };
 type FinanceLead = Lead & { id: string };
 type FinanceDeal = Deal & { id: string };
+type FinanceInstallation = InstallationProject & { id: string };
 type FinanceActionCollection = "financeCommissions" | "financeExpenses" | "financePayments";
 type RevenueSource = {
   amount: number;
@@ -53,8 +54,8 @@ const financeTourSteps: GuidedTourStep[] = [
 ];
 
 const paymentMethods: RentalPaymentMethod[] = ["bankTransfer", "cash", "pos", "cheque", "onlinePayment", "other"];
-const expenseCategories = ["Repairs", "Utilities", "Marketing", "Legal", "Agency", "Inspection", "Office", "Transport", "Other"];
-const relatedEntityTypes = ["office", "deal", "property", "unit", "tenancy", "development", "marketing", "offering", "other"];
+const expenseCategories = ["External Material", "Labour", "Transport", "Subcontractor", "Equipment Hire", "Permit", "Repairs", "Utilities", "Marketing", "Legal", "Agency", "Inspection", "Office", "Other"];
+const relatedEntityTypes = ["office", "deal", "installationProject", "property", "unit", "tenancy", "development", "marketing", "offering", "other"];
 
 function parseDate(value: unknown) {
   if (!value) {
@@ -116,7 +117,7 @@ async function safeList<T extends { id: string }>(organizationId: string, collec
   }
 }
 
-function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals: FinanceRental[], properties: FinanceProperty[], units: FinanceUnit[]): RevenueSource[] {
+function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals: FinanceRental[], properties: FinanceProperty[], units: FinanceUnit[], installations: FinanceInstallation[]): RevenueSource[] {
   return [
     ...deals
       .filter((deal) => !["lost", "dormant"].includes(String(deal.status ?? "")))
@@ -186,6 +187,17 @@ function buildRevenueSources(deals: FinanceDeal[], leads: FinanceLead[], rentals
       sourceType: "unit" as const,
       value: `unit:${unit.id}`,
     })),
+    ...installations.filter((project) => !["cancelled"].includes(project.status)).map((project) => ({
+      amount: Math.max(Number(project.contractValue ?? 0) - Number(project.amountReceived ?? 0), 0),
+      label: `Installation: ${project.name} (${project.referenceNumber})`,
+      payerName: project.clientName ?? "",
+      propertyName: project.siteAddress,
+      reference: project.referenceNumber,
+      revenueCategory: "generalServices" as const,
+      sourceId: project.id,
+      sourceType: "installationProject" as const,
+      value: `installationProject:${project.id}`,
+    })),
     {
       amount: 0,
       label: "Other income",
@@ -204,7 +216,7 @@ function approvalLabel(status: FinanceApprovalStatus | PaymentVerificationStatus
   return titleCase(status === "pending" ? "pendingVerification" : status);
 }
 
-export function FinanceDashboard({ initialSource }: { initialSource?: string }) {
+export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityType, initialSource }: { initialRelatedEntityId?: string; initialRelatedEntityType?: string; initialSource?: string }) {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
   const toast = useToast();
   const [deals, setDeals] = useState<FinanceDeal[]>([]);
@@ -212,6 +224,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
   const [rentals, setRentals] = useState<FinanceRental[]>([]);
   const [properties, setProperties] = useState<FinanceProperty[]>([]);
   const [units, setUnits] = useState<FinanceUnit[]>([]);
+  const [installations, setInstallations] = useState<FinanceInstallation[]>([]);
   const [payments, setPayments] = useState<FinancePayment[]>([]);
   const [expenses, setExpenses] = useState<FinanceExpense[]>([]);
   const [commissions, setCommissions] = useState<FinanceCommission[]>([]);
@@ -236,8 +249,8 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     description: "",
     method: "bankTransfer" as RentalPaymentMethod,
     paymentReference: "",
-    relatedEntityId: "",
-    relatedEntityType: "office",
+    relatedEntityId: initialRelatedEntityId ?? "",
+    relatedEntityType: initialRelatedEntityType ?? "office",
     vendor: "",
   });
   const [commissionForm, setCommissionForm] = useState({
@@ -274,12 +287,13 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     try {
       const branchId = effectiveBranchId(member, activeBranchId);
       const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
-      const [nextDeals, nextLeads, nextRentals, nextProperties, nextUnits, nextPayments, nextExpenses, nextCommissions] = await Promise.all([
+      const [nextDeals, nextLeads, nextRentals, nextProperties, nextUnits, nextInstallations, nextPayments, nextExpenses, nextCommissions] = await Promise.all([
         safeList<FinanceDeal>(activeOrganizationId, "deals", branchConstraints),
         safeList<FinanceLead>(activeOrganizationId, "leads", branchConstraints),
         safeList<FinanceRental>(activeOrganizationId, "rentalTenancies", branchConstraints),
         safeList<FinanceProperty>(activeOrganizationId, "properties", branchConstraints),
         safeList<FinanceUnit>(activeOrganizationId, "propertyUnits", branchConstraints),
+        safeList<FinanceInstallation>(activeOrganizationId, "installationProjects", branchConstraints),
         safeList<FinancePayment>(activeOrganizationId, "financePayments", branchConstraints),
         safeList<FinanceExpense>(activeOrganizationId, "financeExpenses", branchConstraints),
         safeList<FinanceCommission>(activeOrganizationId, "financeCommissions", branchConstraints),
@@ -289,11 +303,12 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
       setRentals(nextRentals);
       setProperties(nextProperties);
       setUnits(nextUnits);
+      setInstallations(nextInstallations);
       setPayments(nextPayments);
       setExpenses(nextExpenses);
       setCommissions(nextCommissions);
       if (initialSource) {
-        const source = buildRevenueSources(nextDeals, nextLeads, nextRentals, nextProperties, nextUnits).find((item) => item.value === initialSource);
+        const source = buildRevenueSources(nextDeals, nextLeads, nextRentals, nextProperties, nextUnits, nextInstallations).find((item) => item.value === initialSource);
         if (source) {
           setPaymentForm((current) => current.source ? current : {
             ...current,
@@ -318,7 +333,7 @@ export function FinanceDashboard({ initialSource }: { initialSource?: string }) 
     return () => window.clearTimeout(timeout);
   }, [loadFinance]);
 
-  const revenueSources = useMemo<RevenueSource[]>(() => buildRevenueSources(deals, leads, rentals, properties, units), [deals, leads, properties, rentals, units]);
+  const revenueSources = useMemo<RevenueSource[]>(() => buildRevenueSources(deals, leads, rentals, properties, units, installations), [deals, installations, leads, properties, rentals, units]);
 
   const commissionSources = useMemo(() => [
     ...deals.map((deal) => ({

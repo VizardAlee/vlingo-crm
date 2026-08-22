@@ -264,6 +264,30 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
+  it("separates installation project creation, reading, and delivery updates", async () => {
+    await seedMember("sales-1", "org-a", ["installations.create", "installations.read"]);
+    await seedMember("project-1", "org-a", ["installations.read", "installations.update"], "projectManager");
+    const salesDb = testEnv.authenticatedContext("sales-1").firestore();
+    const projectRef = doc(salesDb, "organizations/org-a/installationProjects/project-1");
+    await assertSucceeds(setDoc(projectRef, {
+      branchId: "head-office",
+      contractValue: 100000,
+      createdBy: "sales-1",
+      isDeleted: false,
+      materials: [],
+      costLines: [],
+      name: "Test installation",
+      organizationId: "org-a",
+      siteAddress: "Kaduna",
+      status: "planning",
+      updatedBy: "sales-1",
+    }));
+    await assertSucceeds(getDoc(projectRef));
+    await assertFails(updateDoc(projectRef, { progressPercent: 20 }));
+    const projectDb = testEnv.authenticatedContext("project-1").firestore();
+    await assertSucceeds(updateDoc(doc(projectDb, "organizations/org-a/installationProjects/project-1"), { progressPercent: 20, updatedBy: "project-1" }));
+  });
+
   it("allows user managers to read member records", async () => {
     await seedMember("manager-1", "org-a", ["users.manage"], "operationsManager");
     await seedMember("sales-1", "org-a", ["leads.readAssigned"]);

@@ -411,7 +411,7 @@ export const taskSchema = z.object({
   assignedTo: z.string().optional(),
   assignedToEmail: z.string().optional(),
   assignedToName: z.string().optional(),
-  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "tenancy", "development", "marketing", "offering"]),
+  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "tenancy", "development", "installationProject", "marketing", "offering"]),
   relatedEntityId: z.string().optional(),
 });
 
@@ -420,6 +420,6 @@ export const activitySchema = z.object({
   subject: z.string().min(2, "Subject is required."),
   body: z.string().optional(),
   status: z.string().optional(),
-  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "marketing", "offering"]),
+  relatedEntityType: optionalEnum(["deal", "lead", "client", "property", "unit", "task", "tenancy", "development", "installationProject", "marketing", "offering"]),
   relatedEntityId: z.string().optional(),
 });

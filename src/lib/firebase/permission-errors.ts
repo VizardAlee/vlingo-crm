@@ -11,6 +11,8 @@ const collectionPermissions: Partial<Record<OrgCollection, Partial<Record<Firest
   financeCommissions: { create: "finance.create", list: "reports.viewFinancial", read: "reports.viewFinancial", update: "finance.update or finance.approve" },
   financeExpenses: { create: "finance.create", list: "reports.viewFinancial", read: "reports.viewFinancial", update: "finance.update or finance.approve" },
   financePayments: { create: "finance.create", list: "reports.viewFinancial", read: "reports.viewFinancial", update: "finance.update or finance.approve" },
+  installationProjects: { create: "installations.create", list: "installations.read", read: "installations.read", update: "installations.update" },
+  installationInvoices: { create: "finance.create", list: "installations.read or reports.viewFinancial", read: "installations.read or reports.viewFinancial", update: "finance.update or finance.approve" },
   leads: { create: "leads.create", list: "leads.readAssigned or leads.readAll", read: "leads.readAssigned or leads.readAll", update: "leads.updateAssigned or leads.assign" },
   marketingCampaigns: { create: "marketing.create", list: "marketing.read", read: "marketing.read", update: "marketing.update" },
   members: { list: "users.manage, roles.manage, tasks.create, tasks.update, or activities.read", read: "self or users.manage/roles.manage" },

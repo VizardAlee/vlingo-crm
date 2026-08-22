@@ -24,6 +24,9 @@ export type Permission =
   | "development.create"
   | "development.read"
   | "development.update"
+  | "installations.create"
+  | "installations.read"
+  | "installations.update"
   | "marketing.create"
   | "marketing.read"
   | "marketing.update"
@@ -500,6 +503,8 @@ export interface InventoryPurchaseOrder extends EntityMetadata {
   referenceNumber: string;
   supplierId: string;
   supplierName: string;
+  installationProjectId?: string;
+  installationProjectName?: string;
   lines: InventoryPurchaseOrderLine[];
   subtotal: number;
   taxAmount: number;
@@ -916,6 +921,7 @@ export type FinancePaymentSourceType =
   | "property"
   | "unit"
   | "posSale"
+  | "installationProject"
   | "other";
 export type FinanceRevenueCategory =
   | BusinessVertical
@@ -968,6 +974,7 @@ export interface FinanceExpense extends EntityMetadata {
     | "unit"
     | "tenancy"
     | "development"
+    | "installationProject"
     | "marketing"
     | "offering"
     | "office"
@@ -1001,6 +1008,99 @@ export interface FinanceCommission extends EntityMetadata {
   rejectionReason?: string;
   paidAt?: string;
   paidBy?: string;
+}
+
+export type InstallationProjectStatus =
+  | "draft"
+  | "planning"
+  | "awaitingApproval"
+  | "approved"
+  | "procurement"
+  | "scheduled"
+  | "inProgress"
+  | "commissioning"
+  | "completed"
+  | "onHold"
+  | "cancelled";
+
+export type InstallationCostCategory =
+  | "externalMaterial"
+  | "labour"
+  | "transport"
+  | "subcontractor"
+  | "permit"
+  | "equipmentHire"
+  | "other";
+
+export interface InstallationMaterialLine {
+  id: string;
+  offeringId: string;
+  offeringName: string;
+  sku?: string;
+  brandId?: string;
+  brandName?: string;
+  quantityRequired: number;
+  estimatedUnitCost: number;
+  notes?: string;
+}
+
+export interface InstallationCostLine {
+  id: string;
+  category: InstallationCostCategory;
+  description: string;
+  vendor?: string;
+  quantity: number;
+  estimatedUnitCost: number;
+  actualAmount?: number;
+  paymentStatus?: "notPaid" | "partPaid" | "paid" | "credit";
+  notes?: string;
+}
+
+export interface InstallationProject extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  name: string;
+  dealId?: string;
+  dealReference?: string;
+  clientId?: string;
+  clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  siteAddress: string;
+  projectManagerId?: string;
+  projectManagerName?: string;
+  startDate?: string;
+  expectedCompletionDate?: string;
+  contractValue: number;
+  contingencyAmount?: number;
+  amountReceived?: number;
+  progressPercent?: number;
+  scopeOfWork?: string;
+  materials: InstallationMaterialLine[];
+  costLines: InstallationCostLine[];
+  status: InstallationProjectStatus;
+  notes?: string;
+}
+
+export interface InstallationInvoice extends EntityMetadata {
+  id: string;
+  referenceNumber: string;
+  invoiceNumber: string;
+  installationProjectId: string;
+  installationProjectName: string;
+  projectReference: string;
+  clientName: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  siteAddress: string;
+  description: string;
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  issuedAt: string;
+  dueAt?: string;
+  paymentStatus: "unpaid" | "partPaid" | "paid";
+  notes?: string;
 }
 
 export type NotificationKind =
@@ -1172,6 +1272,7 @@ export interface Task extends EntityMetadata {
     | "unit"
     | "tenancy"
     | "development"
+    | "installationProject"
     | "marketing"
     | "offering";
   relatedEntityId?: string;
@@ -1206,6 +1307,7 @@ export interface Activity extends EntityMetadata {
     | "task"
     | "tenancy"
     | "development"
+    | "installationProject"
     | "marketing"
     | "offering";
   relatedEntityId?: string;
