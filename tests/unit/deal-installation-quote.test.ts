@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { quoteLinesToInstallationPlan } from "../../src/features/installations/installation-quote";
+import { dealToInstallationPlan, quoteLinesToInstallationPlan } from "../../src/features/installations/installation-quote";
 import { calculateDealQuoteLine, summarizeDealQuote } from "../../src/features/modules/deal-quote-utils";
 import { dealSchema } from "../../src/lib/validation/schemas";
 import type { DealQuoteLine } from "../../src/types/crm";
@@ -67,5 +67,31 @@ describe("installation deal quotations", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("imports the selected item from a legacy deal without quotation lines", () => {
+    const plan = dealToInstallationPlan({
+      id: "deal-legacy",
+      referenceNumber: "DEAL-1",
+      title: "Legacy panel installation",
+      dealType: "sale",
+      status: "won",
+      offeringId: "panel-550w",
+      offeringName: "550W panel",
+      offeringType: "solarEquipment",
+      offeringQuantity: 16,
+      offeringUnitPrice: 100_000,
+      branchId: "branch-1",
+      organizationId: "org-1",
+      isDeleted: false,
+      createdAt: new Date("2026-08-22"),
+      createdBy: "user-1",
+      updatedAt: new Date("2026-08-22"),
+      updatedBy: "user-1",
+    }, (prefix) => `${prefix}-1`);
+
+    expect(plan.materials).toHaveLength(1);
+    expect(plan.materials[0]).toMatchObject({ offeringId: "panel-550w", offeringName: "550W panel", quantityRequired: 16 });
+    expect(plan.costLines).toHaveLength(0);
   });
 });

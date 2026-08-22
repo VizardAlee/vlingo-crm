@@ -12,7 +12,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
-import { quoteLinesToInstallationPlan } from "@/features/installations/installation-quote";
+import { dealToInstallationPlan } from "@/features/installations/installation-quote";
 import { effectiveBranchId, hasPermission } from "@/lib/permissions";
 import { createReference, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import {
@@ -151,6 +151,8 @@ export function InstallationProjectCreatePage() {
   const [scopeOfWork, setScopeOfWork] = useState("");
   const [notes, setNotes] = useState("");
   const branchId = effectiveBranchId(member, activeBranchId);
+  const selectedDeal = useMemo(() => deals.find((item) => item.id === dealId), [dealId, deals]);
+  const importedPlan = useMemo(() => dealToInstallationPlan(selectedDeal), [selectedDeal]);
 
   useEffect(() => {
     listOrgRecords<Deal>(activeOrganizationId, "deals", branchId ? [where("branchId", "==", branchId)] : [])
@@ -182,7 +184,7 @@ export function InstallationProjectCreatePage() {
         setError("This deal already has an installation project. Open the existing project from the deal instead.");
         return;
       }
-      const installationPlan = quoteLinesToInstallationPlan(deal?.quoteLines);
+      const installationPlan = dealToInstallationPlan(deal);
       const context = writeContext(activeOrganizationId, branchId, user, member?.displayName);
       const id = await createOrgRecord("installationProjects", {
         name: name.trim(),
@@ -222,10 +224,25 @@ export function InstallationProjectCreatePage() {
 
   return (
     <section className="grid gap-5">
-      <div><h1 className="text-2xl font-semibold">Create installation project</h1><p className="mt-1 text-sm text-muted-foreground">Link the delivery workspace to a CRM deal where possible. Materials and costs are added after creation.</p></div>
+      <div><h1 className="text-2xl font-semibold">Create installation project</h1><p className="mt-1 text-sm text-muted-foreground">Choose the CRM deal and its products, external materials, services, labour, and transport will be copied into the project automatically.</p></div>
       {error ? <ErrorState message={error} /> : null}
       <Card><CardContent><form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
         <Field className="md:col-span-2" label="CRM deal (optional)"><Select value={dealId} onChange={(event) => { const nextDealId = event.target.value; const deal = deals.find((item) => item.id === nextDealId); setDealId(nextDealId); if (deal) { setName(`${deal.title} installation`); setContractValue(String(deal.agreedAmount ?? deal.quoteTotal ?? deal.offerAmount ?? deal.quoteSubtotal ?? "")); setScopeOfWork(deal.scopeOfWork ?? ""); } }}><option value="">No linked deal</option>{deals.filter((deal) => !deal.installationProjectId).map((deal) => <option key={deal.id} value={deal.id}>{deal.title} · {deal.referenceNumber}</option>)}</Select></Field>
+        {selectedDeal ? (
+          <div className="grid gap-3 rounded-md border border-primary/20 bg-primary/5 p-4 md:col-span-2">
+            <div>
+              <strong className="text-sm">Deal items ready to import</strong>
+              <p className="mt-1 text-xs text-muted-foreground">These requirements will be available in the project immediately after creation. You do not need to enter them again.</p>
+            </div>
+            {[...importedPlan.materials.map((line) => ({ id: line.id, label: "Inventory material", name: line.offeringName, quantity: line.quantityRequired })), ...importedPlan.costLines.map((line) => ({ id: line.id, label: line.category === "externalMaterial" ? "External material" : titleCase(line.category), name: line.description, quantity: line.quantity }))].map((line) => (
+              <div className="flex flex-col justify-between gap-1 rounded-md border bg-white px-3 py-2 text-sm sm:flex-row sm:items-center" key={line.id}>
+                <span><strong>{line.name}</strong><span className="ml-2 text-xs text-muted-foreground">{line.label}</span></span>
+                <span>{line.quantity} required</span>
+              </div>
+            ))}
+            {!importedPlan.materials.length && !importedPlan.costLines.length ? <p className="text-sm text-warning">This deal has no quotation items to import. Add its products and services to the deal quotation first.</p> : null}
+          </div>
+        ) : null}
         <Field label="Project name"><Input required value={name} onChange={(event) => setName(event.target.value)} /></Field>
         <Field label="Contract value"><Input min="0" required type="number" value={contractValue} onChange={(event) => setContractValue(event.target.value)} /></Field>
         <Field className="md:col-span-2" label="Installation site"><Textarea required value={siteAddress} onChange={(event) => setSiteAddress(event.target.value)} /></Field>
@@ -307,6 +324,7 @@ export function InstallationProjectDetailPage({ id }: { id: string }) {
 
   const materials = project.materials ?? [];
   const costLines = project.costLines ?? [];
+  const externalMaterials = costLines.filter((line) => line.category === "externalMaterial");
   const plannedMaterials = materials.reduce((sum, line) => sum + line.quantityRequired * line.estimatedUnitCost, 0);
   const plannedOther = costLines.reduce((sum, line) => sum + line.quantity * line.estimatedUnitCost, 0);
   const recordedCostActual = costLines.reduce((sum, line) => sum + Number(line.actualAmount ?? 0), 0);
@@ -447,14 +465,18 @@ export function InstallationProjectDetailPage({ id }: { id: string }) {
       </CardContent></Card>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Boxes className="h-4 w-4" />Inventory materials</CardTitle></CardHeader><CardContent className="grid gap-4">
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Boxes className="h-4 w-4" />Project materials</CardTitle></CardHeader><CardContent className="grid gap-4">
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={addMaterial}>
             <Field className="sm:col-span-2" label="Inventory product"><Select disabled={!canUpdate} value={material.offeringId} onChange={(event) => { const item = itemMap.get(event.target.value); setMaterial((current) => ({ ...current, offeringId: event.target.value, estimatedUnitCost: String(item?.costPrice ?? "") })); }}><option value="">Select product</option>{data.items.filter((item) => item.brandId).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.sku || "No SKU"}</option>)}</Select></Field>
             <Field label="Quantity required"><Input min="0.01" step="any" type="number" value={material.quantity} onChange={(event) => setMaterial((current) => ({ ...current, quantity: event.target.value }))} /></Field>
             <Field label="Estimated unit cost"><Input min="0" step="any" type="number" value={material.estimatedUnitCost} onChange={(event) => setMaterial((current) => ({ ...current, estimatedUnitCost: event.target.value }))} /></Field>
             <Button className="sm:col-span-2" disabled={!canUpdate || saving === "material.add"} type="submit"><Plus className="h-4 w-4" />Add material requirement</Button>
           </form>
-          <div className="grid gap-2">{materials.map((line) => { const available = data.balances.filter((balance) => balance.offeringId === line.offeringId).reduce((sum, balance) => sum + Number(balance.quantityOnHand ?? 0) - Number(balance.quantityReserved ?? 0), 0); return <div className="rounded-md border p-3 text-sm" key={line.id}><div className="flex justify-between gap-3"><strong>{line.offeringName}</strong><span>{line.quantityRequired} required</span></div><div className="mt-1 flex justify-between text-muted-foreground"><span>{line.sku || "No SKU"}</span><span className={available < line.quantityRequired ? "text-warning" : "text-success"}>{available} available across accessible branches</span></div>{line.notes ? <p className="mt-2 text-xs text-muted-foreground">{line.notes}</p> : null}</div>; })}{!materials.length ? <Empty text="Add the products required for this installation. This is a plan; it does not change stock." /> : null}</div>
+          <div className="grid gap-2">
+            {materials.map((line) => { const available = data.balances.filter((balance) => balance.offeringId === line.offeringId).reduce((sum, balance) => sum + Number(balance.quantityOnHand ?? 0) - Number(balance.quantityReserved ?? 0), 0); return <div className="rounded-md border p-3 text-sm" key={line.id}><div className="flex justify-between gap-3"><strong>{line.offeringName}</strong><span>{line.quantityRequired} required</span></div><div className="mt-1 flex justify-between text-muted-foreground"><span>{line.sku || "Inventory product"}</span><span className={available < line.quantityRequired ? "text-warning" : "text-success"}>{available} available across accessible branches</span></div>{line.notes ? <p className="mt-2 text-xs text-muted-foreground">{line.notes}</p> : null}</div>; })}
+            {externalMaterials.map((line) => <div className="rounded-md border p-3 text-sm" key={`material-${line.id}`}><div className="flex justify-between gap-3"><strong>{line.description}</strong><span>{line.quantity} required</span></div><div className="mt-1 flex justify-between text-muted-foreground"><span>External / direct-to-site material</span><span>{formatCurrency(line.quantity * line.estimatedUnitCost)}</span></div>{line.notes ? <p className="mt-2 text-xs text-muted-foreground">{line.notes}</p> : null}</div>)}
+            {!materials.length && !externalMaterials.length ? <Empty text="Deal materials appear here automatically. You can also add another inventory requirement when the project scope changes." /> : null}
+          </div>
         </CardContent></Card>
 
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4" />External materials and service costs</CardTitle></CardHeader><CardContent className="grid gap-4">

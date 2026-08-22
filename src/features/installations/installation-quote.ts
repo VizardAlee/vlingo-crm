@@ -1,4 +1,4 @@
-import type { DealQuoteLine, InstallationCostLine, InstallationMaterialLine } from "@/types/crm";
+import type { Deal, DealQuoteLine, InstallationCostLine, InstallationMaterialLine } from "@/types/crm";
 
 function defaultId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -44,4 +44,38 @@ export function quoteLinesToInstallationPlan(
     }));
 
   return { costLines, materials };
+}
+
+export function dealToInstallationPlan(
+  deal: Deal | undefined,
+  createId: (prefix: string) => string = defaultId,
+) {
+  if (!deal) return { costLines: [], materials: [] };
+  if (deal.quoteLines?.length) return quoteLinesToInstallationPlan(deal.quoteLines, createId);
+
+  // Deals created before multi-line quotations still carry their selected
+  // product/service. Convert that legacy line so project users never need to
+  // enter the same requirement again.
+  if (!deal.offeringId && !deal.offeringName) return { costLines: [], materials: [] };
+  const inventoryItem = ["material", "solarEquipment"].includes(String(deal.offeringType ?? ""));
+  const quantity = Math.max(0, Number(deal.offeringQuantity ?? 1) || 1);
+  const legacyLine: DealQuoteLine = {
+    id: `legacy-${deal.id}`,
+    lineType: inventoryItem ? "inventoryProduct" : "service",
+    fulfillment: inventoryItem ? "checkStock" : "service",
+    ...(deal.offeringId ? { offeringId: deal.offeringId } : {}),
+    ...(deal.offeringName ? { offeringName: deal.offeringName } : {}),
+    ...(deal.offeringType ? { offeringType: deal.offeringType } : {}),
+    description: deal.offeringName || deal.title,
+    quantity,
+    unitOfMeasure: "unit",
+    unitPrice: Number(deal.offeringUnitPrice ?? 0),
+    discountAmount: 0,
+    taxRate: 0,
+    estimatedUnitCost: 0,
+    subtotal: Number(deal.quoteSubtotal ?? quantity * Number(deal.offeringUnitPrice ?? 0)),
+    taxAmount: 0,
+    totalAmount: Number(deal.quoteTotal ?? deal.quoteSubtotal ?? quantity * Number(deal.offeringUnitPrice ?? 0)),
+  };
+  return quoteLinesToInstallationPlan([legacyLine], createId);
 }
