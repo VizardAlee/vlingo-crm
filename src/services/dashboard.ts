@@ -23,12 +23,8 @@ export interface DashboardMetrics {
   totalLeads: number;
   qualifiedLeads: number;
   activeClients: number;
-  activeProperties: number;
-  availableUnits: number;
-  reservedUnits: number;
   activeDeals: number;
   pipelineValue: number;
-  upcomingInspections: number;
   overdueFollowUps: number;
   leadPipeline: DashboardChartPoint[];
   leadSources: DashboardChartPoint[];
@@ -40,7 +36,6 @@ export interface DashboardMetrics {
 const pipelineStages = [
   { key: "new", name: "New" },
   { key: "qualified", name: "Qualified" },
-  { key: "inspectionScheduled", name: "Inspection" },
   { key: "negotiation", name: "Negotiation" },
   { key: "converted", name: "Converted" },
 ];
@@ -57,10 +52,11 @@ const categoryColors: Record<FinanceRevenueCategory, string> = {
   solar: "#ca8a04",
   unitSale: "#1f6f78",
 };
-const activeDealStatuses = ["qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending"];
+const activeDealStatuses = ["qualified", "negotiation", "offerMade", "paymentPending"];
 const activeRealDealStatuses = [...activeDealStatuses, "new"];
 const openPipelineStatuses = [...activeDealStatuses, "new", "contacted"];
-const coreBusinessCategories: FinanceRevenueCategory[] = ["realEstate", "solar", "buildingMaterials", "generalServices", "custom"];
+const coreBusinessCategories: FinanceRevenueCategory[] = ["solar", "buildingMaterials", "generalServices", "custom"];
+const retiredRevenueCategories = new Set<FinanceRevenueCategory>(["realEstate", "propertySale", "unitSale", "rental"]);
 
 function logQueryError(context: string, error: unknown) {
   console.error(`[Firestore query failed] ${context}`, error);
@@ -167,6 +163,7 @@ function categoryPoint(category: FinanceRevenueCategory, value: number): Dashboa
 function categoryPointsFromTotals(totals: Partial<Record<FinanceRevenueCategory, number>>) {
   const positiveExtraCategories = Object.keys(totals)
     .filter((category) => !coreBusinessCategories.includes(category as FinanceRevenueCategory))
+    .filter((category) => !retiredRevenueCategories.has(category as FinanceRevenueCategory))
     .filter((category) => Number(totals[category as FinanceRevenueCategory] ?? 0) > 0) as FinanceRevenueCategory[];
   return [...coreBusinessCategories, ...positiveExtraCategories]
     .map((category) => categoryPoint(category, totals[category] ?? 0));
@@ -207,44 +204,6 @@ function leadInterestCategoryRows(rows: Record<string, unknown>[]) {
   return categoryPointsFromTotals(totals);
 }
 
-function dateFromValue(value: unknown) {
-  if (!value) {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  if (typeof value === "string") {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-  }
-
-  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
-    const date = value.toDate() as Date;
-    return Number.isNaN(date.getTime()) ? null : date;
-  }
-
-  return null;
-}
-
-function upcomingInspectionCount(rows: Record<string, unknown>[]) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const thirtyDaysFromNow = new Date(today);
-  thirtyDaysFromNow.setDate(today.getDate() + 30);
-
-  return rows.filter((row) => {
-    if (row.status === "inspectionScheduled") {
-      return true;
-    }
-
-    const date = dateFromValue(row.preferredInspectionDate);
-    return date ? date >= today && date <= thirtyDaysFromNow : false;
-  }).length;
-}
-
 export async function getDashboardMetrics(organizationId: string, options: { assignedTo?: string; branchId?: string } = {}): Promise<DashboardMetrics> {
   const branchFilters = options.branchId ? [where("branchId", "==", options.branchId)] : [];
   const leadFilters = options.assignedTo ? [...branchFilters, where("assignedTo", "==", options.assignedTo)] : branchFilters;
@@ -254,14 +213,11 @@ export async function getDashboardMetrics(organizationId: string, options: { ass
   const leadsPath = orgCollectionPath(organizationId, "leads");
   const dealsPath = orgCollectionPath(organizationId, "deals");
   const tasksPath = orgCollectionPath(organizationId, "tasks");
-  const [totalLeads, qualifiedLeads, activeClients, activeProperties, availableUnits, reservedUnits, overdueFollowUps, leads, deals, recentActivities] =
+  const [totalLeads, qualifiedLeads, activeClients, overdueFollowUps, leads, deals, recentActivities] =
     await Promise.all([
       count(leadsPath, leadFilters),
       count(leadsPath, [...leadFilters, where("status", "==", "qualified")]),
       count(orgCollectionPath(organizationId, "clients"), [...clientFilters, where("status", "==", "active")]),
-      count(orgCollectionPath(organizationId, "properties"), [...branchFilters, where("propertyStatus", "in", ["available", "reserved", "underNegotiation"])]),
-      count(orgCollectionPath(organizationId, "propertyUnits"), [...branchFilters, where("status", "==", "available")]),
-      count(orgCollectionPath(organizationId, "propertyUnits"), [...branchFilters, where("status", "==", "reserved")]),
       count(tasksPath, [...taskFilters, where("status", "==", "overdue")]),
       listRecords(leadsPath, leadFilters, 250),
       listRecords(dealsPath, dealFilters, 250),
@@ -274,14 +230,10 @@ export async function getDashboardMetrics(organizationId: string, options: { ass
     totalLeads,
     qualifiedLeads,
     activeClients,
-    activeProperties,
-    availableUnits,
-    reservedUnits,
     activeDeals: hasDeals
       ? deals.filter((deal) => activeRealDealStatuses.includes(String(deal.status ?? ""))).length
       : leads.filter((lead) => activeDealStatuses.includes(String(lead.status ?? ""))).length,
     pipelineValue: hasDeals ? dealPipelineValue(deals) : pipelineValue(leads),
-    upcomingInspections: upcomingInspectionCount(leads),
     overdueFollowUps,
     leadPipeline: pipelineStages.map((stage) => ({ name: stage.name, value: statusCounts[stage.key] ?? 0 })),
     leadSources: topSources(leads),

@@ -6,24 +6,18 @@ function visible(category: Parameters<typeof dealVisibleFieldNames>[0], dealType
 }
 
 describe("deal form visibility rules", () => {
-  it("keeps real estate sale fields focused on property, commercial, legal, and commission details", () => {
+  it("does not expose retired real-estate fields", () => {
     const fields = visible("realEstate", "sale");
 
-    expect(fields.has("propertyId")).toBe(true);
-    expect(fields.has("unitId")).toBe(true);
-    expect(fields.has("offerAmount")).toBe(true);
-    expect(fields.has("agreedAmount")).toBe(true);
-    expect(fields.has("legalStatus")).toBe(true);
-    expect(fields.has("commissionAmount")).toBe(true);
+    expect(fields.has("propertyId")).toBe(false);
+    expect(fields.has("unitId")).toBe(false);
     expect(fields.has("offeringId")).toBe(false);
-    expect(fields.has("quoteSubtotal")).toBe(false);
-    expect(fields.has("fulfillmentStatus")).toBe(false);
   });
 
-  it("keeps reservations slim and removes closing or fulfillment-only fields", () => {
-    const fields = visible("realEstate", "reservation");
+  it("keeps active product reservations slim", () => {
+    const fields = visible("solar", "reservation");
 
-    expect(fields.has("propertyId")).toBe(true);
+    expect(fields.has("offeringId")).toBe(true);
     expect(fields.has("reservationAmount")).toBe(true);
     expect(fields.has("depositAmount")).toBe(true);
     expect(fields.has("offerAmount")).toBe(false);
@@ -51,6 +45,6 @@ describe("deal form visibility rules", () => {
   it("limits deal type choices by business category", () => {
     expect(dealTypesForCategory("buildingMaterials")).toEqual(["sale", "reservation", "other"]);
     expect(dealTypesForCategory("generalServices")).toEqual(["sale", "lease", "reservation", "other"]);
-    expect(dealTypesForCategory("realEstate")).toContain("rent");
+    expect(dealTypesForCategory("realEstate")).toEqual([]);
   });
 });

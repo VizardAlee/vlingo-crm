@@ -25,7 +25,7 @@ import {
 } from "@/services/users";
 import type { Branch, BranchAccess, InventoryBrand, Member, RoleName } from "@/types/crm";
 
-const roles = Object.keys(rolePermissions) as RoleName[];
+const roles: RoleName[] = (Object.keys(rolePermissions) as RoleName[]).filter((role) => role !== "propertyManager");
 
 const defaultInvite = {
   branchId: "head-office",

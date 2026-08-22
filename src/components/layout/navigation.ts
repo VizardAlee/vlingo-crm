@@ -9,8 +9,6 @@ import {
   FileText,
   FolderKanban,
   Handshake,
-  Home,
-  Landmark,
   LayoutDashboard,
   ListTodo,
   Mail,
@@ -43,7 +41,6 @@ export const notificationAccessPermissions: Permission[] = [
   "leads.readAssigned",
   "leads.readAll",
   "deals.read",
-  "rentals.read",
   "activities.read",
   "reports.viewFinancial",
 ];
@@ -53,10 +50,6 @@ export const documentAccessPermissions: Permission[] = [
   "leads.readAll",
   "clients.read",
   "deals.read",
-  "properties.read",
-  "units.read",
-  "rentals.read",
-  "development.read",
   "installations.read",
   "marketing.read",
   "offerings.read",
@@ -71,8 +64,6 @@ export const emailSettingsAccessPermissions: Permission[] = [
   "leads.readAll",
   "clients.read",
   "deals.read",
-  "properties.read",
-  "units.read",
   "offerings.read",
   "tasks.read",
   "activities.read",
@@ -86,10 +77,6 @@ export const aiGuideAccessPermissions: Permission[] = [
   "leads.readAll",
   "clients.read",
   "deals.read",
-  "properties.read",
-  "units.read",
-  "rentals.read",
-  "development.read",
   "installations.read",
   "marketing.read",
   "offerings.read",
@@ -130,15 +117,6 @@ export const routeAccessRules: RouteAccessRule[] = [
   { pattern: /^\/deals\/[^/]+\/edit$/, permissions: ["deals.update"] },
   { pattern: /^\/deals(\/[^/]+)?$/, permissions: ["deals.read"] },
 
-  { exact: "/properties/new", permissions: ["properties.create"] },
-  { pattern: /^\/properties\/[^/]+\/edit$/, permissions: ["properties.update"] },
-  { pattern: /^\/properties\/[^/]+\/units$/, permissions: ["units.read"] },
-  { pattern: /^\/properties(\/[^/]+)?$/, permissions: ["properties.read"] },
-
-  { exact: "/units/new", permissions: ["units.create"] },
-  { pattern: /^\/units\/[^/]+\/edit$/, permissions: ["units.update"] },
-  { pattern: /^\/units(\/[^/]+)?$/, permissions: ["units.read"] },
-
   { exact: "/offerings/new", permissions: ["offerings.create"] },
   { exact: "/offerings/import", permissions: ["offerings.create"] },
   { pattern: /^\/offerings\/[^/]+\/edit$/, permissions: ["offerings.update"] },
@@ -148,14 +126,6 @@ export const routeAccessRules: RouteAccessRule[] = [
   { pattern: /^\/installations(\/.*)?$/, permissions: ["installations.read"] },
   { pattern: /^\/installation-invoices(\/.*)?$/, permissions: ["installations.read", "reports.viewFinancial"] },
   { pattern: /^\/pos(\/.*)?$/, permissions: ["pos.read"] },
-
-  { exact: "/rentals/new", permissions: ["rentals.create"] },
-  { pattern: /^\/rentals\/[^/]+\/edit$/, permissions: ["rentals.update"] },
-  { pattern: /^\/rentals(\/[^/]+)?$/, permissions: ["rentals.read"] },
-
-  { exact: "/development/new", permissions: ["development.create"] },
-  { pattern: /^\/development\/[^/]+\/edit$/, permissions: ["development.update"] },
-  { pattern: /^\/development(\/[^/]+)?$/, permissions: ["development.read"] },
 
   { exact: "/marketing/new", permissions: ["marketing.create"] },
   { pattern: /^\/marketing\/[^/]+\/edit$/, permissions: ["marketing.update"] },
@@ -206,10 +176,8 @@ export const navigation: NavSection[] = [
     ],
   },
   {
-    label: "Properties",
+    label: "Catalog & Stock",
     items: [
-      { href: "/properties", icon: Building2, label: "Properties", permissions: ["properties.read"] },
-      { href: "/units", icon: Home, label: "Units", permissions: ["units.read"] },
       { href: "/offerings", icon: Package, label: "Products/Services", permissions: ["offerings.read"] },
       { href: "/inventory", icon: Warehouse, label: "Inventory", permissions: ["inventory.read"] },
     ],
@@ -229,8 +197,6 @@ export const navigation: NavSection[] = [
     items: [
       { href: "/pos", icon: ShoppingCart, label: "Point of Sale", permissions: ["pos.read"] },
       { href: "/finance", icon: Receipt, label: "Finance", permissions: ["reports.viewFinancial"] },
-      { href: "/rentals", icon: Landmark, label: "Rentals", permissions: ["rentals.read"] },
-      { href: "/development", icon: FolderKanban, label: "Development", permissions: ["development.read"] },
       { href: "/marketing", icon: Megaphone, label: "Marketing", permissions: ["marketing.read"] },
     ],
   },
@@ -246,3 +212,9 @@ export const navigation: NavSection[] = [
     ],
   },
 ];
+
+const retiredRoutePrefixes = ["/properties", "/units", "/rentals", "/development"];
+
+export function isRetiredRoute(pathname: string) {
+  return retiredRoutePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}

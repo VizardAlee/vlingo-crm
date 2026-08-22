@@ -202,7 +202,7 @@ function toRows(counts: Record<string, number>) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
 
-async function safeList(organizationId: string, collectionName: "leads" | "propertyUnits" | "tasks", constraints: QueryConstraint[] = []) {
+async function safeList(organizationId: string, collectionName: "leads" | "tasks", constraints: QueryConstraint[] = []) {
   try {
     return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName, constraints);
   } catch {
@@ -253,7 +253,6 @@ export function ReportsDashboard() {
   const [timelineFilter, setTimelineFilter] = useState("all");
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [leads, setLeads] = useState<Record<string, unknown>[]>([]);
-  const [units, setUnits] = useState<Record<string, unknown>[]>([]);
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -325,15 +324,13 @@ export function ReportsDashboard() {
         if (!canViewOrganizationReports) throw new Error("Your role does not include organization-wide reporting.");
         const branchId = effectiveBranchId(member, activeBranchId);
         const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
-        const [nextMetrics, nextLeads, nextUnits, nextTasks] = await Promise.all([
+        const [nextMetrics, nextLeads, nextTasks] = await Promise.all([
           getDashboardMetrics(activeOrganizationId, { branchId }),
           safeList(activeOrganizationId, "leads", branchConstraints),
-          safeList(activeOrganizationId, "propertyUnits", branchConstraints),
           safeList(activeOrganizationId, "tasks", branchConstraints),
         ]);
         setMetrics(nextMetrics);
         setLeads(nextLeads);
-        setUnits(nextUnits);
         setTasks(nextTasks);
       }
     } catch (nextError) {
@@ -385,8 +382,7 @@ export function ReportsDashboard() {
     leadStatus: toRows(countBy(leads, "status")),
     source: toRows(countBy(leads, "source")),
     task: toRows(countBy(tasks, "status")),
-    unit: toRows(countBy(units, "status")),
-  }), [leads, tasks, units]);
+  }), [leads, tasks]);
   const estimatedPipeline = useMemo(() => leads.reduce((total, item) => total + Number(item.budgetMaximum ?? item.budgetMinimum ?? 0), 0), [leads]);
 
   function exportSummary() {
@@ -423,9 +419,6 @@ export function ReportsDashboard() {
       ["Total leads", metrics.totalLeads],
       ["Qualified leads", metrics.qualifiedLeads],
       ["Active clients", metrics.activeClients],
-      ["Active properties", metrics.activeProperties],
-      ["Available units", metrics.availableUnits],
-      ["Reserved units", metrics.reservedUnits],
       ["Overdue follow-ups", metrics.overdueFollowUps],
       ["Estimated pipeline", metrics.pipelineValue],
     ], `vlingo-organization-report-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -445,8 +438,7 @@ export function ReportsDashboard() {
   ] : [];
   const organizationCards = metrics ? [
     ["Total leads", metrics.totalLeads.toLocaleString()], ["Qualified leads", metrics.qualifiedLeads.toLocaleString()],
-    ["Active clients", metrics.activeClients.toLocaleString()], ["Active properties", metrics.activeProperties.toLocaleString()],
-    ["Available units", metrics.availableUnits.toLocaleString()], ["Reserved units", metrics.reservedUnits.toLocaleString()],
+    ["Active clients", metrics.activeClients.toLocaleString()],
     ["Overdue follow-ups", metrics.overdueFollowUps.toLocaleString()], ["Estimated pipeline", formatCurrency(metrics.pipelineValue || estimatedPipeline)],
   ] : [];
   const maxMonthlyRevenue = Math.max(1, ...(personal?.breakdowns.revenueByMonth.map((row) => row.value) ?? []));
@@ -584,7 +576,7 @@ export function ReportsDashboard() {
           <div className="grid gap-4 lg:grid-cols-2">
             <BreakdownCard rows={organizationRows.leadStatus} title="Lead pipeline" /><BreakdownCard rows={organizationRows.source} title="Lead sources" />
             <BreakdownCard rows={metrics.businessPipeline.map((item) => [item.name, item.value])} title="Business pipeline value" /><BreakdownCard rows={metrics.leadInterestCategories.map((item) => [item.name, item.value])} title="Lead interest mix" />
-            <BreakdownCard rows={organizationRows.unit} title="Unit availability" /><BreakdownCard rows={organizationRows.task} title="Task status" />
+            <BreakdownCard rows={organizationRows.task} title="Task status" />
           </div>
         </>
       ) : null}

@@ -34,17 +34,10 @@ const relatedConfigs: RelatedConfig[] = [
   { collection: "deals", label: "Deal", permissions: ["deals.read"], type: "deal" },
   { collection: "leads", label: "Lead", permissions: ["leads.readAssigned", "leads.readAll"], type: "lead" },
   { collection: "clients", label: "Client", permissions: ["clients.read"], type: "client" },
-  { collection: "properties", label: "Property", permissions: ["properties.read"], type: "property" },
-  { collection: "propertyUnits", label: "Unit", permissions: ["units.read"], type: "unit" },
   { collection: "tasks", label: "Task", permissions: ["tasks.read"], type: "task" },
-  { collection: "rentalTenancies", label: "Tenancy", permissions: ["rentals.read"], type: "tenancy" },
-  { collection: "developmentProjects", label: "Development project", permissions: ["development.read"], type: "development" },
   { collection: "installationProjects", label: "Installation project", permissions: ["installations.read"], type: "installationProject" },
   { collection: "marketingCampaigns", label: "Marketing campaign", permissions: ["marketing.read"], type: "marketing" },
   { collection: "offerings", label: "Product/service", permissions: ["offerings.read"], type: "offering" },
-  { collection: "propertyStakeholders", filter: (record) => record.type === "owner", label: "Owner", permissions: ["properties.read"], type: "owner" },
-  { collection: "propertyStakeholders", filter: (record) => record.type === "developer", label: "Developer", permissions: ["properties.read"], type: "developer" },
-  { collection: "propertyStakeholders", filter: (record) => record.type === "management", label: "Management record", permissions: ["properties.read"], type: "management" },
 ];
 
 function documentTourTarget(name: string) {
@@ -54,7 +47,7 @@ function documentTourTarget(name: string) {
 const documentTourSteps: GuidedTourStep[] = [
   { target: documentTourTarget("title"), title: "Document title", body: "Give the file a clear title so the team can recognize it in lists and related records." },
   { target: documentTourTarget("category"), title: "Category", body: "Choose the document category so files stay organized by purpose." },
-  { target: documentTourTarget("relatedType"), title: "Related type", body: "Choose what this document belongs to, such as a lead, client, deal, property, unit, tenancy, task, or product/service." },
+  { target: documentTourTarget("relatedType"), title: "Related type", body: "Choose what this document belongs to, such as a lead, client, deal, installation project, task, or product/service." },
   { target: documentTourTarget("relatedRecord"), title: "Related record", body: "Select the exact record so the document appears on the correct detail page and workflow." },
   { target: documentTourTarget("file"), title: "File", body: "Choose the file from your computer. The upload keeps branch and user metadata." },
   { target: documentTourTarget("upload"), title: "Upload", body: "Upload after checking the title, category, related record, and file." },
@@ -62,7 +55,7 @@ const documentTourSteps: GuidedTourStep[] = [
 
 function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
   if (type === "deal") {
-    const detail = [record.clientName ?? record.leadName, record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
+    const detail = [record.clientName ?? record.leadName, record.offeringName, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.title ?? "Deal")} (${detail})` : String(record.title ?? record.referenceNumber ?? record.id);
   }
 
@@ -71,29 +64,9 @@ function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
     return detail ? `${String(record.fullName ?? "Unnamed")} (${detail})` : String(record.fullName ?? record.referenceNumber ?? record.id);
   }
 
-  if (type === "property") {
-    const detail = [record.city, record.referenceNumber].filter(Boolean).join(" · ");
-    return detail ? `${String(record.name ?? "Property")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
-  }
-
-  if (type === "unit") {
-    const detail = [record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
-    return detail ? `${String(record.unitNumber ?? "Unit")} (${detail})` : String(record.unitNumber ?? record.referenceNumber ?? record.id);
-  }
-
   if (type === "task") {
     const detail = [record.assignedToName, record.dueAt, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.title ?? "Task")} (${detail})` : String(record.title ?? record.referenceNumber ?? record.id);
-  }
-
-  if (type === "tenancy") {
-    const detail = [record.propertyName, record.unitName, record.referenceNumber].filter(Boolean).join(" · ");
-    return detail ? `${String(record.tenantName ?? "Tenant")} (${detail})` : String(record.tenantName ?? record.referenceNumber ?? record.id);
-  }
-
-  if (type === "development") {
-    const detail = [record.propertyName, record.city, record.referenceNumber].filter(Boolean).join(" · ");
-    return detail ? `${String(record.name ?? "Development project")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
   }
 
   if (type === "installationProject") {
@@ -102,7 +75,7 @@ function recordLabel(type: RelatedEntityType, record: Record<string, unknown>) {
   }
 
   if (type === "marketing") {
-    const detail = [record.channel, record.propertyName, record.referenceNumber].filter(Boolean).join(" · ");
+    const detail = [record.channel, record.sourceTag, record.referenceNumber].filter(Boolean).join(" · ");
     return detail ? `${String(record.name ?? "Marketing campaign")} (${detail})` : String(record.name ?? record.referenceNumber ?? record.id);
   }
 
@@ -132,24 +105,8 @@ function routeForRelatedDocument(type: string | undefined, id: string | undefine
     return `/clients/${id}`;
   }
 
-  if (type === "property") {
-    return `/properties/${id}`;
-  }
-
-  if (type === "unit") {
-    return `/units/${id}`;
-  }
-
   if (type === "task") {
     return `/tasks/${id}`;
-  }
-
-  if (type === "tenancy") {
-    return `/rentals/${id}`;
-  }
-
-  if (type === "development") {
-    return `/development/${id}`;
   }
 
   if (type === "installationProject") {

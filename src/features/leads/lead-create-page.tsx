@@ -31,16 +31,13 @@ interface ImportSheet {
   rows: Record<string, unknown>[];
 }
 
-const leadStatuses = ["new", "contacted", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
-const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Property portal", "Event", "Other"];
-const platforms = ["Meta", "Google", "TikTok", "LinkedIn", "PropertyPro", "PrivateProperty", "WhatsApp", "Website", "Manual", "Other"];
-const propertyTypes = ["Apartment", "Terrace", "Detached house", "Semi-detached house", "Bungalow", "Land", "Commercial", "Shortlet", "Office", "Warehouse", "Mixed-use"];
-const interests = ["buy", "rent", "lease", "invest"];
+const leadStatuses = ["new", "contacted", "qualified", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
+const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Event", "Other"];
+const platforms = ["Meta", "Google", "TikTok", "LinkedIn", "WhatsApp", "Website", "Manual", "Other"];
 const paymentPreferences = ["outright", "installment", "mortgage", "leasePlan", "notDecided"];
 const temperatures = ["cold", "warm", "hot"];
 const contactPreferences = ["phone", "whatsapp", "email", "sms"];
 const interestCategories = [
-  { label: "Real estate", value: "realEstate" },
   { label: "Solar", value: "solar" },
   { label: "Building materials", value: "buildingMaterials" },
   { label: "Services / consultancy", value: "generalServices" },
@@ -56,19 +53,17 @@ const manualLeadTourSteps: GuidedTourStep[] = [
   { target: leadTourTarget("contact"), title: "Contact details", body: "Start with the lead name and reachable phone, WhatsApp, or email details so follow-up is reliable." },
   { target: leadTourTarget("source"), title: "Source tracking", body: "Record where the lead came from so marketing and sales reports can show what is working." },
   { target: leadTourTarget("interest"), title: "Interest category", body: "Choose the category first. The rest of the form changes to show the fields that fit that type of interest." },
-  { target: leadTourTarget("linkedOffering"), title: "Linked product/service", body: "For non-real-estate leads, link the product, service, solar package, installation, or consultancy item when known." },
-  { target: leadTourTarget("realEstatePreference"), title: "Real estate preference", body: "For real-estate leads, capture transaction interest, property type, category, bedrooms, and inspection expectations." },
-  { target: leadTourTarget("linkedProperty"), title: "Linked property or unit", body: "Link the exact property or unit when the lead is asking about a known listing. This context can later flow into deals." },
+  { target: leadTourTarget("linkedOffering"), title: "Linked product/service", body: "Link the product, service, solar package, installation, or consultancy item when known." },
   { target: leadTourTarget("budget"), title: "Budget and location", body: "Capture location, currency, budget range, and payment preference so matching and qualification are easier." },
   { target: leadTourTarget("geotag"), title: "Geotag location", body: "Capture the lead's site or preferred location from the device GPS when field teams need map visibility." },
-  { target: leadTourTarget("workflow"), title: "Workflow status", body: "Set status, score, follow-up date, and inspection date to keep the pipeline actionable." },
+  { target: leadTourTarget("workflow"), title: "Workflow status", body: "Set status, score, and follow-up date to keep the pipeline actionable." },
   { target: leadTourTarget("notes"), title: "Notes and referral", body: "Add referral details, tags, and notes that help the assigned user understand the conversation." },
   { target: leadTourTarget("save"), title: "Create lead", body: "Save the lead after reviewing the details. The system records creator, branch, assignment, and linked product/service context." },
 ];
 
 const quickLeadTourSteps: GuidedTourStep[] = [
   { target: leadTourTarget("contact"), title: "Essential contact", body: "Capture the lead's name, reachable phone number, interest category, and source." },
-  { target: leadTourTarget("interest"), title: "Immediate interest", body: "Add the known property, unit, product/service, need, or transaction interest without completing a long profile." },
+  { target: leadTourTarget("interest"), title: "Immediate interest", body: "Add the known product/service and customer need without completing a long profile." },
   { target: leadTourTarget("notes"), title: "Next action", body: "Record a follow-up date and the key details another team member needs for the next conversation." },
   { target: leadTourTarget("save"), title: "Save lead", body: "Save the essential record now. More qualification details can be added from the lead page later." },
 ];
@@ -124,7 +119,7 @@ const defaultLead: LeadFormState = {
   sourceReference: "",
   status: "new",
   tags: "",
-  transactionInterest: "buy",
+  transactionInterest: "",
   unitId: "",
   unitName: "",
   whatsappNumber: "",
@@ -188,18 +183,9 @@ const importFields = [
   { key: "campaignName", label: "Campaign name" },
   { key: "sourceReference", label: "External reference" },
   { key: "interestCategory", label: "Interest category" },
-  { key: "transactionInterest", label: "Transaction interest" },
-  { key: "propertyId", label: "Property ID" },
-  { key: "propertyName", label: "Property name" },
-  { key: "propertyReferenceNumber", label: "Property reference" },
-  { key: "unitId", label: "Unit ID" },
-  { key: "unitName", label: "Unit name/number" },
   { key: "offeringId", label: "Product/service ID" },
   { key: "offeringName", label: "Product/service name" },
   { key: "offeringReferenceNumber", label: "Product/service reference / SKU" },
-  { key: "propertyType", label: "Property type" },
-  { key: "preferredPropertyCategory", label: "Property category" },
-  { key: "preferredBedrooms", label: "Bedrooms" },
   { key: "preferredLocation", label: "Preferred location" },
   { key: "preferredState", label: "State" },
   { key: "preferredCity", label: "City" },
@@ -216,7 +202,6 @@ const importFields = [
   { key: "score", label: "Score" },
   { key: "leadTemperature", label: "Lead temperature" },
   { key: "nextFollowUpAt", label: "Next follow-up" },
-  { key: "preferredInspectionDate", label: "Preferred inspection" },
   { key: "referralName", label: "Referral name" },
   { key: "referralPhone", label: "Referral phone" },
   { key: "assignedTo", label: "Assignee" },
@@ -491,12 +476,8 @@ function downloadTemplate() {
     "sourcePlatform",
     "campaignName",
     "interestCategory",
-    "transactionInterest",
-    "propertyReferenceNumber",
-    "unitName",
     "offeringReferenceNumber",
     "offeringName",
-    "propertyType",
     "preferredLocation",
     "preferredState",
     "preferredCity",
@@ -514,23 +495,20 @@ function downloadTemplate() {
     "ada@example.com",
     "Facebook",
     "Meta",
-    "Lekki Q2 Campaign",
-    "realEstate",
-    "buy",
-    "PROP-2026-001",
-    "Block A - Unit 3",
+    "August Solar Campaign",
+    "solar",
     "OFR-2026-001",
     "5kVA Solar Installation Package",
-    "Apartment",
-    "Lekki Phase 1",
-    "Lagos",
-    "Lagos",
-    "25000000",
-    "50000000",
+    "Commercial solar installation",
+    "Kaduna",
+    "Kaduna",
+    "Kaduna",
+    "5000000",
+    "12000000",
     "hot",
     "2026-06-10",
-    "Interested in 3-bedroom apartments",
-    "buyer,lekki",
+    "Interested in a complete installation package",
+    "solar,installation",
   ];
   const csv = [headers, example].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -573,26 +551,10 @@ export function LeadCreatePage() {
   const assignableMembers = useMemo(() => members.filter((item) => (
     item.status === "active" && (canAccessAllBranches(member) || item.branchId === branchId)
   )), [branchId, member, members]);
-  const propertyOptions = useMemo(
-    () => properties.map((property) => {
-      const detail = [property.city, property.referenceNumber].filter(Boolean).join(" · ");
-      return { label: detail ? `${property.name} (${detail})` : property.name, value: property.id };
-    }),
-    [properties],
-  );
-  const unitOptions = useMemo(
-    () => propertyUnits
-      .filter((unit) => !values.propertyId || unit.propertyId === values.propertyId)
-      .map((unit) => {
-        const detail = [unit.propertyName, unit.referenceNumber].filter(Boolean).join(" · ");
-        return { label: detail ? `${unit.unitNumber} (${detail})` : unit.unitNumber, value: unit.id };
-      }),
-    [propertyUnits, values.propertyId],
-  );
   const offeringOptions = useMemo(
     () => offerings
       .filter((offering) => String(offering.status ?? "active") === "active")
-      .filter((offering) => !values.interestCategory || values.interestCategory === "realEstate" || offering.vertical === values.interestCategory)
+      .filter((offering) => !values.interestCategory || offering.vertical === values.interestCategory)
       .map((offering) => {
         const detail = [offering.vertical, offering.type, offering.referenceNumber].filter(Boolean).join(" · ");
         return { label: detail ? `${offering.name} (${detail})` : offering.name, value: offering.id };
@@ -601,7 +563,6 @@ export function LeadCreatePage() {
   );
   const validPreviewRows = preview.filter((row) => row.errors.length === 0);
   const hasInterestCategory = Boolean(values.interestCategory);
-  const isRealEstateInterest = values.interestCategory === "realEstate";
   const selectedBranchName = branchOptions.find((branch) => branch.id === branchId)?.name ?? "Current branch";
   const selectedAssigneeName = assignableMembers.find((item) => item.id === values.assignedTo)?.displayName ?? member?.displayName ?? "Current user";
 
@@ -621,11 +582,9 @@ export function LeadCreatePage() {
     setLoading(true);
     setError(null);
     try {
-      const [nextBranches, nextMembers, nextProperties, nextPropertyUnits, nextOfferings] = await Promise.all([
+      const [nextBranches, nextMembers, nextOfferings] = await Promise.all([
         listBranches(activeOrganizationId),
         listMembers(activeOrganizationId),
-        listOrgRecords<Property>(activeOrganizationId, "properties", optionBranchConstraints).catch(() => []),
-        listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", optionBranchConstraints).catch(() => []),
         listOrgRecords<Offering>(activeOrganizationId, "offerings", optionBranchConstraints).catch(() => []),
       ]);
       const visibleBranches = canAccessAllBranches(member) ? nextBranches : nextBranches.filter((branch) => branch.id === member?.branchId);
@@ -633,8 +592,8 @@ export function LeadCreatePage() {
       setBranches(nextBranches);
       setMembers(nextMembers);
       setOfferings(canAccessAllBranches(member) ? nextOfferings : nextOfferings.filter((offering) => offering.branchId === nextBranchId));
-      setProperties(canAccessAllBranches(member) ? nextProperties : nextProperties.filter((property) => property.branchId === nextBranchId));
-      setPropertyUnits(canAccessAllBranches(member) ? nextPropertyUnits : nextPropertyUnits.filter((unit) => unit.branchId === nextBranchId));
+      setProperties([]);
+      setPropertyUnits([]);
       setBranchId((current) => current && visibleBranches.some((branch) => branch.id === current) ? current : nextBranchId);
       setValues((current) => {
         const branchMembers = nextMembers.filter((item) => item.status === "active" && (canAccessAllBranches(member) || item.branchId === nextBranchId));
@@ -986,12 +945,7 @@ export function LeadCreatePage() {
                     {interestCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </Select>
                 </Field> : null}
-                {captureMode === "quick" && isRealEstateInterest ? <Field label="Looking to">
-                  <Select value={values.transactionInterest} onChange={(event) => updateField("transactionInterest", event.target.value)}>
-                    {interests.map((item) => <option key={item} value={item}>{item}</option>)}
-                  </Select>
-                </Field> : null}
-                {hasInterestCategory && !isRealEstateInterest ? (
+                {hasInterestCategory ? (
                   <div data-tour={leadTourTarget("linkedOffering")}>
                   <Field label="Linked product/service">
                     <Select value={values.offeringId} onChange={(event) => updateField("offeringId", event.target.value)}>
@@ -1001,50 +955,12 @@ export function LeadCreatePage() {
                   </Field>
                   </div>
                 ) : null}
-                {hasInterestCategory && !isRealEstateInterest ? <Field label="Need / use case"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field> : null}
-                {hasInterestCategory && !isRealEstateInterest ? <Field label="Location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
+                {hasInterestCategory ? <Field label="Need / use case"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field> : null}
+                {hasInterestCategory ? <Field label="Location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
               </div> : null}
-
-              {captureMode === "full" && isRealEstateInterest ? (
-              <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("realEstatePreference")}>
-                <Field label="Transaction interest">
-                  <Select value={values.transactionInterest} onChange={(event) => updateField("transactionInterest", event.target.value)}>
-                    {interests.map((item) => <option key={item} value={item}>{item}</option>)}
-                  </Select>
-                </Field>
-                <Field label="Property type">
-                  <Select value={values.propertyType} onChange={(event) => updateField("propertyType", event.target.value)}>
-                    <option value="">Select type</option>
-                    {propertyTypes.map((item) => <option key={item} value={item}>{item}</option>)}
-                  </Select>
-                </Field>
-                <Field label="Property category"><Input value={values.preferredPropertyCategory} onChange={(event) => updateField("preferredPropertyCategory", event.target.value)} /></Field>
-                <Field label="Bedrooms"><Input min="0" type="number" value={values.preferredBedrooms} onChange={(event) => updateField("preferredBedrooms", event.target.value)} /></Field>
-              </div>
-              ) : null}
-
-              {isRealEstateInterest ? (
-              <div className="grid gap-4 rounded-md border bg-muted/30 p-4 lg:grid-cols-2" data-tour={leadTourTarget("linkedProperty")}>
-                <Field label="Linked property">
-                  <Select value={values.propertyId} onChange={(event) => updateField("propertyId", event.target.value)}>
-                    <option value="">Select property</option>
-                    {propertyOptions.map((property) => <option key={property.value} value={property.value}>{property.label}</option>)}
-                  </Select>
-                </Field>
-                <Field label="Linked unit">
-                  <Select value={values.unitId} onChange={(event) => updateField("unitId", event.target.value)}>
-                    <option value="">Select unit</option>
-                    {unitOptions.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
-                  </Select>
-                </Field>
-              </div>
-              ) : null}
 
               {captureMode === "full" && hasInterestCategory ? (
               <div className="grid gap-4 lg:grid-cols-4" data-tour={leadTourTarget("budget")}>
-                {isRealEstateInterest ? <Field label="Preferred location"><Input value={values.preferredLocation} onChange={(event) => updateField("preferredLocation", event.target.value)} /></Field> : null}
-                {isRealEstateInterest ? <Field label="State"><Input value={values.preferredState} onChange={(event) => updateField("preferredState", event.target.value)} /></Field> : null}
-                {isRealEstateInterest ? <Field label="City"><Input value={values.preferredCity} onChange={(event) => updateField("preferredCity", event.target.value)} /></Field> : null}
                 <Field label="Currency"><Input value={values.preferredBudgetCurrency} onChange={(event) => updateField("preferredBudgetCurrency", event.target.value)} /></Field>
                 <Field label="Budget minimum"><Input min="0" type="number" value={values.budgetMinimum} onChange={(event) => updateField("budgetMinimum", event.target.value)} /></Field>
                 <Field label="Budget maximum"><Input min="0" type="number" value={values.budgetMaximum} onChange={(event) => updateField("budgetMaximum", event.target.value)} /></Field>
@@ -1053,7 +969,6 @@ export function LeadCreatePage() {
                     {paymentPreferences.map((item) => <option key={item} value={item}>{item}</option>)}
                   </Select>
                 </Field>
-                {isRealEstateInterest ? <Field label="Intended use"><Input value={values.intendedUse} onChange={(event) => updateField("intendedUse", event.target.value)} /></Field> : null}
               </div>
               ) : null}
 
@@ -1117,7 +1032,6 @@ export function LeadCreatePage() {
                 </Field>
                 <Field label="Score"><Input max="100" min="0" type="number" value={values.score} onChange={(event) => updateField("score", event.target.value)} /></Field>
                 <Field label="Next follow-up"><Input type="date" value={values.nextFollowUpAt} onChange={(event) => updateField("nextFollowUpAt", event.target.value)} /></Field>
-                {isRealEstateInterest ? <Field label="Preferred inspection"><Input type="date" value={values.preferredInspectionDate} onChange={(event) => updateField("preferredInspectionDate", event.target.value)} /></Field> : null}
               </div>
               ) : null}
 
@@ -1213,7 +1127,7 @@ export function LeadCreatePage() {
                         <Badge tone={row.errors.length ? "danger" : "success"}>{row.errors.length ? "Issue" : "Valid"}</Badge>
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground">{String(row.data.phoneNumber ?? "No phone")} · {String(row.data.source ?? "No source")}</p>
-                      {row.data.propertyName || row.data.unitName || row.data.offeringName ? <p className="mt-1 text-sm text-muted-foreground">{[row.data.offeringName, row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ")}</p> : null}
+                      {row.data.offeringName ? <p className="mt-1 text-sm text-muted-foreground">{String(row.data.offeringName)}</p> : null}
                       {row.errors.length ? <p className="mt-2 text-sm text-destructive">{row.errors.join(" · ")}</p> : null}
                     </div>
                   ))}
@@ -1241,7 +1155,7 @@ export function LeadCreatePage() {
                           </td>
                           <td className="px-4 py-3">{String(row.data.phoneNumber ?? "")}</td>
                           <td className="px-4 py-3">{String(row.data.source ?? "")}</td>
-                          <td className="px-4 py-3">{[row.data.offeringName, row.data.unitName, row.data.propertyName].filter(Boolean).join(" · ") || "Not linked"}</td>
+                          <td className="px-4 py-3">{String(row.data.offeringName || "Not linked")}</td>
                           <td className="px-4 py-3">{String(row.data.transactionInterest ?? "")}</td>
                           <td className="px-4 py-3"><Badge tone={row.errors.length ? "danger" : "success"}>{row.errors.length ? "Needs fix" : "Ready"}</Badge></td>
                         </tr>

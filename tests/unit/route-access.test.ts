@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessRuleForPath, navigation, reportsAccessPermissions } from "../../src/components/layout/navigation";
+import { accessRuleForPath, isRetiredRoute, navigation, reportsAccessPermissions } from "../../src/components/layout/navigation";
 import { defaultAppRoute, hasAnyPermission, hasNotificationOversight, hasOrganizationReportAccess, hasPermission, rolePermissions } from "../../src/lib/permissions";
 import type { Member } from "../../src/types/crm";
 
@@ -39,6 +39,16 @@ describe("route access rules", () => {
       expect(rule, `${link.href} should have a route access rule`).toBeDefined();
       expect(new Set(rule?.permissions), `${link.href} should use the same permissions in navigation and route guard`).toEqual(new Set(link.permissions));
     }
+  });
+
+  it("retires property and real-estate routes from the active application", () => {
+    const links = navigation.flatMap((section) => section.items).map((item) => item.href);
+    expect(links).not.toEqual(expect.arrayContaining(["/properties", "/units", "/rentals", "/development"]));
+    expect(isRetiredRoute("/properties/new")).toBe(true);
+    expect(isRetiredRoute("/units/unit-1")).toBe(true);
+    expect(isRetiredRoute("/rentals")).toBe(true);
+    expect(isRetiredRoute("/development/project-1")).toBe(true);
+    expect(isRetiredRoute("/inventory")).toBe(false);
   });
 
   it("keeps super admin unrestricted even when explicit permissions are missing", () => {

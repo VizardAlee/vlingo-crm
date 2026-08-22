@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
-import { accessRuleForPath, navigation, notificationAccessPermissions } from "@/components/layout/navigation";
+import { accessRuleForPath, isRetiredRoute, navigation, notificationAccessPermissions } from "@/components/layout/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { BrowserNotificationListener } from "@/features/notifications/browser-notification-listener";
 import { NotificationMenu } from "@/features/notifications/notification-menu";
@@ -50,6 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const currentAccessRule = useMemo(() => accessRuleForPath(pathname), [pathname]);
   const canViewCurrentRoute = !currentAccessRule || hasAnyPermission(member, currentAccessRule.permissions);
   const shouldRedirectFromDashboard = pathname === "/dashboard" && Boolean(member) && !canViewCurrentRoute;
+  const shouldRedirectRetiredRoute = isRetiredRoute(pathname) && Boolean(member);
   const canCreateLead = hasPermission(member, "leads.create");
   const canViewNotifications = hasAnyPermission(member, notificationAccessPermissions);
   const isBrandPartner = memberRoles(member).includes("brandPartner");
@@ -64,6 +65,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       router.replace(defaultAppRoute(member));
     }
   }, [member, router, shouldRedirectFromDashboard]);
+
+  useEffect(() => {
+    if (shouldRedirectRetiredRoute) {
+      router.replace("/dashboard");
+    }
+  }, [router, shouldRedirectRetiredRoute]);
 
   useEffect(() => {
     const currentUserId = user?.uid;
@@ -142,7 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const flatNavigation = visibleNavigation.flatMap((section) => section.items);
-  const primaryMobileHrefs = ["/dashboard", "/leads", "/properties", "/tasks"];
+  const primaryMobileHrefs = ["/dashboard", "/leads", "/inventory", "/tasks"];
   const primaryMobileNavigation = primaryMobileHrefs
     .map((href) => flatNavigation.find((item) => item.href === href))
     .filter((item) => item !== undefined);
@@ -336,7 +343,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div className="hidden min-w-0 flex-1 items-center gap-3 md:flex">
               <Search className="h-4 w-4 text-muted-foreground" />
-              <Input aria-label="Global search" placeholder="Search leads, clients, properties, tasks" />
+              <Input aria-label="Global search" placeholder="Search leads, clients, products, tasks" />
             </div>
             {!isBrandPartner ? <Select aria-label="Branch selector" className="hidden w-40 md:block" value={activeBranchId} onChange={(event) => setActiveBranchId(event.target.value)}>
               {visibleBranches.length ? visibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>) : (
@@ -389,7 +396,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {firebaseReady ? (memberLoadError ? (
             <ErrorState message={memberLoadError} />
-          ) : shouldRedirectFromDashboard ? <LoadingState /> : canViewCurrentRoute ? children : (
+          ) : shouldRedirectFromDashboard || shouldRedirectRetiredRoute ? <LoadingState /> : canViewCurrentRoute ? children : (
             <PermissionDenied
               currentPermissions={member?.permissions ?? []}
               memberRole={member?.roles?.join(", ") || member?.role}

@@ -31,7 +31,7 @@ const updates = [
     title: "Performance reports",
   },
   {
-    description: "Products/Services supports property, solar, building materials, installation, maintenance, consultancy, and other sellable work. Leads and dynamic deals carry this context into Finance.",
+    description: "Products/Services supports solar, building materials, installation, maintenance, consultancy, and other sellable work. Leads and dynamic deals carry this context into Finance.",
     icon: Package,
     title: "Broader sales workflows",
   },

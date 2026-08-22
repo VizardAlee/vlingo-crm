@@ -4,7 +4,6 @@ import {
   Activity,
   ArrowRight,
   BarChart3,
-  Building2,
   CheckCircle2,
   ClipboardCheck,
   Factory,
@@ -24,13 +23,13 @@ import { ButtonLink } from "@/components/ui/button";
 
 const workflows = [
   { icon: Users, label: "Capture", text: "Leads, sources, interests, follow-ups, and assignments." },
-  { icon: Building2, label: "Match", text: "Properties, units, products/services, inventory, and service categories." },
-  { icon: Handshake, label: "Close", text: "Deals, negotiations, inspections, approvals, and pipeline stages." },
+  { icon: Package, label: "Match", text: "Products, services, inventory, brands, and service categories." },
+  { icon: Handshake, label: "Close", text: "Deals, negotiations, proposals, approvals, and pipeline stages." },
   { icon: Landmark, label: "Account", text: "Payments, receipts, expenses, commissions, and finance checks." },
 ];
 
 const modules = [
-  { icon: Building2, title: "Real estate operations", text: "Properties, units, rentals, inspections, documents, and deal finance stay connected." },
+  { icon: Package, title: "Inventory and point of sale", text: "Track stock across branches, record movements and sales, and generate invoices and receipts." },
   { icon: Factory, title: "Building materials funnel", text: "Track prospects, product interest, quotations, order readiness, and sales follow-up." },
   { icon: SunMedium, title: "Solar business workflows", text: "Manage consultation, installation, projects, equipment sales, and after-sales activity." },
   { icon: ShieldCheck, title: "Roles and branches", text: "Give every team member the right view, right branch scope, and right action level." },
@@ -43,7 +42,7 @@ const metrics = [
   ["Tasks due", "14", "today"],
 ];
 
-const lanes = ["Lead", "Property", "Deal", "Finance"];
+const lanes = ["Lead", "Product", "Deal", "Finance"];
 
 const commandCenterStats = [
   { icon: Users, label: "Leads", value: "128" },
@@ -95,7 +94,7 @@ export default function HomePage() {
               <span className="text-xs font-semibold text-white/70">Team activity</span>
               <Activity className="h-4 w-4 text-[#c9a23d]" />
             </div>
-            {["New solar consultation", "Property viewing booked", "Material quote approved", "Receipt verified"].map((item, index) => (
+            {["New solar consultation", "Stock transfer completed", "Material quote approved", "Receipt verified"].map((item, index) => (
               <div className="landing-activity" key={item} style={{ animationDelay: `${index * 300}ms` }}>
                 <CheckCircle2 className="h-4 w-4 text-[#c9a23d]" />
                 <span>{item}</span>
@@ -131,7 +130,7 @@ export default function HomePage() {
               Vlingo Systems CRM for sales, operations, finance, and field execution.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/74 md:text-lg">
-              Run real estate, building materials, solar projects, service pipelines, tasks, receipts, documents, approvals, and branch-controlled team activity from one connected workspace.
+              Run inventory, point of sale, building materials, solar projects, service pipelines, tasks, receipts, documents, approvals, and branch-controlled team activity from one connected workspace.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <ButtonLink className="h-12 px-5" href="/login">
@@ -150,7 +149,7 @@ export default function HomePage() {
         <div>
           <p className="text-sm font-semibold uppercase text-primary">Connected journey</p>
           <h2 className="mt-3 text-3xl font-semibold md:text-4xl">One record chain from first enquiry to final receipt.</h2>
-          <p className="mt-4 text-base leading-7 text-muted-foreground">Every lead can point to the right product, property, unit, project, or service. Deals inherit context, finance records reference the commercial source, and activities keep the team honest.</p>
+          <p className="mt-4 text-base leading-7 text-muted-foreground">Every lead can point to the right product, project, or service. Deals inherit context, finance records reference the commercial source, and activities keep the team honest.</p>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
           {workflows.map((item, index) => (
@@ -168,7 +167,7 @@ export default function HomePage() {
           <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
             <div className="max-w-2xl">
               <p className="text-sm font-semibold uppercase text-primary">Industry-ready scope</p>
-              <h2 className="mt-3 text-3xl font-semibold md:text-4xl">Designed for property workflows, flexible enough for broader commercial operations.</h2>
+              <h2 className="mt-3 text-3xl font-semibold md:text-4xl">Designed for connected sales, stock, service, project, and finance operations.</h2>
             </div>
             <div className="flex items-center gap-2 rounded-md border bg-[#f7f8f3] px-3 py-2 text-sm font-medium text-secondary">
               <LockKeyhole className="h-4 w-4 text-primary" />

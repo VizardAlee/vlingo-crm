@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { where, type QueryConstraint } from "firebase/firestore";
-import { AlertTriangle, Bell, CheckCircle2, Clock, FileClock, ListTodo, MessageSquare, RefreshCw, WalletCards } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, Clock, ListTodo, MessageSquare, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,13 @@ import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
 import { browserNotificationPermission, requestBrowserNotificationPermission } from "@/features/notifications/browser-notification-listener";
 import { effectiveBranchId, hasAnyPermission, hasNotificationOversight, hasPermission } from "@/lib/permissions";
-import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
+import { cn, formatDate, titleCase } from "@/lib/utils";
 import { ensureUserNotifications, listUserNotifications, markNotificationRead, markNotificationsRead, type NotificationDraft } from "@/services/notifications";
 import { registerPushSubscription, removePushSubscription } from "@/services/push-notifications";
 import { listOrgRecords } from "@/services/repository";
 import type { AppNotification, NotificationKind, NotificationTone } from "@/types/crm";
 
 const upcomingWindowDays = 7;
-const renewalWindowDays = 60;
 const notificationsChangedEvent = "beacon:notifications-changed";
 
 function parseDate(value: unknown) {
@@ -105,24 +104,8 @@ function routeForActivity(type: unknown, id: unknown) {
     return `/clients/${entityId}`;
   }
 
-  if (type === "property") {
-    return `/properties/${entityId}`;
-  }
-
-  if (type === "unit") {
-    return `/units/${entityId}`;
-  }
-
   if (type === "task") {
     return `/tasks/${entityId}`;
-  }
-
-  if (type === "tenancy") {
-    return `/rentals/${entityId}`;
-  }
-
-  if (type === "development") {
-    return `/development/${entityId}`;
   }
 
   if (type === "marketing") {
@@ -147,14 +130,6 @@ function notificationIcon(kind: NotificationKind) {
 
   if (kind === "lead") {
     return Bell;
-  }
-
-  if (kind === "rent") {
-    return WalletCards;
-  }
-
-  if (kind === "renewal") {
-    return FileClock;
   }
 
   return MessageSquare;
@@ -192,7 +167,7 @@ export function NotificationsCenter() {
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<"idle" | "registering" | "enabled">("idle");
   const registrationAttempted = useRef(false);
-  const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "deals.read", "rentals.read", "activities.read", "reports.viewFinancial"]);
+  const canViewNotifications = hasAnyPermission(member, ["tasks.read", "leads.readAssigned", "leads.readAll", "deals.read", "activities.read", "reports.viewFinancial"]);
   const context = useMemo(
     () => user ? { branchId: activeBranchId, organizationId: activeOrganizationId, userId: user.uid } : null,
     [activeBranchId, activeOrganizationId, user],
@@ -213,18 +188,15 @@ export function NotificationsCenter() {
       const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
       const taskConstraints = canReadElevatedTasks ? branchConstraints : [...branchConstraints, where("assignedTo", "==", user.uid)];
       const leadConstraints = canReadAllLeads && hasOversight ? branchConstraints : [...branchConstraints, where("assignedTo", "==", user.uid)];
-      const [tasks, leads, rentalRecords, activityRecords] = await Promise.all([
+      const [tasks, leads, activityRecords] = await Promise.all([
         hasPermission(member, "tasks.read") ? safeList(activeOrganizationId, "tasks", taskConstraints) : [],
         hasAnyPermission(member, ["leads.readAssigned", "leads.readAll"]) ? safeList(activeOrganizationId, "leads", leadConstraints) : [],
-        hasPermission(member, "rentals.read") ? safeList(activeOrganizationId, "rentalTenancies", branchConstraints) : [],
         hasPermission(member, "activities.read") ? safeList(activeOrganizationId, "activities", branchConstraints) : [],
       ]);
       const relatedRecords = new Set([
         ...tasks.map((task) => `task:${task.id}`),
         ...leads.map((lead) => `lead:${lead.id}`),
       ]);
-      const rentals = hasOversight ? rentalRecords : rentalRecords.filter((rental) => recordRelatesToUser(rental, user.uid));
-      rentals.forEach((rental) => relatedRecords.add(`tenancy:${rental.id}`));
       const activities = hasOversight
         ? activityRecords
         : activityRecords.filter((activity) => recordRelatesToUser(activity, user.uid, relatedRecords));
@@ -271,46 +243,6 @@ export function NotificationsCenter() {
             sourceId: lead.id,
             title: `Follow up ${String(lead.fullName ?? "lead")}`,
             tone: followUpDays < 0 ? "danger" : "warning",
-          });
-        }
-      });
-
-      rentals.forEach((rental) => {
-        if (!isOpenStatus(rental.status)) {
-          return;
-        }
-
-        const rentDays = daysUntil(rental.nextRentDueDate);
-        const paymentStatus = String(rental.paymentStatus ?? "notInvoiced");
-        if (paymentStatus === "overdue" || (rentDays !== null && rentDays <= upcomingWindowDays)) {
-          const overdue = paymentStatus === "overdue" || (rentDays !== null && rentDays < 0);
-          generated.push({
-            body: `${formatCurrency(Number(rental.rentAmount ?? 0))} · ${compactDueLabel(rental.nextRentDueDate)}`,
-            triggerAt: parseDate(rental.nextRentDueDate),
-            href: `/rentals/${rental.id}`,
-            dedupeKey: `rent:${rental.id}:${String(rental.nextRentDueDate ?? "")}:${paymentStatus}`,
-            kind: "rent",
-            recipientId: user.uid,
-            sourceCollection: "rentalTenancies",
-            sourceId: rental.id,
-            title: `Rent due: ${String(rental.tenantName ?? rental.referenceNumber ?? "Tenant")}`,
-            tone: overdue ? "danger" : "warning",
-          });
-        }
-
-        const leaseDays = daysUntil(rental.leaseEndDate);
-        if (leaseDays !== null && leaseDays <= renewalWindowDays) {
-          generated.push({
-            body: `Lease ends ${dateLabel(rental.leaseEndDate)} · ${leaseDays < 0 ? `${Math.abs(leaseDays)} days expired` : `${leaseDays} days left`}`,
-            triggerAt: parseDate(rental.leaseEndDate),
-            href: `/rentals/${rental.id}`,
-            dedupeKey: `renewal:${rental.id}:${String(rental.leaseEndDate ?? "")}`,
-            kind: "renewal",
-            recipientId: user.uid,
-            sourceCollection: "rentalTenancies",
-            sourceId: rental.id,
-            title: `Renewal review: ${String(rental.tenantName ?? rental.referenceNumber ?? "Tenant")}`,
-            tone: leaseDays < 0 ? "danger" : leaseDays <= 14 ? "warning" : "info",
           });
         }
       });

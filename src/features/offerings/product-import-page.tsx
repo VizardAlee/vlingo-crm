@@ -336,8 +336,8 @@ export function ProductImportPage() {
           <details className="mt-2">
             <summary className="cursor-pointer font-semibold text-foreground">Accepted type values</summary>
             <div className="mt-2 grid gap-1 text-xs">
-              <p><strong>Business vertical:</strong> Real estate, Solar, Building materials, General services, or Custom.</p>
-              <p><strong>Product/service type:</strong> Property, Unit, Material, Solar equipment, Solar service, Installation project, Consultancy, Maintenance, Service, or Other.</p>
+              <p><strong>Business vertical:</strong> Solar, Building materials, General services, or Custom.</p>
+              <p><strong>Product/service type:</strong> Material, Solar equipment, Solar service, Installation project, Consultancy, Maintenance, Service, or Other.</p>
               <p><strong>Traceability:</strong> None, Batch, or Serial. <strong>Status:</strong> Active, Draft, Inactive, or Archived.</p>
               <p>Inventory products must reference an active brand already configured in Inventory. Brand and branch values may use their name, code, or system ID.</p>
             </div>

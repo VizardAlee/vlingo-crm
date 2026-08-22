@@ -35,7 +35,7 @@ const dealFieldGuideText: Record<string, string> = {
   depositAmount: "Capture the upfront deposit or initial commitment amount when the deal requires one.",
   expectedCloseDate: "Set the date the team expects this deal to close. This supports planning, reporting, and follow-up priority.",
   financeStatus: "Track whether the deal is not invoiced, pending payment, partly paid, paid, or overdue.",
-  fulfillmentDueDate: "Set the expected delivery, installation, service, or handover date for non-property and service deals.",
+  fulfillmentDueDate: "Set the expected delivery, installation, service, or handover date.",
   fulfillmentStatus: "Track the operational stage after the commercial terms are agreed, such as procurement, scheduled, delivered, or completed.",
   leadId: "Link the original lead when this deal started from an enquiry. This preserves source history and avoids duplicate entry.",
   legalStatus: "Track legal document progress where contracts, leases, sale documents, or agreements are required.",
@@ -47,13 +47,11 @@ const dealFieldGuideText: Record<string, string> = {
   offeringUnitPrice: "Enter the price per unit or service item. The quote subtotal is calculated from quantity and unit price.",
   paymentPlan: "Describe installment terms, payment milestones, or any agreed schedule for collection.",
   proposalStatus: "Track whether a proposal or quotation is being drafted, sent, accepted, rejected, or expired.",
-  propertyId: "Link the property involved in a real-estate deal so finance, documents, inspections, and activities share context.",
   quoteSubtotal: "This is calculated from quantity and unit price. It gives the commercial subtotal for catalog-based deals.",
-  reservationAmount: "Capture the reservation amount for deals where the customer is holding a property, unit, product, or service slot.",
+  reservationAmount: "Capture the reservation amount when the customer is holding a product, service slot, or scheduled project capacity.",
   scopeOfWork: "Describe the service, installation, project, order, or fulfillment scope agreed with the customer.",
   status: "Set the deal stage so the pipeline, dashboards, and follow-up workflows stay accurate.",
   title: "Give the opportunity a clear name that sales, finance, and management can recognize in lists and receipts.",
-  unitId: "Link the exact unit when the deal is for a specific apartment, shop, land plot, or other inventory unit.",
 };
 
 export function formTourSteps(config: ModuleConfig, visibleFields: ModuleConfig["fields"] = config.fields): GuidedTourStep[] {

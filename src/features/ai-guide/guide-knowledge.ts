@@ -22,13 +22,9 @@ const guideAreaPermissions = [
   ["Leads and Lead Locations", ["leads.readAssigned", "leads.readAll"]],
   ["Clients", ["clients.read"]],
   ["Deals", ["deals.read"]],
-  ["Properties", ["properties.read"]],
-  ["Units", ["units.read"]],
   ["Products/Services", ["offerings.read"]],
   ["Inventory", ["inventory.read"]],
   ["Point of Sale", ["pos.read"]],
-  ["Rentals", ["rentals.read"]],
-  ["Development", ["development.read"]],
   ["Installation Projects", ["installations.read"]],
   ["Marketing", ["marketing.read"]],
   ["Tasks and Google Calendar", ["tasks.read"]],
@@ -162,9 +158,9 @@ export const guideTopics: GuideTopic[] = [
     title: "Understand the CRM concept",
     steps: [
       "CRM means Customer Relationship Management. It is the system and process a company uses to track prospects, clients, conversations, deals, tasks, and revenue.",
-      "A lead is an early opportunity: someone interested in a property, solar solution, material, installation, consultancy, or service.",
+      "A lead is an early opportunity: someone interested in a solar solution, material, installation, consultancy, or service.",
       "A client is a qualified person or organization you now manage as a business relationship.",
-      "A deal is the commercial opportunity that can produce revenue, such as a property sale, rental, solar installation, material sale, or consultancy project.",
+      "A deal is the commercial opportunity that can produce revenue, such as a solar installation, material sale, maintenance contract, or consultancy project.",
       "Activities and tasks keep follow-up visible so the team knows what happened and what should happen next.",
       "Finance connects payments, receipts, expenses, and commissions to the real business records instead of tracking money separately.",
       "Good CRM use means every customer interaction is recorded once, assigned to the right person, linked to the right product/service, and moved through the right next step.",
@@ -185,7 +181,7 @@ export const guideTopics: GuideTopic[] = [
       "Use Quick capture for the lead's essential contact, category, source, immediate interest, follow-up, and notes; switch to Full details only when richer qualification information is available.",
       "Choose the branch and default assignee before entering lead details.",
       "Select the interest category first so the form only shows relevant fields.",
-      "For real-estate leads, add property preferences, linked property or unit, budget, and inspection details.",
+      "Choose the relevant business category, link the required product/service, and add budget and delivery details.",
       "For solar, materials, or services, link the relevant product/service where possible.",
       "Use Map location to capture the lead's site or preferred location when field follow-up is needed.",
       "Save the lead, then use the lead detail page for follow-up, email, tasks, conversion, or opening a deal.",
@@ -197,9 +193,9 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Go to Deals, then choose New Deal, or open a lead and use Open Deal.",
       "Choose the deal category and deal type; the form will show only fields that fit that deal.",
-      "Link the lead, client, property, unit, or product/service so finance and history stay connected.",
+      "Link the lead, client, or product/service so finance and history stay connected.",
       "Set the owner, stage, expected close date, amount, probability, proposal status, and fulfillment status.",
-      "Save the deal, then update the stage as the sale, rental, installation, material order, or service progresses.",
+      "Save the deal, then update the stage as the sale, installation, material order, or service progresses.",
       "Use Finance to record payments, receipts, commissions, and approvals tied to that deal.",
     ],
   },
@@ -361,8 +357,8 @@ export const guideTopics: GuideTopic[] = [
     title: "Record finance activity",
     steps: [
       "Go to Finance.",
-      "Use Payments to record property sale, unit sale, rental, lease, reservation, deposit, solar, materials, or service revenue.",
-      "Link payments to the right deal, rental, property, unit, client, or payer record.",
+      "Use Payments to record solar, materials, installation, consultancy, maintenance, or service revenue.",
+      "Link payments to the correct deal, installation project, client, or payer record.",
       "Set verification status and save; verified payments count toward confirmed revenue.",
       "Open the receipt view when a printable receipt is needed.",
       "Use Expenses and Commissions for operational costs and commission tracking, then approve them with the proper finance permissions.",
@@ -495,7 +491,6 @@ export const guideTopics: GuideTopic[] = [
   },
   {
     keywords: [
-      "property",
       "unit",
       "offering",
       "catalog",
@@ -509,9 +504,8 @@ export const guideTopics: GuideTopic[] = [
       "materials",
       "services",
     ],
-    title: "Manage properties, units, and products/services",
+    title: "Manage products and services",
     steps: [
-      "Use Properties and Units for real-estate inventory.",
       "Use Products/Services for catalog items such as solar equipment, installation packages, materials, consultancy, maintenance, and services.",
       "For an inventory product, select its brand. An admin or manager with inventory.manageCatalog can use Create brand beside the Brand field when the required brand is not in the dropdown.",
       "Enter the product details and save the record; the SKU/item code is generated automatically and cannot be entered manually. Barcode/GTIN is optional.",
@@ -519,7 +513,7 @@ export const guideTopics: GuideTopic[] = [
       "The importer can match an existing brand by name, code, or ID. Users with all-branch access can map a branch column or choose a default branch; branch-limited users always import to their assigned branch.",
       "The product form does not accept a stock quantity. After saving the product, use Inventory > Add / move stock to enter existing opening stock or receive new stock so every quantity has a location and an audit trail.",
       "The product defaults to the creator's assigned branch. A user with all-branch access can select another active admin-created branch before saving.",
-      "Link leads and deals to properties, units, or products/services so users do not re-enter the same information.",
+      "Link leads and deals to products/services so users do not re-enter the same information.",
       "Keep prices, status, category, stock, and service details current so sales and finance flows stay accurate.",
     ],
   },
@@ -556,14 +550,14 @@ export const guideTopics: GuideTopic[] = [
 ];
 
 export const appGuideContext = `
-Vlingo Systems CRM is an internal business operations CRM for real estate, solar, building materials, services, consultancy, installations, projects, inventory, point of sale, rentals, finance, documents, notifications, and team administration.
+Vlingo Systems CRM is an internal business operations CRM for solar, building materials, services, consultancy, installations, projects, inventory, point of sale, finance, documents, notifications, and team administration. Property, unit, rental, and real-estate development modules are currently retired from the active app; do not direct users to those areas.
 
 CRM concept:
 - CRM means Customer Relationship Management.
 - The CRM exists to help the company capture demand, qualify opportunities, follow up consistently, assign responsibility, convert prospects into clients, manage deals, connect revenue to work performed, and preserve relationship history.
 - Lead: a person or organization showing interest before becoming a client.
 - Client: a known customer relationship with useful profile and communication history.
-- Deal: the revenue-facing opportunity tied to a lead/client and often a property, unit, rental, solar package, material, service, or project.
+- Deal: the revenue-facing opportunity tied to a lead/client and a solar package, material, service, or project.
 - Pipeline: the stages a lead or deal moves through from first contact to conversion, win, loss, payment, or fulfillment.
 - Activity: a record of what happened.
 - Task: a future action someone must complete.
@@ -574,13 +568,10 @@ Main routes and modules:
 - Leads: create, import with flexible header mapping, geotag, assign, qualify, email, follow up, convert, delete when authorized, and open deals. Lead forms reveal fields based on interest category.
 - Lead Locations: map view for geotagged leads. Sales executives see assigned leads; managers see branch-scoped records; super admins can view all branches.
 - Clients: manage client records, communication, pagination, list/card views, creator attribution, and clickable WhatsApp phone links.
-- Deals: dynamic finance-facing pipeline for property sales, rentals, solar, materials, services, consultancy, installation, and custom work. Deal forms reveal fields based on category and type, inherit useful lead/client/product data, and record owner/creator attribution.
-- Properties and Units: real-estate inventory and unit management.
+- Deals: dynamic finance-facing pipeline for solar, materials, services, consultancy, installation, and custom work. Deal forms reveal fields based on category and type, inherit useful lead/client/product data, and record owner/creator attribution.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
 - Inventory: branch-aware stock balances, guided opening-stock entry, movement ledger, supplier master, paid/part-paid/credit purchase orders, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, filtered CSV/A4 reports, and brand-partner collaboration.
 - Point of Sale: branch-aware checkout, directly typed whole-number quantities with plus/minus shortcuts, customer details, discounts, tax, full/partial/unpaid sales, stock deduction, sales history, later payments, and Vlingo-branded printable invoices and receipts.
-- Rentals: tenancy, rent payment, lease dates, renewal tasks, and tenant follow-up.
-- Development: property development projects, project managers, delivery details, and related operational work.
 - Installation Projects: CRM-linked delivery workspaces for bill of materials, branch stock availability, reservations and issues, shortage procurement, direct-to-site materials, labour, transport, tasks, documents, receipts, costs, and forecast margin.
 - Marketing: campaign records connected to lead sources and sales follow-up.
 - Finance: payments, receipt numbers, verification, expenses, commissions, approvals, and printable receipts.
@@ -593,7 +584,7 @@ Main routes and modules:
 - Settings: organization name/logo/theme, branches, users and renewable invite links, multiple roles, Google Calendar, email SMTP, and audit logs.
 
 Cross-module workflows:
-- Lead -> linked property/unit or product/service -> client conversion -> deal -> verified finance payment -> personal performance report.
+- Lead -> linked product/service -> client conversion -> deal -> verified finance payment -> personal performance report.
 - Selecting a lead interest category or deal category/type hides irrelevant fields and keeps forms focused.
 - Lead, client, and deal cards show who entered the record; ownership fields determine personal workflow visibility and reporting attribution.
 - Phone numbers in lead/client areas can open WhatsApp, and single or bulk email uses the organization's configured SMTP mailbox.
@@ -639,7 +630,7 @@ export function fallbackGuideAnswer(question: string) {
   const selected = topic ?? {
     title: "Use the CRM effectively",
     steps: [
-      "Start from the sidebar and choose the module that matches the work: Leads, Clients, Deals, Finance, Properties, Products/Services, Tasks, Documents, or Settings.",
+      "Start from the sidebar and choose the module that matches the work: Leads, Clients, Deals, Finance, Products/Services, Inventory, Installation Projects, Tasks, Documents, or Settings.",
       "Use Create/New actions for new records and open existing records for detail, edit, email, activity, or finance actions.",
       "Check your role and branch if a section or record is not visible.",
       "Use Guide me buttons on forms when you need field-by-field help.",

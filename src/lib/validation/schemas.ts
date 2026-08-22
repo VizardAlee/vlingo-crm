@@ -62,8 +62,8 @@ export const leadSchema = z.object({
   budgetMinimum: optionalNumber,
   budgetMaximum: optionalNumber,
   preferredBudgetCurrency: z.string().optional(),
-  interestCategory: optionalEnum(["realEstate", "solar", "buildingMaterials", "generalServices", "custom"]),
-  transactionInterest: z.enum(["buy", "rent", "lease", "invest"]),
+  interestCategory: optionalEnum(["solar", "buildingMaterials", "generalServices", "custom"]),
+  transactionInterest: optionalEnum(["buy", "rent", "lease", "invest"]),
   propertyId: z.string().optional(),
   propertyName: z.string().optional(),
   propertyReferenceNumber: z.string().optional(),
@@ -133,7 +133,7 @@ export const clientSchema = z.object({
 export const dealSchema = z.object({
   title: z.string().min(2, "Deal title is required."),
   dealType: z.enum(["sale", "rent", "lease", "reservation", "investment", "other"]),
-  dealCategory: optionalEnum(["realEstate", "solar", "buildingMaterials", "generalServices", "custom"]),
+  dealCategory: optionalEnum(["solar", "buildingMaterials", "generalServices", "custom"]),
   leadId: z.string().optional(),
   leadName: z.string().optional(),
   clientId: z.string().optional(),
@@ -253,7 +253,7 @@ export const propertySchema = z.object({
 
 export const offeringSchema = z.object({
   name: z.string().min(2, "Product/service name is required."),
-  vertical: z.enum(["realEstate", "solar", "buildingMaterials", "generalServices", "custom"]),
+  vertical: z.enum(["solar", "buildingMaterials", "generalServices", "custom"]),
   type: z.enum(["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"]),
   category: z.string().min(2, "Category is required."),
   brandId: z.string().optional(),

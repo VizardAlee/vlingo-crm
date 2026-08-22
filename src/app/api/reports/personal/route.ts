@@ -9,15 +9,18 @@ type ReportPeriod = "30" | "90" | "365" | "all" | "custom";
 
 const qualifiedLeadStatuses = new Set([
   "qualified",
-  "propertyRecommended",
-  "inspectionScheduled",
-  "inspectionCompleted",
   "negotiation",
   "offerMade",
   "paymentPending",
   "converted",
 ]);
 const closedDealStatuses = new Set(["won", "lost"]);
+const retiredRevenueCategories = new Set(["realEstate", "propertySale", "unitSale", "rental"]);
+
+function activeLeadStatus(value: unknown) {
+  const status = String(value ?? "notSet");
+  return ["propertyRecommended", "inspectionScheduled", "inspectionCompleted"].includes(status) ? "qualified" : status;
+}
 
 function requestToken(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
@@ -198,7 +201,7 @@ function leadTimeline(
         kind: "stageChange",
         leadId: lead.id,
         leadName,
-        title: `${String(item.from ?? "Lead")} -> ${String(item.to ?? "Updated")}`,
+        title: `${activeLeadStatus(item.from ?? "Lead")} -> ${activeLeadStatus(item.to ?? "Updated")}`,
       });
     }
   }
@@ -292,7 +295,9 @@ export async function GET(request: Request) {
       allLeads.map((record) => record.id),
       allDeals.map((record) => record.id),
     );
-    const payments = allPayments.filter((record) => withinPeriod(record, start, end, "at"));
+    const payments = allPayments.filter((record) => (
+      withinPeriod(record, start, end, "at") && !retiredRevenueCategories.has(String(record.revenueCategory ?? "other"))
+    ));
     const verifiedPayments = payments.filter((record) => record.verificationStatus === "verified");
     const pendingPayments = payments.filter((record) => record.verificationStatus === "pending");
     const wonDeals = deals.filter((record) => record.status === "won");
@@ -332,7 +337,11 @@ export async function GET(request: Request) {
         dealStatus: countBy(deals, "status"),
         leadInteractionType: countBy(leadActivities, "type"),
         leadSource: countBy(leads, "source"),
-        leadStatus: countBy(leads, "status"),
+        leadStatus: leads.reduce<Record<string, number>>((totals, lead) => {
+          const status = activeLeadStatus(lead.status);
+          totals[status] = (totals[status] ?? 0) + 1;
+          return totals;
+        }, {}),
         revenueByCategory,
         revenueByMonth: monthRows(verifiedPayments, start),
         taskStatus: countBy(tasks, "status"),
@@ -340,7 +349,7 @@ export async function GET(request: Request) {
       period,
       periodEnd: end?.toISOString() ?? null,
       periodStart: start?.toISOString() ?? null,
-      revenueAttributionNote: "Verified revenue linked to your owned leads and deals is included. Older direct property, unit, rental, and other-income receipts without a revenue owner are excluded.",
+      revenueAttributionNote: "Verified revenue linked to your owned leads and deals is included. Older retired-module and other-income receipts without a revenue owner are excluded.",
       timeline: leadTimeline(allLeads, allLeadActivities, allTasks, decoded.uid, start, end),
     });
   } catch (error) {

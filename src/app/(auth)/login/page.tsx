@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   BadgeCheck,
-  Building2,
   CheckCircle2,
   ClipboardCheck,
   Handshake,
@@ -29,14 +28,14 @@ import { AuthProvider, useAuth } from "@/features/auth/auth-provider";
 import { defaultAppRoute } from "@/lib/permissions";
 
 const featureRows = [
-  { icon: Users, title: "Lead capture", text: "Real estate, building materials, solar, and service enquiries." },
+  { icon: Users, title: "Lead capture", text: "Building materials, solar, product, and service enquiries." },
   { icon: Handshake, title: "Deal pipeline", text: "Linked owners, products/services, activities, approvals, and finance." },
   { icon: Landmark, title: "Finance control", text: "Receipts, commissions, expenses, verification, and audit trails." },
 ];
 
 const activityFeed = [
   "Solar consultation assigned",
-  "Property inspection confirmed",
+  "Stock transfer completed",
   "Material quote moved to deal",
   "Receipt awaiting verification",
 ];
@@ -122,7 +121,7 @@ function LoginContent() {
             </div>
             <div className="grid gap-px bg-white/10 sm:grid-cols-2">
               {[
-                { icon: Building2, label: "Properties", value: "34" },
+                { icon: Handshake, label: "Open deals", value: "34" },
                 { icon: SunMedium, label: "Solar projects", value: "18" },
                 { icon: Package, label: "Products/Services", value: "76" },
                 { icon: ClipboardCheck, label: "Tasks due", value: "14" },

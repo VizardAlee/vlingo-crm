@@ -44,7 +44,7 @@ function financeTourTarget(name: string) {
 }
 
 const financeTourSteps: GuidedTourStep[] = [
-  { target: financeTourTarget("paymentSource"), title: "Revenue source", body: "Choose the deal, lead, rental, property, or unit this payment belongs to so receipt and reporting records stay connected." },
+  { target: financeTourTarget("paymentSource"), title: "Revenue source", body: "Choose the deal, lead, or installation project this payment belongs to so receipt and reporting records stay connected." },
   { target: financeTourTarget("payer"), title: "Payer", body: "Confirm the payer name that should appear on the payment record and printable receipt." },
   { target: financeTourTarget("paymentAmount"), title: "Payment amount", body: "Enter the amount received. Finance status and balances use this value." },
   { target: financeTourTarget("paymentMethod"), title: "Payment method", body: "Record how the money was received, plus bank or transaction reference where available." },
@@ -55,7 +55,8 @@ const financeTourSteps: GuidedTourStep[] = [
 
 const paymentMethods: RentalPaymentMethod[] = ["bankTransfer", "cash", "pos", "cheque", "onlinePayment", "other"];
 const expenseCategories = ["External Material", "Labour", "Transport", "Subcontractor", "Equipment Hire", "Permit", "Repairs", "Utilities", "Marketing", "Legal", "Agency", "Inspection", "Office", "Other"];
-const relatedEntityTypes = ["office", "deal", "installationProject", "property", "unit", "tenancy", "development", "marketing", "offering", "other"];
+const relatedEntityTypes = ["office", "deal", "installationProject", "marketing", "offering", "other"];
+const retiredFinanceCategories = new Set<FinanceRevenueCategory>(["realEstate", "propertySale", "unitSale", "rental"]);
 
 function parseDate(value: unknown) {
   if (!value) {
@@ -287,12 +288,9 @@ export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityT
     try {
       const branchId = effectiveBranchId(member, activeBranchId);
       const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
-      const [nextDeals, nextLeads, nextRentals, nextProperties, nextUnits, nextInstallations, nextPayments, nextExpenses, nextCommissions] = await Promise.all([
+      const [nextDeals, nextLeads, nextInstallations, nextPayments, nextExpenses, nextCommissions] = await Promise.all([
         safeList<FinanceDeal>(activeOrganizationId, "deals", branchConstraints),
         safeList<FinanceLead>(activeOrganizationId, "leads", branchConstraints),
-        safeList<FinanceRental>(activeOrganizationId, "rentalTenancies", branchConstraints),
-        safeList<FinanceProperty>(activeOrganizationId, "properties", branchConstraints),
-        safeList<FinanceUnit>(activeOrganizationId, "propertyUnits", branchConstraints),
         safeList<FinanceInstallation>(activeOrganizationId, "installationProjects", branchConstraints),
         safeList<FinancePayment>(activeOrganizationId, "financePayments", branchConstraints),
         safeList<FinanceExpense>(activeOrganizationId, "financeExpenses", branchConstraints),
@@ -300,15 +298,16 @@ export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityT
       ]);
       setDeals(nextDeals);
       setLeads(nextLeads);
-      setRentals(nextRentals);
-      setProperties(nextProperties);
-      setUnits(nextUnits);
+      setRentals([]);
+      setProperties([]);
+      setUnits([]);
       setInstallations(nextInstallations);
-      setPayments(nextPayments);
+      const activePayments = nextPayments.filter((payment) => !retiredFinanceCategories.has(revenueCategoryFromPayment(payment)));
+      setPayments(activePayments);
       setExpenses(nextExpenses);
       setCommissions(nextCommissions);
       if (initialSource) {
-        const source = buildRevenueSources(nextDeals, nextLeads, nextRentals, nextProperties, nextUnits, nextInstallations).find((item) => item.value === initialSource);
+        const source = buildRevenueSources(nextDeals, nextLeads, [], [], [], nextInstallations).find((item) => item.value === initialSource);
         if (source) {
           setPaymentForm((current) => current.source ? current : {
             ...current,
@@ -343,28 +342,7 @@ export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityT
       type: "deal" as const,
       value: `deal:${deal.id}`,
     })),
-    ...properties.map((property) => ({
-      amount: Number(property.commissionAmount ?? 0),
-      label: `${property.name} (${property.referenceNumber ?? "Property"})`,
-      reference: property.referenceNumber,
-      type: "property" as const,
-      value: `property:${property.id}`,
-    })),
-    ...units.map((unit) => ({
-      amount: Number(unit.askingPrice ?? unit.rentAmount ?? 0),
-      label: `${unit.unitNumber} (${unit.referenceNumber ?? unit.propertyName ?? "Unit"})`,
-      reference: unit.referenceNumber,
-      type: "unit" as const,
-      value: `unit:${unit.id}`,
-    })),
-    ...rentals.map((rental) => ({
-      amount: Number(rental.agencyFee ?? 0),
-      label: `${rental.tenantName ?? rental.referenceNumber ?? "Rental"} (${rental.referenceNumber ?? "Tenancy"})`,
-      reference: rental.referenceNumber,
-      type: "rental" as const,
-      value: `rental:${rental.id}`,
-    })),
-  ], [deals, properties, rentals, units]);
+  ], [deals]);
 
   const finance = useMemo(() => {
     const activeRentals = rentals.filter(isOpenRental);
@@ -767,7 +745,6 @@ export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityT
 
   const metricCards = [
     { icon: CheckCircle2, label: "Total verified revenue", tone: "text-success", value: formatCurrency(finance.verifiedCollected) },
-    { icon: Receipt, label: "Real estate income", tone: "text-primary", value: formatCurrency(finance.collectedByCategory.realEstate + finance.collectedByCategory.propertySale + finance.collectedByCategory.unitSale + finance.collectedByCategory.rental) },
     { icon: Banknote, label: "Solar income", tone: "text-warning", value: formatCurrency(finance.collectedByCategory.solar) },
     { icon: WalletCards, label: "Materials income", tone: "text-info", value: formatCurrency(finance.collectedByCategory.buildingMaterials) },
     { icon: ClipboardCheck, label: "Services income", tone: "text-success", value: formatCurrency(finance.collectedByCategory.generalServices) },
@@ -779,11 +756,10 @@ export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityT
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
           <h1 className="text-xl font-semibold md:text-2xl">Finance</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Verify real estate, rental, solar, materials, services, and other income receipts alongside expenses and commissions.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Verify solar, materials, services, installation, and other business income alongside expenses and commissions.</p>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 md:mt-0 md:flex">
           <GuidedTour className="h-10" storageKey="beacon-tour:finance:forms" steps={financeTourSteps} />
-          <ButtonLink href="/rentals" variant="outline">Rental ledger</ButtonLink>
           <ButtonLink href="/reports" variant="secondary">Reports</ButtonLink>
         </div>
       </div>
@@ -978,30 +954,6 @@ export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityT
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle>Payment Queue</CardTitle></CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            {[...finance.overdueRentals, ...finance.upcomingRentals].slice(0, 8).map((rental) => {
-              const dueDays = daysUntil(rental.nextRentDueDate);
-              const overdue = isOverdue(rental);
-              return (
-                <Link className="rounded-md border p-3 text-foreground hover:bg-muted" href={`/rentals/${rental.id}`} key={rental.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold">{String(rental.tenantName ?? rental.referenceNumber ?? "Tenant")}</p>
-                      <p className="mt-1 truncate text-muted-foreground">{String(rental.unitName ?? rental.propertyName ?? "No property linked")}</p>
-                    </div>
-                    <span className="font-semibold">{formatCurrency(rentalBalance(rental))}</span>
-                  </div>
-                  <p className={cn("mt-2 text-xs", overdue ? "text-destructive" : "text-muted-foreground")}>
-                    {displayDate(rental.nextRentDueDate)}{dueDays === null ? "" : dueDays < 0 ? ` · ${Math.abs(dueDays)} days overdue` : ` · ${dueDays} days left`}
-                  </p>
-                </Link>
-              );
-            })}
-            {!finance.overdueRentals.length && !finance.upcomingRentals.length ? <div className="rounded-md border border-dashed p-4 text-muted-foreground">No overdue or upcoming rent payments in the next 30 days.</div> : null}
-          </CardContent>
-        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -1071,7 +1023,7 @@ export function FinanceDashboard({ initialRelatedEntityId, initialRelatedEntityT
         <CardHeader><CardTitle>Finance Controls</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm md:grid-cols-3">
             {[
-            { icon: Receipt, label: "Receipts", value: `${finance.sortedPayments.length} numbered receipts across rent, sales, and other income.` },
+            { icon: Receipt, label: "Receipts", value: `${finance.sortedPayments.length} numbered receipts across sales, projects, and other active income.` },
             { icon: FileText, label: "Expenses", value: `${finance.sortedExpenses.length} expenses, ${formatCurrency(finance.approvedExpenses)} approved.` },
             { icon: Scale, label: "Commissions", value: `${finance.sortedCommissions.length} commission records, ${formatCurrency(finance.commissionPayable)} payable.` },
           ].map((item) => {

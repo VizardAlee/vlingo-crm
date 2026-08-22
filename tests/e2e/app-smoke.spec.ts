@@ -44,13 +44,8 @@ test("launch-critical routes do not crash before authentication", async ({ page 
     "/leads",
     "/leads/new",
     "/deals",
-    "/development",
-    "/development/new",
     "/finance",
     "/notifications",
-    "/properties",
-    "/units",
-    "/rentals",
     "/documents",
   ];
 

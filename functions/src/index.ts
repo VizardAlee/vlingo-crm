@@ -43,15 +43,13 @@ const emailSettingsAccessPermissions = [
   "leads.readAll",
   "clients.read",
   "deals.read",
-  "properties.read",
-  "units.read",
   "offerings.read",
   "tasks.read",
   "activities.read",
   "users.manage",
 ];
 
-const rolePermissions = {
+const legacyRolePermissions = {
   superAdmin: [
     "dashboard.viewExecutive",
     "leads.create",
@@ -411,7 +409,28 @@ const rolePermissions = {
   ],
 } as const;
 
-type RoleName = keyof typeof rolePermissions;
+type RoleName = keyof typeof legacyRolePermissions;
+const retiredPermissions = new Set([
+  "properties.create",
+  "properties.read",
+  "properties.update",
+  "properties.approve",
+  "units.create",
+  "units.read",
+  "units.update",
+  "rentals.create",
+  "rentals.read",
+  "rentals.update",
+  "development.create",
+  "development.read",
+  "development.update",
+]);
+const rolePermissions = Object.fromEntries(
+  Object.entries(legacyRolePermissions).map(([role, permissions]) => [
+    role,
+    permissions.filter((permission) => !retiredPermissions.has(permission)),
+  ]),
+) as Record<RoleName, string[]>;
 type BranchAccess = "own" | "all";
 
 interface ActorContext {

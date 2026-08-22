@@ -43,14 +43,14 @@ const guideStoragePrefix = "vlingo:ai-guide";
 
 const suggestedQuestions = [
   "What is CRM and how should our team use it?",
-  "How do I create a lead and link it to a property?",
+  "How do I create a lead and link it to a product or service?",
   "How do I open a deal from a lead?",
   "How do I create and receive a purchase order?",
   "How do stock reservations and available quantities work?",
   "What can a brand partner see in Inventory?",
   "What sales records are shown on the dashboard?",
   "How do I complete a POS sale and print the official invoice or receipt?",
-  "How do I record a property sale payment and print a receipt?",
+  "How do I record a sales or project payment and print a receipt?",
   "How do I send bulk emails to leads?",
   "How do I review my performance and amount generated?",
   "How do I connect my tasks to Google Calendar?",

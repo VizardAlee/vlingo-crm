@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return ["properties", "units", "rentals", "development"].map((segment) => ({
+      destination: "/dashboard",
+      permanent: false,
+      source: `/${segment}/:path*`,
+    }));
+  },
   async headers() {
     return [
       {

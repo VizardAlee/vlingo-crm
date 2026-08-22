@@ -34,10 +34,10 @@ export interface ModuleConfig {
   title: string;
 }
 
-const leadStatuses = ["new", "contacted", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
-const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Property portal", "Event", "Other"];
-const dealStatuses = ["new", "qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "won", "lost", "dormant"];
-const dealTypes = ["sale", "rent", "lease", "reservation", "investment", "other"];
+const leadStatuses = ["new", "contacted", "qualified", "negotiation", "offerMade", "paymentPending", "converted", "lost", "dormant"];
+const leadSources = ["Website", "Facebook", "Instagram", "Google Ads", "WhatsApp", "Referral", "Agent", "Walk-in", "Phone call", "Event", "Other"];
+const dealStatuses = ["new", "qualified", "negotiation", "offerMade", "paymentPending", "won", "lost", "dormant"];
+const dealTypes = ["sale", "lease", "reservation", "other"];
 const dealFinanceStatuses = ["notInvoiced", "paymentPending", "partPaid", "paid", "overdue"];
 const dealLegalStatuses = ["notStarted", "drafting", "inReview", "signed", "completed", "blocked"];
 const dealProposalStatuses = ["notStarted", "drafting", "sent", "accepted", "rejected", "expired"];
@@ -61,10 +61,10 @@ const permitStatuses = ["notStarted", "inReview", "approved", "rejected", "notRe
 const riskLevels = ["low", "medium", "high", "critical"];
 const priorities = ["low", "medium", "high", "urgent"];
 const marketingCampaignStatuses = ["draft", "planned", "active", "paused", "completed", "cancelled"];
-const marketingCampaignTypes = ["Property launch", "Open house", "Lead generation", "Retargeting", "Brand awareness", "Referral drive", "Agent campaign", "Event", "Other"];
-const marketingChannels = ["Facebook", "Instagram", "Google Ads", "WhatsApp", "Email", "SMS", "Property portal", "Referral", "Event", "Outdoor", "Other"];
-const businessVerticals = ["realEstate", "solar", "buildingMaterials", "generalServices", "custom"];
-const offeringTypes = ["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
+const marketingCampaignTypes = ["Product launch", "Lead generation", "Retargeting", "Brand awareness", "Referral drive", "Agent campaign", "Event", "Other"];
+const marketingChannels = ["Facebook", "Instagram", "Google Ads", "WhatsApp", "Email", "SMS", "Referral", "Event", "Outdoor", "Other"];
+const businessVerticals = ["solar", "buildingMaterials", "generalServices", "custom"];
+const offeringTypes = ["material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
 const offeringStatuses = ["active", "draft", "inactive", "archived"];
 const unitOfMeasureOptions = ["unit", "piece", "pack", "bag", "ton", "kg", "sqm", "meter", "kW", "kVA", "panel", "battery", "inverter", "service", "project", "other"];
 
@@ -92,17 +92,11 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { helpText: "Longitude for the lead's site or preferred location.", name: "geoLongitude", label: "Longitude", section: "Map location", type: "number" },
       { helpText: "GPS accuracy in meters when captured from the browser.", name: "geoAccuracy", label: "Accuracy (meters)", section: "Map location", type: "number" },
       { helpText: "ISO timestamp from the last browser GPS capture.", name: "geoCapturedAt", label: "Location captured at", readOnly: true, section: "Map location", type: "text" },
-      { name: "propertyType", label: "Property type", type: "text" },
-      { name: "preferredPropertyCategory", label: "Preferred property category", type: "text" },
-      { name: "preferredBedrooms", label: "Preferred bedrooms", type: "number" },
       { name: "budgetMinimum", label: "Budget minimum", type: "number" },
       { name: "budgetMaximum", label: "Budget maximum", type: "number" },
       { name: "preferredBudgetCurrency", label: "Budget currency", type: "text" },
       { name: "interestCategory", label: "Interest category", options: businessVerticals, type: "select" },
-      { name: "transactionInterest", label: "Transaction interest", options: ["buy", "rent", "lease", "invest"], required: true, type: "select" },
-      { helpText: "Optional: link the primary property this lead is asking about.", name: "propertyId", label: "Linked property", optionSource: "properties", section: "Linked product/service", type: "select" },
-      { helpText: "Optional if the interest is for a specific unit.", name: "unitId", label: "Linked unit", optionSource: "propertyUnits", section: "Linked product/service", type: "select" },
-      { helpText: "Use this for solar, building materials, consultancy, installation packages, or any non-property product/service.", name: "offeringId", label: "Linked product/service", optionSource: "offerings", section: "Linked product/service", type: "select" },
+      { helpText: "Link the product, service, material, or installation package the customer needs.", name: "offeringId", label: "Linked product/service", optionSource: "offerings", section: "Linked product/service", type: "select" },
       { name: "source", label: "Source", options: leadSources, required: true, type: "select" },
       { name: "sourcePlatform", label: "Source platform", type: "text" },
       { name: "campaignName", label: "Campaign name", type: "text" },
@@ -112,7 +106,6 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "leadTemperature", label: "Lead temperature", options: ["cold", "warm", "hot"], type: "select" },
       { name: "status", label: "Status", options: leadStatuses, required: true, type: "select" },
       { name: "nextFollowUpAt", label: "Next follow-up date", type: "text" },
-      { name: "preferredInspectionDate", label: "Preferred inspection date", type: "text" },
       { name: "referralName", label: "Referral name", type: "text" },
       { name: "referralPhone", label: "Referral phone", type: "text" },
       { name: "tags", label: "Tags", type: "text" },
@@ -153,7 +146,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     route: "/deals",
     title: "Deals",
     fields: [
-      { name: "title", label: "Deal title", placeholder: "Example: Lekki Phase 1 Duplex Sale", required: true, section: "Deal basics", type: "text" },
+      { name: "title", label: "Deal title", placeholder: "Example: Kaduna Solar Installation", required: true, section: "Deal basics", type: "text" },
       { helpText: "Choose the business line so only relevant deal fields are shown.", name: "dealCategory", label: "Deal category", options: businessVerticals, section: "Deal basics", type: "select" },
       { name: "dealType", label: "Deal type", options: dealTypes, required: true, section: "Deal basics", type: "select" },
       { name: "status", label: "Deal stage", options: dealStatuses, required: true, section: "Deal basics", type: "select" },
@@ -162,10 +155,8 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "closeProbability", label: "Close probability %", section: "Deal basics", type: "number" },
 
       { helpText: "Optional: link the original lead so history and source context are preserved.", name: "leadId", label: "Linked lead", optionSource: "leads", section: "Linked records", type: "select" },
-      { helpText: "Optional until the buyer, tenant, or investor has a client record.", name: "clientId", label: "Client", optionSource: "clients", section: "Linked records", type: "select" },
-      { name: "propertyId", label: "Property", optionSource: "properties", section: "Linked records", type: "select" },
-      { helpText: "Optional if the deal is for the full property.", name: "unitId", label: "Unit", optionSource: "propertyUnits", section: "Linked records", type: "select" },
-      { helpText: "Use this for non-real-estate products/services or to connect a deal to the broader catalog.", name: "offeringId", label: "Product/service", optionSource: "offerings", section: "Linked records", type: "select" },
+      { helpText: "Optional until the customer has a client record.", name: "clientId", label: "Client", optionSource: "clients", section: "Linked records", type: "select" },
+      { helpText: "Connect this deal to its product, material, service, or installation package.", name: "offeringId", label: "Product/service", optionSource: "offerings", section: "Linked records", type: "select" },
 
       { name: "offerAmount", label: "Offer amount", section: "Commercial terms", type: "number" },
       { name: "agreedAmount", label: "Agreed amount", section: "Commercial terms", type: "number" },
@@ -442,14 +433,13 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
     route: "/marketing",
     title: "Marketing Campaigns",
     fields: [
-      { name: "name", label: "Campaign name", placeholder: "Example: Lekki Phase 1 Open House", required: true, section: "Campaign basics", type: "text" },
+      { name: "name", label: "Campaign name", placeholder: "Example: August Solar Product Campaign", required: true, section: "Campaign basics", type: "text" },
       { name: "campaignType", label: "Campaign type", options: marketingCampaignTypes, required: true, section: "Campaign basics", type: "select" },
       { name: "channel", label: "Primary channel", options: marketingChannels, required: true, section: "Campaign basics", type: "select" },
       { name: "status", label: "Campaign status", options: marketingCampaignStatuses, required: true, section: "Campaign basics", type: "select" },
       { name: "priority", label: "Priority", options: priorities, section: "Campaign basics", type: "select" },
       { colSpan: "full", name: "objective", label: "Objective", placeholder: "What this campaign is meant to achieve.", section: "Campaign basics", type: "textarea" },
 
-      { helpText: "Optional: link campaign performance to a property/listing.", name: "propertyId", label: "Linked property/listing", optionSource: "properties", section: "Targeting", type: "select" },
       { name: "campaignManagerId", label: "Campaign manager", optionSource: "internalManagers", section: "Targeting", type: "select" },
       { name: "targetAudience", label: "Target audience", placeholder: "Investors, tenants, first-time buyers...", section: "Targeting", type: "text" },
       { name: "targetLocation", label: "Target location", placeholder: "Lekki, Ajah, Abuja...", section: "Targeting", type: "text" },
@@ -507,8 +497,8 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Lead", accessorKey: "fullName" },
       { header: "Phone", cell: ({ row }) => <WhatsAppPhoneLink displayNumber={String(row.original.phoneNumber ?? "")} phoneNumber={String(row.original.whatsappNumber ?? row.original.phoneNumber ?? "")} /> },
       { header: "Source", cell: ({ row }) => String(row.original.source ?? "") },
-      { header: "Product/service", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
-      { header: "Interest", cell: ({ row }) => titleCase(String(row.original.transactionInterest ?? "")) },
+      { header: "Product/service", cell: ({ row }) => String(row.original.offeringName ?? "Not linked") },
+      { header: "Interest", cell: ({ row }) => titleCase(String(row.original.interestCategory ?? "")) },
       inputByColumn,
       statusColumn,
     ];
@@ -537,7 +527,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
         ),
       },
       { header: "Client/lead", cell: ({ row }) => String(row.original.clientName ?? row.original.leadName ?? "Not linked") },
-      { header: "Product/service", cell: ({ row }) => String(row.original.offeringName ?? row.original.unitName ?? row.original.propertyName ?? "Not linked") },
+      { header: "Product/service", cell: ({ row }) => String(row.original.offeringName ?? "Not linked") },
       { header: "Value", cell: ({ row }) => formatCurrency(Number(row.original.agreedAmount ?? row.original.offerAmount ?? row.original.depositAmount ?? row.original.reservationAmount ?? 0)) },
       { header: "Owner", cell: ({ row }) => String(row.original.dealOwnerName ?? row.original.dealOwnerEmail ?? "Unassigned") },
       inputByColumn,

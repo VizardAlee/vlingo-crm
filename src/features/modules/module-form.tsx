@@ -101,10 +101,6 @@ function clearHiddenDealFields(parsedData: Record<string, unknown>, fields: Form
 }
 
 function offeringTypesForVertical(vertical: BusinessVertical | "") {
-  if (vertical === "realEstate") {
-    return ["property", "unit", "service", "other"];
-  }
-
   if (vertical === "solar") {
     return ["solarEquipment", "solarService", "installationProject", "maintenance", "consultancy", "other"];
   }
@@ -117,7 +113,7 @@ function offeringTypesForVertical(vertical: BusinessVertical | "") {
     return ["consultancy", "maintenance", "service", "installationProject", "other"];
   }
 
-  return ["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
+  return ["material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
 }
 
 function shouldShowOfferingField(field: FormField, type: string) {
@@ -504,8 +500,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           listOrgRecords<Lead>(activeOrganizationId, "leads", leadConstraints).catch(() => []),
           Promise.resolve<PropertyStakeholder[]>([]),
           loadMembers(),
-          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
-          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
+          Promise.resolve<Property[]>([]),
+          Promise.resolve<PropertyUnit[]>([]),
           listOrgRecords<Offering>(activeOrganizationId, "offerings", branchConstraints).catch(() => []),
         ]);
       }
@@ -516,8 +512,8 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           Promise.resolve<Lead[]>([]),
           Promise.resolve<PropertyStakeholder[]>([]),
           loadMembers(),
-          listOrgRecords<Property>(activeOrganizationId, "properties", branchConstraints).catch(() => []),
-          listOrgRecords<PropertyUnit>(activeOrganizationId, "propertyUnits", branchConstraints).catch(() => []),
+          Promise.resolve<Property[]>([]),
+          Promise.resolve<PropertyUnit[]>([]),
           listOrgRecords<Offering>(activeOrganizationId, "offerings", branchConstraints).catch(() => []),
         ]);
       }

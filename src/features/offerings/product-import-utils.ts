@@ -59,8 +59,8 @@ const headerAliases: Record<string, string[]> = {
   vertical: ["vertical", "businessvertical", "businessline", "division"],
 };
 
-const verticals = ["realEstate", "solar", "buildingMaterials", "generalServices", "custom"];
-const productTypes = ["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
+const verticals = ["solar", "buildingMaterials", "generalServices", "custom"];
+const productTypes = ["material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"];
 const statuses = ["active", "draft", "inactive", "archived"];
 const trackingModes = ["none", "batch", "serial"];
 

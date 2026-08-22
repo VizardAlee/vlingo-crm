@@ -226,9 +226,6 @@ const leadJourneyStages = [
   { description: "Fresh lead from manual entry or import.", key: "new", label: "New" },
   { description: "A call, WhatsApp, email, or visit has happened.", key: "contacted", label: "Contacted" },
   { description: "Budget, need, location, and timeline are understood.", key: "qualified", label: "Qualified" },
-  { description: "A matching property or unit has been suggested.", key: "propertyRecommended", label: "Recommended" },
-  { description: "A physical or virtual inspection has been booked.", key: "inspectionScheduled", label: "Inspection set" },
-  { description: "Inspection has happened and outcome is recorded.", key: "inspectionCompleted", label: "Inspection done" },
   { description: "Price, payment plan, and terms are being discussed.", key: "negotiation", label: "Negotiation" },
   { description: "Proposal, offer, or reservation details have been shared.", key: "offerMade", label: "Offer made" },
   { description: "Deposit, reservation fee, or formal commitment is pending.", key: "paymentPending", label: "Payment pending" },
@@ -244,7 +241,6 @@ const interactionTypes = [
   "whatsappMessage",
   "email",
   "meeting",
-  "inspection",
   "followUp",
   "documentRequest",
   "internalNote",
@@ -436,47 +432,6 @@ function textMatches(candidate: unknown, preferred: unknown) {
   return Boolean(left && right && (left.includes(right) || right.includes(left)));
 }
 
-function priceForInterest(record: Record<string, unknown>, interest: string) {
-  return ["rent", "lease"].includes(interest)
-    ? Number(record.rentAmount ?? record.askingPrice ?? 0)
-    : Number(record.askingPrice ?? record.minimumAcceptablePrice ?? record.rentAmount ?? 0);
-}
-
-function isAvailableOffering(record: Record<string, unknown>) {
-  return !["sold", "rented", "leased", "occupied", "unavailable", "withdrawn", "underMaintenance"].includes(String(record.status ?? record.propertyStatus ?? ""));
-}
-
-function matchScore(lead: Record<string, unknown>, offering: Record<string, unknown>) {
-  const interest = String(lead.transactionInterest ?? "");
-  const transactionTypes = Array.isArray(offering.transactionTypes) ? offering.transactionTypes : [];
-  let score = 0;
-
-  if (transactionTypes.some((type) => textMatches(type, interest === "buy" ? "sale" : interest))) {
-    score += 3;
-  }
-
-  if ([offering.city, offering.state, offering.estateOrNeighborhood, offering.propertyName].some((value) => textMatches(value, lead.preferredCity) || textMatches(value, lead.preferredState) || textMatches(value, lead.preferredLocation))) {
-    score += 3;
-  }
-
-  if (textMatches(offering.category ?? offering.unitType, lead.preferredPropertyCategory) || textMatches(offering.category ?? offering.unitType, lead.propertyType)) {
-    score += 2;
-  }
-
-  if (Number(lead.preferredBedrooms ?? 0) && Number(offering.bedrooms ?? 0) >= Number(lead.preferredBedrooms)) {
-    score += 1;
-  }
-
-  const price = priceForInterest(offering, interest);
-  const minBudget = Number(lead.budgetMinimum ?? 0);
-  const maxBudget = Number(lead.budgetMaximum ?? 0);
-  if (price && (!minBudget || price >= minBudget) && (!maxBudget || price <= maxBudget)) {
-    score += 3;
-  }
-
-  return score;
-}
-
 function offeringCatalogPrice(record: Record<string, unknown>) {
   return Number(record.sellingPrice ?? record.askingPrice ?? record.rentAmount ?? 0);
 }
@@ -486,12 +441,8 @@ function catalogMatchScore(lead: Record<string, unknown>, offering: Record<strin
   const tags = Array.isArray(offering.tags) ? offering.tags : [];
   const searchValues = [offering.name, offering.category, offering.type, offering.vertical, ...tags];
 
-  if (searchValues.some((value) => textMatches(value, lead.propertyType) || textMatches(value, lead.preferredPropertyCategory) || textMatches(value, lead.intendedUse))) {
+  if (searchValues.some((value) => textMatches(value, lead.interestCategory) || textMatches(value, lead.intendedUse) || textMatches(value, lead.offeringName))) {
     score += 4;
-  }
-
-  if (String(offering.vertical) === "realEstate" && ["buy", "rent", "lease", "invest"].includes(String(lead.transactionInterest ?? ""))) {
-    score += 1;
   }
 
   const price = offeringCatalogPrice(offering);
@@ -504,45 +455,9 @@ function catalogMatchScore(lead: Record<string, unknown>, offering: Record<strin
   return score;
 }
 
-function LeadOfferingPanel({
-  offerings,
-  propertyUnits,
-  properties,
-  record,
-}: {
-  offerings: Record<string, unknown>[];
-  propertyUnits: Record<string, unknown>[];
-  properties: Record<string, unknown>[];
-  record: Record<string, unknown>;
-}) {
-  const linkedProperty = record.propertyId ? properties.find((property) => property.id === record.propertyId) : null;
-  const linkedUnit = record.unitId ? propertyUnits.find((unit) => unit.id === record.unitId) : null;
+function LeadOfferingPanel({ offerings, record }: { offerings: Record<string, unknown>[]; record: Record<string, unknown> }) {
   const linkedOffering = record.offeringId ? offerings.find((offering) => offering.id === record.offeringId) : null;
-  const propertyLabel = String(linkedProperty?.name ?? record.propertyName ?? record.propertyReferenceNumber ?? "");
-  const unitLabel = String(linkedUnit?.unitNumber ?? record.unitName ?? "");
   const offeringLabel = String(linkedOffering?.name ?? record.offeringName ?? record.offeringReferenceNumber ?? "");
-  const unitMatches = propertyUnits
-    .filter(isAvailableOffering)
-    .map((unit) => ({
-      href: `/units/${unit.id}`,
-      id: String(unit.id),
-      label: String(unit.unitNumber ?? unit.referenceNumber ?? "Unit"),
-      price: priceForInterest(unit, String(record.transactionInterest ?? "")),
-      score: matchScore(record, unit),
-      subtitle: [unit.propertyName, unit.unitType, unit.bedrooms ? `${unit.bedrooms} bed` : ""].filter(Boolean).join(" · "),
-      type: "Unit",
-    }));
-  const propertyMatches = properties
-    .filter(isAvailableOffering)
-    .map((property) => ({
-      href: `/properties/${property.id}`,
-      id: String(property.id),
-      label: String(property.name ?? property.referenceNumber ?? "Property"),
-      price: priceForInterest(property, String(record.transactionInterest ?? "")),
-      score: matchScore(record, property),
-      subtitle: [property.city, property.category, property.bedrooms ? `${property.bedrooms} bed` : ""].filter(Boolean).join(" · "),
-      type: "Property",
-    }));
   const offeringMatches = offerings
     .filter((offering) => String(offering.status ?? "active") === "active")
     .map((offering) => ({
@@ -554,8 +469,8 @@ function LeadOfferingPanel({
       subtitle: [titleCase(String(offering.vertical ?? "")), titleCase(String(offering.type ?? "")), offering.category].filter(Boolean).join(" · "),
       type: "Product/service",
     }));
-  const matches = [...unitMatches, ...propertyMatches, ...offeringMatches]
-    .filter((match) => match.score > 0 && match.id !== record.unitId && match.id !== record.propertyId && match.id !== record.offeringId)
+  const matches = offeringMatches
+    .filter((match) => match.score > 0 && match.id !== record.offeringId)
     .sort((left, right) => right.score - left.score || right.price - left.price)
     .slice(0, 5);
 
@@ -564,23 +479,13 @@ function LeadOfferingPanel({
       <Card>
         <CardHeader><CardTitle>Linked Product/Service</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          {propertyLabel || unitLabel || offeringLabel ? (
-            <>
+          {offeringLabel ? (
               <div className="flex items-center justify-between gap-4">
                 <span className="text-muted-foreground">Product/service</span>
                 {record.offeringId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/offerings/${record.offeringId}`}>{offeringLabel || "View product/service"}</Link> : <span className="font-medium">{offeringLabel || "Not linked"}</span>}
               </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground">Property</span>
-                {record.propertyId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/properties/${record.propertyId}`}>{propertyLabel || "View property"}</Link> : <span className="font-medium">{propertyLabel || "Not linked"}</span>}
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground">Unit</span>
-                {record.unitId ? <Link className="max-w-56 truncate font-medium text-primary" href={`/units/${record.unitId}`}>{unitLabel || "View unit"}</Link> : <span className="font-medium">{unitLabel || "Not linked"}</span>}
-              </div>
-            </>
           ) : (
-            <div className="rounded-md border border-dashed p-4 text-muted-foreground">No product/service, property, or unit has been linked to this lead yet.</div>
+            <div className="rounded-md border border-dashed p-4 text-muted-foreground">No product/service has been linked to this lead yet.</div>
           )}
         </CardContent>
       </Card>
@@ -595,7 +500,7 @@ function LeadOfferingPanel({
               </div>
               <p className="mt-1 text-muted-foreground">{match.type} · {match.subtitle || "Inventory"} · {formatCurrency(match.price)}</p>
             </Link>
-          )) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No strong property matches from current inventory yet.</div>}
+          )) : <div className="rounded-md border border-dashed p-4 text-muted-foreground">No strong product/service matches from the active catalog yet.</div>}
         </CardContent>
       </Card>
     </div>
@@ -1661,7 +1566,7 @@ function LeadJourneyPanel({
           <div className="flex flex-wrap gap-2">
             <Badge tone={statusTone(currentStatus)}>{titleCase(currentStatus)}</Badge>
             <Badge tone={openTasks.length ? "warning" : "muted"}>{openTasks.length} open follow-up{openTasks.length === 1 ? "" : "s"}</Badge>
-            {canCreateDeal && ["qualified", "propertyRecommended", "inspectionScheduled", "inspectionCompleted", "negotiation", "offerMade", "paymentPending", "converted"].includes(currentStatus) ? (
+            {canCreateDeal && ["qualified", "negotiation", "offerMade", "paymentPending", "converted"].includes(currentStatus) ? (
               <ButtonLink href={`/deals/new?leadId=${id}`} size="sm" variant="outline">
                 <Handshake className="h-4 w-4" />
                 Open deal
@@ -1808,7 +1713,7 @@ function LeadJourneyPanel({
                 <Input disabled={!canSendEmail} placeholder="client@example.com" type="email" value={emailRecipient} onChange={(event) => setEmailRecipient(event.target.value)} />
               </Field>
               <Field label="Subject">
-                <Input disabled={!canSendEmail || !emailRecipient} placeholder="Property recommendation, inspection details..." value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} />
+                <Input disabled={!canSendEmail || !emailRecipient} placeholder="Product, service, or proposal details..." value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} />
               </Field>
               <Field label="Message">
                 <Textarea disabled={!canSendEmail || !emailRecipient} placeholder="Write the message that should be sent to this lead." value={emailBody} onChange={(event) => setEmailBody(event.target.value)} />
@@ -2331,7 +2236,6 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [activityMembers, setActivityMembers] = useState<Member[]>([]);
   const [offerings, setOfferings] = useState<Record<string, unknown>[]>([]);
-  const [properties, setProperties] = useState<Record<string, unknown>[]>([]);
   const [propertyUnits, setPropertyUnits] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -2355,13 +2259,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 
   const loadDetail = useCallback(async () => {
     const relatedType = relatedTypeForCollection(config.collection);
-    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextOfferings, nextMembers] = await Promise.all([
+    const [nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits, nextOfferings, nextMembers] = await Promise.all([
       getOrgRecord<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, id),
       safeListOrgRecords(activeOrganizationId, "tasks", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "activities", branchConstraints),
       safeListDocuments(activeOrganizationId, branchConstraints),
-      safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
-      safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
+      Promise.resolve([] as Array<Record<string, unknown> & { id: string }>),
       safeListOrgRecords(activeOrganizationId, "offerings", branchConstraints),
       shouldResolveUserSnapshots(config.collection) ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ]);
@@ -2375,7 +2278,6 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
     setRelatedRecord(nextRelatedRecord);
     setActivityMembers(nextMembers);
     setOfferings(config.collection === "leads" ? nextOfferings : []);
-    setProperties(config.collection === "leads" ? nextProperties : []);
     setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : config.collection === "leads" ? nextPropertyUnits : []);
     if (relatedType) {
       setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
@@ -2393,12 +2295,11 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       safeListOrgRecords(activeOrganizationId, "tasks", branchConstraints),
       safeListOrgRecords(activeOrganizationId, "activities", branchConstraints),
       safeListDocuments(activeOrganizationId, branchConstraints),
-      safeListOrgRecords(activeOrganizationId, "properties", branchConstraints),
-      safeListOrgRecords(activeOrganizationId, "propertyUnits", branchConstraints),
+      Promise.resolve([] as Array<Record<string, unknown> & { id: string }>),
       safeListOrgRecords(activeOrganizationId, "offerings", branchConstraints),
       shouldResolveUserSnapshots(config.collection) ? safeListMembers(activeOrganizationId) : Promise.resolve([]),
     ])
-      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextProperties, nextPropertyUnits, nextOfferings, nextMembers]) => {
+      .then(async ([nextRecord, nextTasks, nextActivities, nextDocuments, nextPropertyUnits, nextOfferings, nextMembers]) => {
         if (!mounted) {
           return;
         }
@@ -2417,7 +2318,6 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
         setRelatedRecord(nextRelatedRecord);
         setActivityMembers(nextMembers);
         setOfferings(config.collection === "leads" ? nextOfferings : []);
-        setProperties(config.collection === "leads" ? nextProperties : []);
         setPropertyUnits(config.collection === "properties" ? nextPropertyUnits.filter((item) => item.propertyId === id).slice(0, 8) : config.collection === "leads" ? nextPropertyUnits : []);
         if (relatedType) {
           setTasks(nextTasks.filter((item) => item.relatedEntityType === relatedType && item.relatedEntityId === id).slice(0, 8));
@@ -2611,9 +2511,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       {config.collection === "leads" ? (
         <LeadJourneyPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
       ) : null}
-      {config.collection === "leads" ? (
-        <LeadOfferingPanel offerings={offerings} properties={properties} propertyUnits={propertyUnits} record={record} />
-      ) : null}
+      {config.collection === "leads" ? <LeadOfferingPanel offerings={offerings} record={record} /> : null}
       {config.collection === "developmentProjects" ? (
         <DevelopmentOperationsPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
       ) : null}
