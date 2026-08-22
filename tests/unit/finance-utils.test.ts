@@ -23,6 +23,7 @@ describe("finance utilities", () => {
 
   it("computes deal target amount and finance summary from verified and pending receipts", () => {
     expect(dealTargetAmount({ agreedAmount: 45000000, offerAmount: 50000000 })).toBe(45000000);
+    expect(dealTargetAmount({ offerAmount: 250000, quoteSubtotal: 1000000, quoteTotal: 1075000 })).toBe(1075000);
     expect(dealTargetAmount({ offerAmount: 250000, quoteSubtotal: 1000000 })).toBe(1000000);
     expect(dealTargetAmount({ depositAmount: 5000000, reservationAmount: 1000000 })).toBe(5000000);
 

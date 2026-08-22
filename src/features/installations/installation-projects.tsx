@@ -12,6 +12,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/features/auth/auth-provider";
+import { quoteLinesToInstallationPlan } from "@/features/installations/installation-quote";
 import { effectiveBranchId, hasPermission } from "@/lib/permissions";
 import { createReference, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import {
@@ -47,7 +48,7 @@ import type {
 } from "@/types/crm";
 
 const projectStatuses: InstallationProjectStatus[] = ["draft", "planning", "awaitingApproval", "approved", "procurement", "scheduled", "inProgress", "commissioning", "completed", "onHold", "cancelled"];
-const costCategories: InstallationCostCategory[] = ["externalMaterial", "labour", "transport", "subcontractor", "permit", "equipmentHire", "other"];
+const costCategories: InstallationCostCategory[] = ["externalMaterial", "service", "labour", "transport", "subcontractor", "permit", "equipmentHire", "other"];
 
 function numberValue(value: string) {
   const number = Number(value);
@@ -158,7 +159,7 @@ export function InstallationProjectCreatePage() {
         const initialDeal = nextDeals.find((item) => item.id === dealId);
         if (initialDeal) {
           setName((current) => current || `${initialDeal.title} installation`);
-          setContractValue((current) => current || String(initialDeal.agreedAmount ?? initialDeal.offerAmount ?? initialDeal.quoteSubtotal ?? ""));
+          setContractValue((current) => current || String(initialDeal.agreedAmount ?? initialDeal.quoteTotal ?? initialDeal.offerAmount ?? initialDeal.quoteSubtotal ?? ""));
           setScopeOfWork((current) => current || initialDeal.scopeOfWork || "");
         }
       })
@@ -177,6 +178,11 @@ export function InstallationProjectCreatePage() {
     setError(null);
     try {
       const deal = deals.find((item) => item.id === dealId);
+      if (deal?.installationProjectId) {
+        setError("This deal already has an installation project. Open the existing project from the deal instead.");
+        return;
+      }
+      const installationPlan = quoteLinesToInstallationPlan(deal?.quoteLines);
       const context = writeContext(activeOrganizationId, branchId, user, member?.displayName);
       const id = await createOrgRecord("installationProjects", {
         name: name.trim(),
@@ -196,13 +202,14 @@ export function InstallationProjectCreatePage() {
         amountReceived: Number(deal?.paidAmount ?? 0),
         progressPercent: 0,
         scopeOfWork: scopeOfWork.trim(),
-        materials: [] as InstallationMaterialLine[],
-        costLines: [] as InstallationCostLine[],
+        materials: installationPlan.materials,
+        costLines: installationPlan.costLines,
         status: "planning" as InstallationProjectStatus,
         notes: notes.trim(),
       }, context, "INS");
       if (deal && hasPermission(member, "deals.update")) {
-        await updateOrgRecord("deals", deal.id, { installationProjectId: id, installationProjectName: name.trim(), fulfillmentStatus: "scheduled" }, context);
+        const needsProcurement = deal.quoteLines?.some((line) => ["procureToStock", "directToSite"].includes(line.fulfillment));
+        await updateOrgRecord("deals", deal.id, { installationProjectId: id, installationProjectName: name.trim(), fulfillmentStatus: needsProcurement ? "procurement" : "scheduled" }, context);
       }
       await writeAuditLog(context, "installation.create", "installationProjects", id, { dealId: deal?.id ?? null, name: name.trim() });
       router.push(`/installations/${id}`);
@@ -218,7 +225,7 @@ export function InstallationProjectCreatePage() {
       <div><h1 className="text-2xl font-semibold">Create installation project</h1><p className="mt-1 text-sm text-muted-foreground">Link the delivery workspace to a CRM deal where possible. Materials and costs are added after creation.</p></div>
       {error ? <ErrorState message={error} /> : null}
       <Card><CardContent><form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
-        <Field className="md:col-span-2" label="CRM deal (optional)"><Select value={dealId} onChange={(event) => { const nextDealId = event.target.value; const deal = deals.find((item) => item.id === nextDealId); setDealId(nextDealId); if (deal) { setName(`${deal.title} installation`); setContractValue(String(deal.agreedAmount ?? deal.offerAmount ?? deal.quoteSubtotal ?? "")); setScopeOfWork(deal.scopeOfWork ?? ""); } }}><option value="">No linked deal</option>{deals.map((deal) => <option key={deal.id} value={deal.id}>{deal.title} · {deal.referenceNumber}</option>)}</Select></Field>
+        <Field className="md:col-span-2" label="CRM deal (optional)"><Select value={dealId} onChange={(event) => { const nextDealId = event.target.value; const deal = deals.find((item) => item.id === nextDealId); setDealId(nextDealId); if (deal) { setName(`${deal.title} installation`); setContractValue(String(deal.agreedAmount ?? deal.quoteTotal ?? deal.offerAmount ?? deal.quoteSubtotal ?? "")); setScopeOfWork(deal.scopeOfWork ?? ""); } }}><option value="">No linked deal</option>{deals.filter((deal) => !deal.installationProjectId).map((deal) => <option key={deal.id} value={deal.id}>{deal.title} · {deal.referenceNumber}</option>)}</Select></Field>
         <Field label="Project name"><Input required value={name} onChange={(event) => setName(event.target.value)} /></Field>
         <Field label="Contract value"><Input min="0" required type="number" value={contractValue} onChange={(event) => setContractValue(event.target.value)} /></Field>
         <Field className="md:col-span-2" label="Installation site"><Textarea required value={siteAddress} onChange={(event) => setSiteAddress(event.target.value)} /></Field>
@@ -447,7 +454,7 @@ export function InstallationProjectDetailPage({ id }: { id: string }) {
             <Field label="Estimated unit cost"><Input min="0" step="any" type="number" value={material.estimatedUnitCost} onChange={(event) => setMaterial((current) => ({ ...current, estimatedUnitCost: event.target.value }))} /></Field>
             <Button className="sm:col-span-2" disabled={!canUpdate || saving === "material.add"} type="submit"><Plus className="h-4 w-4" />Add material requirement</Button>
           </form>
-          <div className="grid gap-2">{materials.map((line) => { const available = data.balances.filter((balance) => balance.offeringId === line.offeringId).reduce((sum, balance) => sum + Number(balance.quantityOnHand ?? 0) - Number(balance.quantityReserved ?? 0), 0); return <div className="rounded-md border p-3 text-sm" key={line.id}><div className="flex justify-between gap-3"><strong>{line.offeringName}</strong><span>{line.quantityRequired} required</span></div><div className="mt-1 flex justify-between text-muted-foreground"><span>{line.sku || "No SKU"}</span><span className={available < line.quantityRequired ? "text-warning" : "text-success"}>{available} available across accessible branches</span></div></div>; })}{!materials.length ? <Empty text="Add the products required for this installation. This is a plan; it does not change stock." /> : null}</div>
+          <div className="grid gap-2">{materials.map((line) => { const available = data.balances.filter((balance) => balance.offeringId === line.offeringId).reduce((sum, balance) => sum + Number(balance.quantityOnHand ?? 0) - Number(balance.quantityReserved ?? 0), 0); return <div className="rounded-md border p-3 text-sm" key={line.id}><div className="flex justify-between gap-3"><strong>{line.offeringName}</strong><span>{line.quantityRequired} required</span></div><div className="mt-1 flex justify-between text-muted-foreground"><span>{line.sku || "No SKU"}</span><span className={available < line.quantityRequired ? "text-warning" : "text-success"}>{available} available across accessible branches</span></div>{line.notes ? <p className="mt-2 text-xs text-muted-foreground">{line.notes}</p> : null}</div>; })}{!materials.length ? <Empty text="Add the products required for this installation. This is a plan; it does not change stock." /> : null}</div>
         </CardContent></Card>
 
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4" />External materials and service costs</CardTitle></CardHeader><CardContent className="grid gap-4">
@@ -461,7 +468,7 @@ export function InstallationProjectDetailPage({ id }: { id: string }) {
             <Field label="Payment status"><Select value={cost.paymentStatus} onChange={(event) => setCost((current) => ({ ...current, paymentStatus: event.target.value as InstallationCostLine["paymentStatus"] }))}><option value="notPaid">Not paid</option><option value="partPaid">Part paid</option><option value="paid">Paid</option><option value="credit">Credit agreement</option></Select></Field>
             <Button className="self-end" disabled={!canUpdate || saving === "cost.add"} type="submit"><Plus className="h-4 w-4" />Add project cost</Button>
           </form>
-          <div className="grid gap-2">{costLines.map((line) => <div className="rounded-md border p-3 text-sm" key={line.id}><div className="flex justify-between gap-3"><strong>{line.description}</strong><span>{formatCurrency(line.quantity * line.estimatedUnitCost)}</span></div><div className="mt-1 text-muted-foreground">{titleCase(line.category)} · {line.vendor || "No vendor"} · {titleCase(line.paymentStatus || "notPaid")}</div></div>)}{!costLines.length ? <Empty text="Record externally sourced materials, labour, transport, permits, hire, and subcontracting here." /> : null}</div>
+          <div className="grid gap-2">{costLines.map((line) => <div className="rounded-md border p-3 text-sm" key={line.id}><div className="flex justify-between gap-3"><strong>{line.description}</strong><span>{formatCurrency(line.quantity * line.estimatedUnitCost)}</span></div><div className="mt-1 text-muted-foreground">{titleCase(line.category)} · {line.vendor || "No vendor"} · {titleCase(line.paymentStatus || "notPaid")}</div>{line.notes ? <p className="mt-2 text-xs text-muted-foreground">{line.notes}</p> : null}</div>)}{!costLines.length ? <Empty text="Record externally sourced materials, labour, transport, permits, hire, and subcontracting here." /> : null}</div>
         </CardContent></Card>
       </div>
 

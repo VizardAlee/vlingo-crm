@@ -136,7 +136,7 @@ async function attributablePayments(organizationId: string, uid: string, leadIds
 }
 
 function amountForDeal(deal: RecordData) {
-  return Number(deal.agreedAmount ?? deal.offerAmount ?? deal.quoteSubtotal ?? deal.reservationAmount ?? deal.depositAmount ?? 0);
+  return Number(deal.agreedAmount ?? deal.quoteTotal ?? deal.offerAmount ?? deal.quoteSubtotal ?? deal.reservationAmount ?? deal.depositAmount ?? 0);
 }
 
 function monthRows(payments: RecordData[], start: Date | null) {

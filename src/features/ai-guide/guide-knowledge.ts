@@ -85,11 +85,11 @@ export const guideTopics: GuideTopic[] = [
     keywords: ["installation project", "project materials", "project labour", "project transport", "project procurement", "project margin", "site project", "external material"],
     title: "Run an installation project",
     steps: [
-      "Open a qualified CRM deal and choose Create installation project, or go to Installation Projects and create one directly. Link the CRM deal whenever possible so the customer, commercial value, and scope stay connected.",
-      "In Inventory materials, add the catalog products required and their planned quantities. Adding a requirement is planning only and does not change inventory.",
+      "Open a qualified solar CRM deal and choose Create installation project, or go to Installation Projects and create one directly. A linked deal copies its customer, scope, agreed or quoted total, inventory-product lines, and external service-cost lines into the project plan.",
+      "In the deal quotation, catalog inventory lines marked Check stock or Procure into inventory become project material requirements. Adding a requirement is planning only and does not change inventory.",
       "Review availability across the branches you can access. Reserve available stock for the project, then choose Issue to project only when the material physically leaves the location for site work.",
       "For catalog shortages, create a project-linked purchase order. Paid, part-paid, and credit orders follow the existing approval and receiving workflow; receiving the order adds stock before it is issued to the project.",
-      "Record items that will not enter inventory—externally sourced materials delivered directly to site, labour, transport, subcontractors, permits, and equipment hire—as project cost lines.",
+      "Deal lines marked direct to site, external material, service, labour, transport, or other become project cost lines. They do not create artificial inventory movements.",
       "Create project tasks, activity updates, and documents from the project header. Use Finance to record customer payments and project expenses against the installation project.",
       "Create milestone invoices for deposits, procurement, progress work, commissioning, or the final balance. Open any invoice to print or save the official fixed-A4 Vlingo document.",
       "Use the project ledger to compare contract value, receipts, planned costs, inventory issued, supplier commitments, other actual costs, and forecast margin. Only verified receipts and approved or paid expenses count as financial actuals.",
@@ -193,8 +193,10 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Go to Deals, then choose New Deal, or open a lead and use Open Deal.",
       "Choose the deal category and deal type; the form will show only fields that fit that deal.",
-      "Link the lead, client, or product/service so finance and history stay connected.",
-      "Set the owner, stage, expected close date, amount, probability, proposal status, and fulfillment status.",
+      "Link the lead or client so finance and history stay connected.",
+      "For a solar deal, build the installation quotation with as many catalog products, externally sourced materials, services, labour, transport, and other lines as required. Enter selling price, estimated internal cost, discount, tax, and the intended fulfillment route for every line.",
+      "Set the owner, stage, expected close date, agreed amount when negotiated, probability, proposal status, and fulfillment status. The quotation calculates subtotal, discounts, tax, customer total, and estimated cost.",
+      "Review and finalize the quotation before creating the installation project. Once a project is linked, the quotation lines are locked so the project plan and commercial record cannot silently diverge.",
       "Save the deal, then update the stage as the sale, installation, material order, or service progresses.",
       "Use Finance to record payments, receipts, commissions, and approvals tied to that deal.",
     ],
@@ -587,7 +589,7 @@ Main routes and modules:
 - Leads: create, import with flexible header mapping, geotag, assign, qualify, email, follow up, convert, delete when authorized, and open deals. Lead forms reveal fields based on interest category.
 - Lead Locations: map view for geotagged leads. Sales executives see assigned leads; managers see branch-scoped records; super admins can view all branches.
 - Clients: manage client records, communication, pagination, list/card views, creator attribution, and clickable WhatsApp phone links.
-- Deals: dynamic finance-facing pipeline for solar, materials, services, consultancy, installation, and custom work. Deal forms reveal fields based on category and type, inherit useful lead/client/product data, and record owner/creator attribution.
+- Deals: dynamic finance-facing pipeline for solar, materials, services, consultancy, installation, and custom work. Solar deals use a multi-line installation quotation for catalog stock, direct-to-site materials, services, labour, transport, discounts, tax, selling totals, estimated costs, and planned fulfillment; other deal forms reveal fields based on category and type and inherit useful lead/client data.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
 - Inventory: branch-aware stock balances, guided opening-stock entry, movement ledger, supplier master, paid/part-paid/credit purchase orders, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, filtered CSV/A4 reports, and brand-partner collaboration.
 - Point of Sale: branch-aware checkout, directly typed whole-number quantities with plus/minus shortcuts, customer details, discounts, tax, full/partial/unpaid sales, stock deduction, sales history, later payments, and Vlingo-branded printable invoices and receipts.
@@ -609,7 +611,7 @@ Cross-module workflows:
 - Phone numbers in lead/client areas can open WhatsApp, and single or bulk email uses the organization's configured SMTP mailbox.
 - Dated assigned tasks can sync to the user's connected Google Calendar and task notifications can reach enabled browsers/PWA devices.
 - Product/service catalogue items marked as inventory feed branch/location balances. Procurement receipts, controlled movements, counts, and reservation fulfillment update stock through server-side transactions.
-- A CRM deal can create one linked installation project. Adding planned materials never changes stock; reserving protects available stock; fulfilling the reservation issues it to the project. Catalog shortages use project-linked purchase orders, while labour, transport, subcontractors, permits, equipment hire, and direct-to-site items stay outside stock as project cost lines. Finance receipts and expenses can link to the project for profitability reporting.
+- A CRM deal can create one linked installation project. Solar quotation lines automatically seed the project: stock/check-stock and procure-to-stock catalog items become material requirements, while direct-to-site materials, services, labour, transport, and other non-stock lines become cost lines. Adding planned materials never changes stock; reserving protects available stock; fulfilling the reservation issues it to the project. Catalog shortages use project-linked purchase orders. Finance receipts and expenses can link to the project for profitability reporting.
 - The dashboard is inventory-first and sales-aware: it highlights stock on hand, available and reserved units, low-stock exposure, inventory value, recent movements and units sold. Users with pos.read also see transaction count, sales value, payments received, outstanding balances, today's sales, and the eight latest completed invoices for the active branch.
 - Point of Sale sells from the active branch's available balance. A user can type a full whole-number cart quantity or use plus/minus shortcuts. Checkout creates the sale, branch-coded VSL invoice number, optional numbered receipt and finance payment, inventory issues, and stock deductions atomically. It supports walk-in customers, discounts, tax, unpaid invoices, part payments, and a separate receipt for every later payment.
 - Printable POS invoices, receipts, finance receipts, and inventory reports use a fixed A4 print layout on desktop, Android, and iPhone. Print actions show a blocking preparation dialog and disable the button before opening the native print sheet. Mobile navigation, drawers, overlays, and loading UI are excluded from the printed document. Mobile printing preserves the desktop-style columns and full document width; the system print dialog can print physically or save/share a PDF.

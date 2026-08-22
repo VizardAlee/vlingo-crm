@@ -14,6 +14,8 @@ import { useToast } from "@/components/ui/toast";
 import { GuidedTour } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { AiGuideLink } from "@/features/ai-guide/ai-guide-link";
+import { DealQuoteLinesEditor } from "@/features/modules/deal-quote-lines-editor";
+import { summarizeDealQuote } from "@/features/modules/deal-quote-utils";
 import { dealCategoryFromFormValue, dealTypeFromFormValue, dealTypesForCategory, dealVisibleFieldNames } from "@/features/modules/deal-form-logic";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
@@ -23,7 +25,7 @@ import { cn, createReference, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { createInventoryBrand, listInventoryBrands } from "@/services/inventory";
 import { listBranches, listMembers } from "@/services/users";
-import type { Branch, BusinessVertical, Client, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
+import type { Branch, BusinessVertical, Client, DealQuoteLine, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
@@ -43,10 +45,51 @@ function moduleSingularTitle(config: ModuleConfig) {
   return config.singularTitle ?? config.title.slice(0, -1);
 }
 
-type FormValues = Record<string, string | number | string[] | undefined>;
+type FormValues = Record<string, string | number | string[] | DealQuoteLine[] | undefined>;
 type SelectOption = { label: string; value: string };
 type StakeholderKind = "developer" | "management" | "owner";
 type FormValue = FormValues[string];
+
+function initialDealQuoteLines(existing?: FormValues): DealQuoteLine[] {
+  const stored: unknown = existing?.quoteLines;
+  if (Array.isArray(stored)) {
+    return stored.filter((line): line is DealQuoteLine => Boolean(line && typeof line === "object"));
+  }
+
+  const offeringId = String(existing?.offeringId ?? "").trim();
+  const description = String(existing?.offeringName ?? "").trim();
+  if (!offeringId && !description) return [];
+
+  const quantity = Math.max(0, Number(existing?.offeringQuantity ?? 1) || 1);
+  const unitPrice = Math.max(0, Number(existing?.offeringUnitPrice ?? 0) || 0);
+  const subtotal = quantity * unitPrice;
+  const offeringType = String(existing?.offeringType ?? "");
+  const inventoryProduct = ["material", "solarEquipment"].includes(offeringType);
+  return [{
+    id: `legacy-${offeringId || "line"}`,
+    lineType: inventoryProduct ? "inventoryProduct" : "service",
+    fulfillment: inventoryProduct ? "checkStock" : "service",
+    offeringId: offeringId || undefined,
+    offeringName: description || undefined,
+    offeringType: existing?.offeringType as DealQuoteLine["offeringType"],
+    description: description || "Legacy deal item",
+    quantity,
+    unitOfMeasure: "unit",
+    unitPrice,
+    discountAmount: 0,
+    taxRate: 0,
+    estimatedUnitCost: 0,
+    subtotal,
+    taxAmount: 0,
+    totalAmount: subtotal,
+  }];
+}
+
+function serializableDealQuoteLines(lines: DealQuoteLine[]) {
+  return lines.map((line) => Object.fromEntries(
+    Object.entries(line).filter(([, value]) => value !== undefined),
+  ));
+}
 
 function calculateFeeAmount(type: string, value: number, baseAmount: number) {
   if (!value || type === "none") {
@@ -237,6 +280,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [leads, setLeads] = useState<Lead[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [dealQuoteLines, setDealQuoteLines] = useState<DealQuoteLine[]>(() => initialDealQuoteLines(existing));
   const [inventoryBrands, setInventoryBrands] = useState<InventoryBrand[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [offeringBranchId, setOfferingBranchId] = useState(
@@ -291,9 +335,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     name: ["askingPrice", "rentAmount", "agencyFeeType", "agencyFeeValue", "agencyFee", "commissionType", "commissionValue", "agreedAmount", "offerAmount", "offeringQuantity", "offeringUnitPrice", "serviceCharge", "cautionFee", "legalFee", "leaseStartDate", "leaseEndDate", "paymentCycle"],
   });
   const offeringSubtotal = Number(offeringQuantity || 0) * Number(offeringUnitPrice || 0);
+  const quoteSummary = useMemo(() => summarizeDealQuote(dealQuoteLines), [dealQuoteLines]);
   const basePropertyAmount = Number(askingPrice || rentAmount || 0);
   const calculatedAgencyFee = calculateFeeAmount(String(agencyFeeType ?? ""), Number(agencyFeeValue || 0), basePropertyAmount);
-  const baseCommissionAmount = config.collection === "deals" ? Number(agreedAmount || offeringSubtotal || offerAmount || 0) : basePropertyAmount;
+  const baseCommissionAmount = config.collection === "deals" ? Number(agreedAmount || quoteSummary.total || offeringSubtotal || offerAmount || 0) : basePropertyAmount;
   const commissionAmount = calculateFeeAmount(String(commissionType ?? ""), Number(commissionValue || 0), baseCommissionAmount);
   const totalInitialPayment = Number(rentAmount || 0) + Number(serviceCharge || 0) + Number(cautionFee || 0) + Number(directAgencyFee || 0) + Number(legalFee || 0);
   const selectedPropertyId = useWatch({ control, name: "propertyId" });
@@ -314,6 +359,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const effectiveDealType = config.collection === "deals"
     ? dealTypeFromFormValue(selectedDealType) || dealTypeFromFormValue(existing?.dealType) || "sale"
     : "";
+  const usesDealQuoteBuilder = config.collection === "deals" && effectiveDealCategory === "solar" && effectiveDealType !== "reservation";
   const branchConstraints = useMemo<QueryConstraint[]>(() => (
     effectiveBranchId(member, activeBranchId) ? [where("branchId", "==", effectiveBranchId(member, activeBranchId))] : []
   ), [activeBranchId, member]);
@@ -866,6 +912,28 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     setError(null);
     setValidationErrors({});
+    if (usesDealQuoteBuilder) {
+      if (!dealQuoteLines.length) {
+        const message = "Add at least one product or service to the installation quotation.";
+        setError(message);
+        toast({ title: "Quotation line required", description: message, variant: "error" });
+        return;
+      }
+      const invalidLine = dealQuoteLines.find((line) => !line.description.trim() || Number(line.quantity) <= 0);
+      if (invalidLine) {
+        const message = "Every quotation line needs a description and a quantity greater than zero.";
+        setError(message);
+        toast({ title: "Check quotation lines", description: message, variant: "error" });
+        return;
+      }
+      const inventoryLineWithoutCatalogItem = dealQuoteLines.find((line) => line.lineType === "inventoryProduct" && line.fulfillment !== "directToSite" && !line.offeringId);
+      if (inventoryLineWithoutCatalogItem) {
+        const message = "Select a catalog product for every stock or procure-to-stock line. Use External material for a one-off item that will go directly to site.";
+        setError(message);
+        toast({ title: "Catalog product required", description: message, variant: "error" });
+        return;
+      }
+    }
     const parsed = schema.safeParse(values);
     if (!parsed.success) {
       const nextValidationErrors = Object.fromEntries(parsed.error.issues.map((issue) => [String(issue.path[0]), issue.message]));
@@ -975,6 +1043,22 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
         parsedData.unitId = "";
         parsedData.unitName = "";
         parsedData.legalStatus = undefined;
+      }
+      if (usesDealQuoteBuilder) {
+        const firstCatalogLine = dealQuoteLines.find((line) => line.offeringId);
+        parsedData.quoteLines = serializableDealQuoteLines(dealQuoteLines);
+        parsedData.quoteSubtotal = quoteSummary.subtotal;
+        parsedData.quoteDiscountAmount = quoteSummary.discount;
+        parsedData.quoteTaxAmount = quoteSummary.tax;
+        parsedData.quoteTotal = quoteSummary.total;
+        parsedData.quoteEstimatedCost = quoteSummary.estimatedCost;
+        parsedData.offeringId = firstCatalogLine?.offeringId ?? "";
+        parsedData.offeringName = firstCatalogLine?.offeringName ?? "";
+        parsedData.offeringReferenceNumber = "";
+        parsedData.offeringType = firstCatalogLine?.offeringType;
+        parsedData.offeringVertical = "solar";
+        parsedData.offeringQuantity = firstCatalogLine?.quantity;
+        parsedData.offeringUnitPrice = firstCatalogLine?.unitPrice;
       }
       parsedData.dealOwnerName = dealOwner?.displayName ?? "";
       parsedData.dealOwnerEmail = dealOwner?.email ?? "";
@@ -1267,6 +1351,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       return config.collection === "offerings" ? shouldShowOfferingField(field, String(selectedOfferingType ?? "")) : true;
     }
 
+    if (usesDealQuoteBuilder && ["offeringId", "offeringQuantity", "offeringUnitPrice", "quoteSubtotal"].includes(field.name)) {
+      return false;
+    }
+
     return shouldShowDealField(field, effectiveDealCategory, effectiveDealType);
   }
   const tourSteps = formTourSteps(config, config.fields.filter(isFieldVisible));
@@ -1343,6 +1431,15 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span>Capture or edit the coordinates used by the Lead Locations map. Browser location requires HTTPS or localhost.</span>
                   </div>
+                ) : null}
+                {usesDealQuoteBuilder && section.title === "Commercial terms" ? (
+                  <DealQuoteLinesEditor
+                    disabled={isSubmitting || Boolean(existing?.installationProjectId)}
+                    locked={Boolean(existing?.installationProjectId)}
+                    lines={dealQuoteLines}
+                    offerings={offerings}
+                    onChange={setDealQuoteLines}
+                  />
                 ) : null}
                 {config.collection === "properties" && section.title === "Ownership and management" ? (
                   <div className="grid gap-3 rounded-md border bg-muted/30 p-4">

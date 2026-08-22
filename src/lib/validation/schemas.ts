@@ -130,6 +130,28 @@ export const clientSchema = z.object({
   notes: z.string().optional(),
 });
 
+const dealQuoteLineSchema = z.object({
+  id: z.string().min(1),
+  lineType: z.enum(["inventoryProduct", "externalMaterial", "service", "labour", "transport", "other"]),
+  fulfillment: z.enum(["checkStock", "procureToStock", "directToSite", "service"]),
+  offeringId: z.string().optional(),
+  offeringName: z.string().optional(),
+  offeringType: optionalEnum(["property", "unit", "material", "solarEquipment", "solarService", "installationProject", "consultancy", "maintenance", "service", "other"]),
+  description: z.string().min(1),
+  sku: z.string().optional(),
+  brandId: z.string().optional(),
+  brandName: z.string().optional(),
+  quantity: z.number().positive(),
+  unitOfMeasure: z.string().optional(),
+  unitPrice: z.number().min(0),
+  discountAmount: z.number().min(0),
+  taxRate: z.number().min(0).max(100),
+  estimatedUnitCost: z.number().min(0),
+  subtotal: z.number().min(0),
+  taxAmount: z.number().min(0),
+  totalAmount: z.number().min(0),
+});
+
 export const dealSchema = z.object({
   title: z.string().min(2, "Deal title is required."),
   dealType: z.enum(["sale", "rent", "lease", "reservation", "investment", "other"]),
@@ -153,6 +175,11 @@ export const dealSchema = z.object({
   offeringQuantity: optionalNumber,
   offeringUnitPrice: optionalNumber,
   quoteSubtotal: optionalNumber,
+  quoteDiscountAmount: optionalNumber,
+  quoteTaxAmount: optionalNumber,
+  quoteTotal: optionalNumber,
+  quoteEstimatedCost: optionalNumber,
+  quoteLines: z.array(dealQuoteLineSchema).optional(),
   proposalStatus: optionalEnum(["notStarted", "drafting", "sent", "accepted", "rejected", "expired"]),
   fulfillmentStatus: optionalEnum(["notStarted", "awaitingPayment", "procurement", "scheduled", "inProgress", "delivered", "completed", "onHold", "cancelled"]),
   fulfillmentDueDate: optionalDateString,

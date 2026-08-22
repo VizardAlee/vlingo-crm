@@ -25,7 +25,7 @@ import { sendBulkSalesEmail, sendSalesJourneyEmail } from "@/services/email-sett
 import { createOrgRecord, getOrgRecord, listOrgRecords, softDeleteOrgRecord, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
-import type { Member } from "@/types/crm";
+import type { DealQuoteLine, Member } from "@/types/crm";
 
 type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "offering";
 
@@ -291,7 +291,7 @@ function isPhoneField(key: string) {
 
 function isAmountField(key: string) {
   const normalized = key.toLowerCase();
-  return normalized.includes("amount") || normalized.includes("balance") || normalized.includes("budget") || normalized.includes("price");
+  return normalized.includes("amount") || normalized.includes("balance") || normalized.includes("budget") || normalized.includes("price") || normalized === "quotetotal" || normalized === "quotesubtotal";
 }
 
 function userDisplay(value: unknown, members: Member[]) {
@@ -336,6 +336,7 @@ function recordSummaryEntries(record: Record<string, unknown>, collection: Modul
       "fulfillmentStatus",
       "agreedAmount",
       "offerAmount",
+      "quoteTotal",
       "quoteSubtotal",
       "paidAmount",
       "pendingPaymentAmount",
@@ -407,6 +408,33 @@ function recordSummaryEntries(record: Record<string, unknown>, collection: Modul
   ]
     .filter((key) => key in record)
     .map((key) => ({ key, label: titleCase(key), value: record[key] }));
+}
+
+function DealQuotationPanel({ record }: { record: Record<string, unknown> }) {
+  const lines = Array.isArray(record.quoteLines) ? record.quoteLines as DealQuoteLine[] : [];
+  if (!lines.length) return null;
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Installation quotation</CardTitle></CardHeader>
+      <CardContent className="grid gap-3">
+        <div className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="border-b text-xs uppercase text-muted-foreground">
+              <tr><th className="px-2 py-2">Item / service</th><th className="px-2 py-2">Type</th><th className="px-2 py-2 text-right">Qty.</th><th className="px-2 py-2 text-right">Unit price</th><th className="px-2 py-2 text-right">Discount</th><th className="px-2 py-2 text-right">Tax</th><th className="px-2 py-2 text-right">Total</th></tr>
+            </thead>
+            <tbody>{lines.map((line) => <tr className="border-b last:border-0" key={line.id}><td className="px-2 py-3"><strong>{line.description}</strong>{line.sku ? <div className="text-xs text-muted-foreground">{line.sku}</div> : null}</td><td className="px-2 py-3">{titleCase(line.lineType)}<div className="text-xs text-muted-foreground">{titleCase(line.fulfillment)}</div></td><td className="px-2 py-3 text-right">{line.quantity} {line.unitOfMeasure || ""}</td><td className="px-2 py-3 text-right">{formatCurrency(line.unitPrice)}</td><td className="px-2 py-3 text-right">{formatCurrency(line.discountAmount)}</td><td className="px-2 py-3 text-right">{formatCurrency(line.taxAmount)}</td><td className="px-2 py-3 text-right font-semibold">{formatCurrency(line.totalAmount)}</td></tr>)}</tbody>
+          </table>
+        </div>
+        <div className="ml-auto grid w-full gap-1 rounded-md bg-muted p-3 text-sm sm:w-80">
+          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Subtotal</span><strong>{formatCurrency(Number(record.quoteSubtotal ?? 0))}</strong></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Discount</span><strong>{formatCurrency(Number(record.quoteDiscountAmount ?? 0))}</strong></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Tax</span><strong>{formatCurrency(Number(record.quoteTaxAmount ?? 0))}</strong></div>
+          <div className="mt-1 flex justify-between gap-4 border-t pt-2 text-base"><span>Total</span><strong className="text-primary">{formatCurrency(Number(record.quoteTotal ?? 0))}</strong></div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function shouldResolveUserSnapshots(collection: ModuleConfig["collection"]) {
@@ -2494,7 +2522,12 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
               Create receipt
             </ButtonLink>
           ) : null}
-          {config.collection === "deals" && hasPermission(member, "installations.create") ? (
+          {config.collection === "deals" && record.installationProjectId ? (
+            <ButtonLink href={`/installations/${String(record.installationProjectId)}`} variant="outline">
+              <GitBranch className="h-4 w-4" />
+              Open installation project
+            </ButtonLink>
+          ) : config.collection === "deals" && hasPermission(member, "installations.create") ? (
             <ButtonLink href={`/installations/new?dealId=${id}`} variant="outline">
               <GitBranch className="h-4 w-4" />
               Create installation project
@@ -2518,6 +2551,7 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
       {config.collection === "rentalTenancies" ? (
         <RentalOperationsPanel activities={activities} id={id} onChanged={loadDetail} record={record} tasks={tasks} />
       ) : null}
+      {config.collection === "deals" ? <DealQuotationPanel record={record} /> : null}
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>
           <CardHeader><CardTitle>Summary</CardTitle></CardHeader>
@@ -2618,11 +2652,11 @@ export function ModuleDetailPage({ config, id }: { config: ModuleConfig; id: str
 export function ModuleEditPage({ config, id }: { config: ModuleConfig; id: string }) {
   const { activeOrganizationId, member } = useAuth();
   const singularTitle = moduleSingularTitle(config);
-  const [record, setRecord] = useState<Record<string, string | number | string[] | undefined> | null>(null);
+  const [record, setRecord] = useState<Record<string, string | number | string[] | DealQuoteLine[] | undefined> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getOrgRecord<Record<string, string | number | string[] | undefined> & { id: string }>(activeOrganizationId, config.collection, id)
+    getOrgRecord<Record<string, string | number | string[] | DealQuoteLine[] | undefined> & { id: string }>(activeOrganizationId, config.collection, id)
       .then(setRecord)
       .finally(() => setLoading(false));
   }, [activeOrganizationId, config.collection, id]);

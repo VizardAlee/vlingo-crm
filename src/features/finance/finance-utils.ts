@@ -30,8 +30,8 @@ export function paymentStatusForAmount(amount: number, rental: Pick<RentalTenanc
   return nextTotal >= Number(rental.rentAmount ?? 0) ? "paid" : "partPaid";
 }
 
-export function dealTargetAmount(deal: Pick<Deal, "agreedAmount" | "depositAmount" | "offerAmount" | "quoteSubtotal" | "reservationAmount">) {
-  return Number(deal.agreedAmount ?? deal.quoteSubtotal ?? deal.offerAmount ?? deal.depositAmount ?? deal.reservationAmount ?? 0);
+export function dealTargetAmount(deal: Pick<Deal, "agreedAmount" | "depositAmount" | "offerAmount" | "quoteSubtotal" | "quoteTotal" | "reservationAmount">) {
+  return Number(deal.agreedAmount ?? deal.quoteTotal ?? deal.quoteSubtotal ?? deal.offerAmount ?? deal.depositAmount ?? deal.reservationAmount ?? 0);
 }
 
 export function normalizeRevenueCategory(value: unknown): FinanceRevenueCategory {

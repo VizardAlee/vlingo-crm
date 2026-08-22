@@ -296,6 +296,42 @@ export type DealFulfillmentStatus =
   | "onHold"
   | "cancelled";
 
+export type DealQuoteLineType =
+  | "inventoryProduct"
+  | "externalMaterial"
+  | "service"
+  | "labour"
+  | "transport"
+  | "other";
+
+export type DealQuoteFulfillment =
+  | "checkStock"
+  | "procureToStock"
+  | "directToSite"
+  | "service";
+
+export interface DealQuoteLine {
+  id: string;
+  lineType: DealQuoteLineType;
+  fulfillment: DealQuoteFulfillment;
+  offeringId?: string;
+  offeringName?: string;
+  offeringType?: OfferingType;
+  description: string;
+  sku?: string;
+  brandId?: string;
+  brandName?: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice: number;
+  discountAmount: number;
+  taxRate: number;
+  estimatedUnitCost: number;
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+}
+
 export interface Deal extends EntityMetadata {
   id: string;
   referenceNumber: string;
@@ -321,6 +357,13 @@ export interface Deal extends EntityMetadata {
   offeringQuantity?: number;
   offeringUnitPrice?: number;
   quoteSubtotal?: number;
+  quoteDiscountAmount?: number;
+  quoteTaxAmount?: number;
+  quoteTotal?: number;
+  quoteEstimatedCost?: number;
+  quoteLines?: DealQuoteLine[];
+  installationProjectId?: string;
+  installationProjectName?: string;
   proposalStatus?: DealProposalStatus;
   fulfillmentStatus?: DealFulfillmentStatus;
   fulfillmentDueDate?: Date | string | null;
@@ -1025,6 +1068,7 @@ export type InstallationProjectStatus =
 
 export type InstallationCostCategory =
   | "externalMaterial"
+  | "service"
   | "labour"
   | "transport"
   | "subcontractor"
