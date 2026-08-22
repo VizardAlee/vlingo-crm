@@ -22,4 +22,14 @@ describe("offering inventory validation", () => {
   it("allows non-stock services without a brand", () => {
     expect(offeringSchema.safeParse({ ...baseOffering, type: "consultancy", vertical: "generalServices" }).success).toBe(true);
   });
+
+  it("strips legacy stock quantity from catalog submissions", () => {
+    const result = offeringSchema.parse({
+      ...baseOffering,
+      brandId: "sorotec",
+      stockQuantity: 250,
+    });
+
+    expect(result).not.toHaveProperty("stockQuantity");
+  });
 });

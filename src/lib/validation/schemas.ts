@@ -265,7 +265,6 @@ export const offeringSchema = z.object({
   unitOfMeasure: z.string().optional(),
   sellingPrice: optionalNumber,
   costPrice: optionalNumber,
-  stockQuantity: optionalNumber,
   reorderLevel: optionalNumber,
   supplierName: z.string().optional(),
   serviceDurationDays: optionalNumber,

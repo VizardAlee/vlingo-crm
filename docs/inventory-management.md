@@ -63,7 +63,7 @@ The Inventory page includes a permission-aware **Guide me** tour that runs only 
 3. Sign in as a super admin, operations manager, or inventory manager.
 4. Open Inventory > Setup and create brands such as Sorotec and Revo.
 5. An administrator creates or activates locations under Settings > Branches. Active locations automatically appear in the applicable inventory stock dropdowns.
-6. Create or edit each stock-tracked Product/Service and assign its brand, unit, cost price, and reorder level. New products default to the creator's assigned branch; users with all-branch access can choose another active branch before saving. The SKU is generated automatically when the product is saved.
+6. Create or edit each stock-tracked Product/Service and assign its brand, unit, cost price, and reorder level. New products default to the creator's assigned branch; users with all-branch access can choose another active branch before saving. The SKU is generated automatically when the product is saved. There is intentionally no quantity input on this form because stock quantities belong to location balances and the movement ledger.
 7. Open Add / move stock and choose **Enter existing / opening stock** at each location to establish audited opening balances. Do not copy the legacy catalog `stockQuantity`; opening stock should enter through the ledger.
 
 ## Brand partner onboarding

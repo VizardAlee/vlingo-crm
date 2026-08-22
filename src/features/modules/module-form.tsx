@@ -121,7 +121,7 @@ function offeringTypesForVertical(vertical: BusinessVertical | "") {
 }
 
 function shouldShowOfferingField(field: FormField, type: string) {
-  const stockFields = new Set(["stockQuantity", "reorderLevel"]);
+  const stockFields = new Set(["reorderLevel"]);
   const supplierFields = new Set(["supplierName"]);
   const serviceFields = new Set(["serviceDurationDays"]);
   const inventoryTypes = new Set(["material", "solarEquipment"]);
@@ -902,6 +902,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     }
 
     if (config.collection === "offerings") {
+      // Stock is ledger-owned. Never let a catalog edit overwrite the aggregate
+      // maintained atomically by inventory movements.
+      delete parsedData.stockQuantity;
       const brand = inventoryBrands.find((item) => item.id === parsedData.brandId);
       parsedData.brandName = brand?.name ?? "";
       if (!String(parsedData.sku ?? "").trim()) {
@@ -911,7 +914,6 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       const isInventoryOffering = ["material", "solarEquipment"].includes(offeringType);
       const isServiceOffering = ["solarService", "installationProject", "consultancy", "maintenance", "service"].includes(offeringType);
       if (!isInventoryOffering) {
-        parsedData.stockQuantity = undefined;
         parsedData.reorderLevel = undefined;
       }
 
@@ -1291,6 +1293,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                 <p className="mt-1 text-xs text-muted-foreground">
                   New products default to your assigned branch. Users with
                   all-branch access can choose another branch before saving.
+                </p>
+                <p className="mt-2 text-xs font-medium text-primary">
+                  Quantity is not entered on the product form. Save the product,
+                  then use Inventory to enter opening stock or receive procured stock.
                 </p>
               </div>
               <Field label="Product branch">
