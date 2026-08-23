@@ -3119,6 +3119,7 @@ function officialSalesDocumentNumber(
   documentType: "SAL" | "INV" | "RCT",
   date: Date,
   uniqueId: string,
+  documentBrand: "vlingoSystems" | "kadaBuildersMart" = "vlingoSystems",
 ) {
   const safeBranchCode = String(branchCode || "HQ")
     .toUpperCase()
@@ -3132,7 +3133,8 @@ function officialSalesDocumentNumber(
   }).formatToParts(date);
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     dateParts.find((entry) => entry.type === type)?.value ?? "";
-  return `VSL/${safeBranchCode}/${documentType}/${part("year")}/${part("month")}${part("day")}/${uniqueId.slice(0, 6).toUpperCase()}`;
+  const companyCode = documentBrand === "kadaBuildersMart" ? "KBM" : "VSL";
+  return `${companyCode}/${safeBranchCode}/${documentType}/${part("year")}/${part("month")}${part("day")}/${uniqueId.slice(0, 6).toUpperCase()}`;
 }
 
 export const createPosSale = onCall(callableOptions, async (request) => {
@@ -3186,6 +3188,12 @@ export const createPosSale = onCall(callableOptions, async (request) => {
   const customerName = typeof request.data?.customerName === "string" && request.data.customerName.trim()
     ? request.data.customerName.trim().slice(0, 160)
     : "Walk-in customer";
+  const documentBrand = request.data?.documentBrand === undefined
+    ? "vlingoSystems"
+    : request.data.documentBrand;
+  if (!["vlingoSystems", "kadaBuildersMart"].includes(documentBrand)) {
+    throw new HttpsError("invalid-argument", "Select a valid invoice and receipt brand.");
+  }
   const soldAt = request.data?.soldAt ? new Date(String(request.data.soldAt)) : new Date();
   if (Number.isNaN(soldAt.getTime())) {
     throw new HttpsError("invalid-argument", "Enter a valid sale date.");
@@ -3214,10 +3222,10 @@ export const createPosSale = onCall(callableOptions, async (request) => {
       throw new HttpsError("failed-precondition", "The selected branch is not active.");
     }
     branchCode = String(branchSnapshot.data()?.code || branchId);
-    referenceNumber = officialSalesDocumentNumber(branchCode, "SAL", soldAt, saleRef.id);
-    invoiceNumber = officialSalesDocumentNumber(branchCode, "INV", soldAt, saleRef.id);
+    referenceNumber = officialSalesDocumentNumber(branchCode, "SAL", soldAt, saleRef.id, documentBrand);
+    invoiceNumber = officialSalesDocumentNumber(branchCode, "INV", soldAt, saleRef.id, documentBrand);
     receiptNumber = amountPaid > 0
-      ? officialSalesDocumentNumber(branchCode, "RCT", soldAt, paymentRef?.id ?? saleRef.id)
+      ? officialSalesDocumentNumber(branchCode, "RCT", soldAt, paymentRef?.id ?? saleRef.id, documentBrand)
       : "";
     const offeringSnapshots = snapshots.slice(0, normalizedLines.length);
     const balanceSnapshots = snapshots.slice(normalizedLines.length);
@@ -3333,6 +3341,7 @@ export const createPosSale = onCall(callableOptions, async (request) => {
       referenceNumber,
       invoiceNumber,
       receiptNumber,
+      documentBrand,
       customerName,
       customerPhone: typeof request.data?.customerPhone === "string" ? request.data.customerPhone.trim().slice(0, 60) : "",
       customerEmail: typeof request.data?.customerEmail === "string" ? request.data.customerEmail.trim().slice(0, 160) : "",
@@ -3448,6 +3457,7 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
       "RCT",
       new Date(),
       paymentRef.id,
+      sale.documentBrand === "kadaBuildersMart" ? "kadaBuildersMart" : "vlingoSystems",
     );
     const currentBalance = money(Number(sale.balanceDue ?? 0));
     if (amount > currentBalance) {

@@ -713,6 +713,7 @@ export interface InventoryComment {
 
 export type PosPaymentStatus = "unpaid" | "partPaid" | "paid";
 export type PosSaleStatus = "completed" | "void";
+export type PosDocumentBrand = "vlingoSystems" | "kadaBuildersMart";
 
 export interface PosSaleLine {
   offeringId: string;
@@ -743,6 +744,7 @@ export interface PosSale extends EntityMetadata {
   referenceNumber: string;
   invoiceNumber: string;
   receiptNumber?: string;
+  documentBrand?: PosDocumentBrand;
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;

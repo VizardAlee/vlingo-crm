@@ -32,7 +32,9 @@ describe("AI Guide knowledge", () => {
     const dashboard = fallbackGuideAnswer("What sales records are shown on the dashboard?");
 
     expect(pos).toContain("Type the full required whole-number quantity directly");
-    expect(pos).toContain("Vlingo letterhead template");
+    expect(pos).toContain("Vlingo Systems or Kada Builders Mart");
+    expect(pos).toContain("VSL or KBM invoice number");
+    expect(pos).toContain("Vlingo letterhead");
     expect(pos).toContain("official stamp");
     expect(dashboard).toContain("Sales record section");
     expect(dashboard).toContain("eight latest completed invoices");

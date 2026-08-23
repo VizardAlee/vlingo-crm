@@ -15,7 +15,7 @@ import { hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { listInventoryBalances, listInventoryItems } from "@/services/inventory";
 import { createPosSale, listPosSales, recordPosSalePayment } from "@/services/pos";
-import type { InventoryBalance, Offering, PosSale, RentalPaymentMethod } from "@/types/crm";
+import type { InventoryBalance, Offering, PosDocumentBrand, PosSale, RentalPaymentMethod } from "@/types/crm";
 
 type CartLine = { offeringId: string; quantity: number; discountAmount: number };
 const paymentMethods: Array<{ value: RentalPaymentMethod; label: string }> = [
@@ -29,9 +29,18 @@ const paymentMethods: Array<{ value: RentalPaymentMethod; label: string }> = [
 const posTourSteps: GuidedTourStep[] = [
   { target: "pos-products", title: "Choose products", body: "Search the active branch's available stock by product, SKU, barcode, or brand, then add products to the cart." },
   { target: "pos-cart", title: "Build the sale", body: "Confirm quantities, apply any line discount and tax, and review the total. Reserved stock is excluded automatically." },
+  { target: "pos-document-brand", title: "Choose the document brand", body: "Select Vlingo Systems or Kada Builders Mart. The choice controls the invoice and every receipt created for this sale." },
   { target: "pos-payment", title: "Receive payment", body: "Enter nothing for an unpaid invoice, or record a full or partial payment and its method. A receipt is created whenever money is received." },
   { target: "pos-history", title: "Invoices and receipts", body: "Use Sales history to print documents and collect outstanding invoice balances later." },
 ];
+const documentBrandOptions: Array<{ value: PosDocumentBrand; label: string }> = [
+  { value: "vlingoSystems", label: "Vlingo Systems" },
+  { value: "kadaBuildersMart", label: "Kada Builders Mart" },
+];
+
+function documentBrandLabel(value: PosDocumentBrand | undefined) {
+  return value === "kadaBuildersMart" ? "Kada Builders Mart" : "Vlingo Systems";
+}
 
 function paymentTone(status: string) {
   if (status === "paid") return "success" as const;
@@ -54,6 +63,7 @@ export function PosDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", address: "", notes: "" });
   const [payment, setPayment] = useState({ amountPaid: 0, method: "cash" as RentalPaymentMethod, reference: "", taxRate: 0 });
+  const [documentBrand, setDocumentBrand] = useState<PosDocumentBrand>("vlingoSystems");
   const [paymentForm, setPaymentForm] = useState({ saleId: "", amount: 0, method: "cash" as RentalPaymentMethod, reference: "" });
   const canSell = hasPermission(member, "pos.sell");
 
@@ -165,6 +175,7 @@ export function PosDashboard() {
         customerPhone: customer.phone,
         customerEmail: customer.email,
         customerAddress: customer.address,
+        documentBrand,
         notes: customer.notes,
         lines: cart.map((line) => ({ offeringId: line.offeringId, quantity: line.quantity, discountAmount: line.discountAmount })),
         taxRate: Number(payment.taxRate || 0),
@@ -280,6 +291,8 @@ export function PosDashboard() {
                 {!cart.length ? <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Select products to begin a sale.</div> : null}
               </div>
               <div className="grid gap-2 border-y py-4 text-sm"><div className="flex justify-between"><span>Subtotal</span><strong>{formatCurrency(subtotal)}</strong></div><div className="flex justify-between"><span>Discount</span><strong>-{formatCurrency(discount)}</strong></div><div className="flex items-center justify-between gap-4"><span>Tax rate</span><Input className="w-24" max="100" min="0" onChange={(event) => setPayment((value) => ({ ...value, taxRate: Number(event.target.value) }))} type="number" value={payment.taxRate} /></div><div className="flex justify-between text-lg"><strong>Total</strong><strong>{formatCurrency(total)}</strong></div></div>
+              <Field label="Invoice and receipt brand"><Select data-tour="pos-document-brand" onChange={(event) => setDocumentBrand(event.target.value as PosDocumentBrand)} value={documentBrand}>{documentBrandOptions.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}</Select></Field>
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground"><strong className="block text-sm text-foreground">{documentBrandLabel(documentBrand)} documents</strong><span>The invoice and every receipt for this sale will use this brand’s logo, colours, numbering, and business wording.</span></div>
               <Field label="Amount received"><Input data-tour="pos-payment" max={total} min="0" onChange={(event) => setPayment((value) => ({ ...value, amountPaid: Number(event.target.value) }))} type="number" value={payment.amountPaid} /></Field>
               {payment.amountPaid > 0 ? <><Field label="Payment method"><Select onChange={(event) => setPayment((value) => ({ ...value, method: event.target.value as RentalPaymentMethod }))} value={payment.method}>{paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</Select></Field><Field label="Payment reference"><Input onChange={(event) => setPayment((value) => ({ ...value, reference: event.target.value }))} placeholder="Optional" value={payment.reference} /></Field></> : null}
               <div className="rounded-md bg-muted p-3 text-sm"><div className="flex justify-between"><span>Balance due</span><strong>{formatCurrency(Math.max(0, total - payment.amountPaid))}</strong></div><p className="mt-1 text-xs text-muted-foreground">Every sale generates an invoice. A receipt is generated for any payment received.</p></div>
@@ -294,7 +307,7 @@ export function PosDashboard() {
             {sales.map((sale) => (
               <div className="rounded-md border p-4" key={sale.id}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div><div className="flex flex-wrap items-center gap-2"><strong>{sale.invoiceNumber}</strong><Badge tone={paymentTone(sale.paymentStatus)}>{titleCase(sale.paymentStatus)}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{sale.customerName} · {formatDate(sale.soldAt)} · {sale.lines.length} product line(s)</p></div>
+                  <div><div className="flex flex-wrap items-center gap-2"><strong>{sale.invoiceNumber}</strong><Badge tone={paymentTone(sale.paymentStatus)}>{titleCase(sale.paymentStatus)}</Badge><Badge tone="muted">{documentBrandLabel(sale.documentBrand)}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{sale.customerName} · {formatDate(sale.soldAt)} · {sale.lines.length} product line(s)</p></div>
                   <div className="md:text-right"><strong className="text-lg">{formatCurrency(sale.totalAmount)}</strong><p className="text-xs text-muted-foreground">{formatCurrency(sale.balanceDue)} due</p></div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2"><Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/invoice`}><FileText className="h-4 w-4" />Invoice</Link>{(sale.paymentHistory ?? []).map((entry, index) => <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt/${encodeURIComponent(entry.receiptNumber)}`} key={entry.receiptNumber}><Printer className="h-4 w-4" />Receipt {index + 1}</Link>)}{sale.amountPaid > 0 && !sale.paymentHistory?.length ? <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt`}><Printer className="h-4 w-4" />Receipt</Link> : null}{canSell && sale.balanceDue > 0 ? <Button onClick={() => setPaymentForm({ saleId: sale.id, amount: sale.balanceDue, method: "cash", reference: "" })} size="sm" type="button" variant="secondary">Record payment</Button> : null}</div>

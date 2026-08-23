@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { PrintAction } from "@/components/print-action";
 import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/state";
 import { AuthorizedDocumentSignature } from "@/components/authorized-document-signature";
@@ -12,7 +12,30 @@ import { nairaAmountInWords } from "@/features/pos/pos-document-utils";
 import { hasPermission } from "@/lib/permissions";
 import { formatDate, titleCase } from "@/lib/utils";
 import { getOrgRecord } from "@/services/repository";
-import type { PosPaymentEntry, PosSale } from "@/types/crm";
+import type { PosDocumentBrand, PosPaymentEntry, PosSale } from "@/types/crm";
+
+const documentBrands = {
+  vlingoSystems: {
+    accent: "#c7a13a",
+    businessName: "Vlingo Systems Nigeria Limited",
+    footer: "Solar • Energy • Infrastructure Solutions",
+    primary: "#174f20",
+    soft: "#f2f4ed",
+  },
+  kadaBuildersMart: {
+    accent: "#f28c00",
+    businessName: "Kada Builders Mart",
+    footer: "Building Materials • Hardware • Project Supplies",
+    primary: "#08751b",
+    soft: "#f1f8ef",
+  },
+} as const;
+
+type DocumentCss = CSSProperties & {
+  "--document-accent": string;
+  "--document-primary": string;
+  "--document-soft": string;
+};
 
 const officialCurrency = new Intl.NumberFormat("en-NG", {
   currency: "NGN",
@@ -62,8 +85,19 @@ function Totals({ sale, receipt }: { sale: PosSale; receipt?: PosPaymentEntry })
       <div className="flex justify-between border-b py-2"><span>Subtotal</span><span>{formatMoney(sale.subtotal)}</span></div>
       <div className="flex justify-between border-b py-2"><span>Discount</span><span>-{formatMoney(sale.discountAmount)}</span></div>
       <div className="flex justify-between border-b py-2"><span>Tax ({sale.taxRate}%)</span><span>{formatMoney(sale.taxAmount)}</span></div>
-      <div className="flex justify-between bg-[#174f20] px-3 py-2.5 text-sm font-bold text-white"><span>{receipt ? "TOTAL RECEIVED" : "INVOICE TOTAL"}</span><span>{formatMoney(receipt?.amount ?? sale.totalAmount)}</span></div>
+      <div className="flex justify-between bg-[var(--document-primary)] px-3 py-2.5 text-sm font-bold text-white"><span>{receipt ? "TOTAL RECEIVED" : "INVOICE TOTAL"}</span><span>{formatMoney(receipt?.amount ?? sale.totalAmount)}</span></div>
       {receipt && sale.balanceDue > 0 ? <div className="flex justify-between border-b px-3 py-2"><span>Invoice balance</span><strong>{formatMoney(sale.balanceDue)}</strong></div> : null}
+    </div>
+  );
+}
+
+function KadaDocumentSignature({ date }: { date: string }) {
+  return (
+    <div className="ml-auto w-full max-w-64 pt-12 text-center">
+      <div className="border-t border-[#151915] pt-1 text-[10px]">
+        <p className="font-semibold">Authorised Signatory</p>
+        <p className="mt-0.5 text-[#5e665e]">Date: {date}</p>
+      </div>
     </div>
   );
 }
@@ -103,6 +137,13 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
   const amountLabel = type === "receipt" ? "Total received" : sale.balanceDue > 0 ? "Amount due" : "Invoice total";
   const branchLabel = titleCase(sale.branchId || "Kaduna");
   const statusLabel = paymentStatusLabel(sale.paymentStatus);
+  const documentBrand: PosDocumentBrand = sale.documentBrand === "kadaBuildersMart" ? "kadaBuildersMart" : "vlingoSystems";
+  const brand = documentBrands[documentBrand];
+  const documentStyle: DocumentCss = {
+    "--document-accent": brand.accent,
+    "--document-primary": brand.primary,
+    "--document-soft": brand.soft,
+  };
 
   return (
     <section className="grid gap-5">
@@ -111,20 +152,35 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
         <PrintAction />
       </div>
 
-      <article className="pos-print-document mx-auto w-full max-w-[850px] overflow-hidden bg-white text-[#151915] shadow-xl print:shadow-none">
-        <div className="h-2 bg-[#174f20]" />
+      <article className="pos-print-document mx-auto w-full max-w-[850px] overflow-hidden bg-white text-[#151915] shadow-xl print:shadow-none" style={documentStyle}>
+        <div className="h-2 bg-[var(--document-primary)]" />
         <div className="pos-document-body px-6 py-6 sm:px-10 sm:py-8">
-          <header className="border-b-2 border-[#c7a13a] pb-4">
-            <Image alt="Vlingo Systems Nigeria Limited" className="h-auto w-full max-w-[520px] object-contain object-left" height={92} priority src="/branding/vlingo-logo.jpeg" width={550} />
-            <div className="pos-document-letterhead mt-3 grid gap-2 text-[10px] font-medium leading-4 text-[#4f574f] sm:grid-cols-2 sm:gap-5">
-              <p><strong className="text-[#174f20]">Kaduna Office:</strong> 27A, Isa Kaita Road, U/Sarki, Kaduna · +234 803 770 1084</p>
-              <p><strong className="text-[#174f20]">Kano Office:</strong> Block 3, Shop 1D, Civic Center Ultramodern Market, Kano · 07032545288</p>
-            </div>
+          <header className="border-b-2 border-[var(--document-accent)] pb-4">
+            {documentBrand === "vlingoSystems" ? (
+              <>
+                <Image alt="Vlingo Systems Nigeria Limited" className="h-auto w-full max-w-[520px] object-contain object-left" height={92} priority src="/branding/vlingo-logo.jpeg" width={550} />
+                <div className="pos-document-letterhead mt-3 grid gap-2 text-[10px] font-medium leading-4 text-[#4f574f] sm:grid-cols-2 sm:gap-5">
+                  <p><strong className="text-[var(--document-primary)]">Kaduna Office:</strong> 27A, Isa Kaita Road, U/Sarki, Kaduna · +234 803 770 1084</p>
+                  <p><strong className="text-[var(--document-primary)]">Kano Office:</strong> Block 3, Shop 1D, Civic Center Ultramodern Market, Kano · 07032545288</p>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative h-36 w-full max-w-64 overflow-hidden rounded-sm bg-[#08751b]">
+                  <Image alt="Kada Builders Mart" className="object-cover object-[50%_43%]" fill priority sizes="256px" src="/branding/kada-builders-mart.jpeg" />
+                </div>
+                <div className="sm:text-right">
+                  <p className="text-xl font-black uppercase tracking-[0.12em] text-[var(--document-primary)]">Kada Builders Mart</p>
+                  <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#5d655d]">Building materials · Hardware · Project supplies</p>
+                  <p className="mt-3 text-[10px] font-medium text-[#4f574f]">Sales document issued from {branchLabel}</p>
+                </div>
+              </div>
+            )}
           </header>
 
           <div className="pos-document-title mt-7 flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-start sm:justify-between">
-            <div><h1 className="text-2xl font-black tracking-tight text-[#174f20] sm:text-3xl">{type === "invoice" ? "SALES INVOICE" : "OFFICIAL RECEIPT"}</h1><p className="mt-2 max-w-xl text-sm font-medium text-[#515851]">{sale.lines.map((line) => line.offeringName).slice(0, 3).join(" • ")}{sale.lines.length > 3 ? ` • +${sale.lines.length - 3} more` : ""}</p></div>
-            <div className="w-fit min-w-40 bg-[#174f20] px-5 py-3 text-center text-xs font-black tracking-[0.12em] text-white">{type === "receipt" ? "PAYMENT RECEIVED" : statusLabel}</div>
+            <div><h1 className="text-2xl font-black tracking-tight text-[var(--document-primary)] sm:text-3xl">{type === "invoice" ? "SALES INVOICE" : "OFFICIAL RECEIPT"}</h1><p className="mt-2 max-w-xl text-sm font-medium text-[#515851]">{sale.lines.map((line) => line.offeringName).slice(0, 3).join(" • ")}{sale.lines.length > 3 ? ` • +${sale.lines.length - 3} more` : ""}</p></div>
+            <div className="w-fit min-w-40 bg-[var(--document-primary)] px-5 py-3 text-center text-xs font-black tracking-[0.12em] text-white">{type === "receipt" ? "PAYMENT RECEIVED" : statusLabel}</div>
           </div>
 
           <div className="pos-document-meta mt-6 grid gap-5 sm:grid-cols-2">
@@ -142,17 +198,17 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
             </dl>
           </div>
 
-          <section className="mt-6 grid gap-1 border-l-[6px] border-[#c7a13a] bg-[#f2f4ed] px-5 py-4">
+          <section className="mt-6 grid gap-1 border-l-[6px] border-[var(--document-accent)] bg-[var(--document-soft)] px-5 py-4">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#5e665e]">{amountLabel}</p>
-            <p className="text-2xl font-black text-[#174f20] sm:text-3xl">{formatMoney(amount)}</p>
+            <p className="text-2xl font-black text-[var(--document-primary)] sm:text-3xl">{formatMoney(amount)}</p>
             <p className="text-xs font-semibold italic text-[#3e463e]">{nairaAmountInWords(amount)}</p>
           </section>
 
           <section className="mt-7">
-            <h2 className="border-b-2 border-[#174f20] pb-2 text-xs font-black uppercase tracking-[0.12em] text-[#174f20]">{type === "invoice" ? "Itemized invoice summary" : "Itemized payment summary"}</h2>
+            <h2 className="border-b-2 border-[var(--document-primary)] pb-2 text-xs font-black uppercase tracking-[0.12em] text-[var(--document-primary)]">{type === "invoice" ? "Itemized invoice summary" : "Itemized payment summary"}</h2>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-xs">
-                <thead className="bg-[#174f20] text-left text-[10px] uppercase tracking-[0.08em] text-white"><tr><th className="w-12 px-3 py-3 text-center">S/N</th><th className="px-3 py-3">Item / Service Description</th><th className="px-3 py-3 text-center">Qty.</th><th className="px-3 py-3 text-right">Unit Price</th><th className="px-3 py-3 text-right">Amount</th></tr></thead>
+                <thead className="bg-[var(--document-primary)] text-left text-[10px] uppercase tracking-[0.08em] text-white"><tr><th className="w-12 px-3 py-3 text-center">S/N</th><th className="px-3 py-3">Item / Service Description</th><th className="px-3 py-3 text-center">Qty.</th><th className="px-3 py-3 text-right">Unit Price</th><th className="px-3 py-3 text-right">Amount</th></tr></thead>
                 <tbody>{sale.lines.map((line, index) => <tr className="border-b border-black/10 even:bg-[#fafaf7]" key={line.offeringId}><td className="px-3 py-3 text-center">{index + 1}</td><td className="px-3 py-3"><strong>{line.offeringName}</strong><p className="mt-0.5 text-[10px] text-[#697069]">{line.brandName}{line.sku ? ` · SKU ${line.sku}` : ""}{line.discountAmount ? ` · Discount ${formatMoney(line.discountAmount)}` : ""}</p></td><td className="px-3 py-3 text-center">{line.quantity}</td><td className="px-3 py-3 text-right">{formatMoney(line.unitPrice)}</td><td className="px-3 py-3 text-right font-bold">{formatMoney(line.lineTotal)}</td></tr>)}</tbody>
               </table>
             </div>
@@ -161,23 +217,23 @@ export function PosDocumentPage({ receiptNumber, saleId, type }: { receiptNumber
 
           {type === "invoice" ? (
             <section className="pos-document-payment-grid mt-7 grid gap-4 sm:grid-cols-2">
-              <div className="border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[#174f20]">Payment information</h2><div className="mt-3 grid gap-1 text-xs"><p><strong>Account Name:</strong> Vlingo Systems Nig. Ltd.</p><p><strong>Bank:</strong> Lotus Bank</p><p><strong>Account Number:</strong> 1008302826</p><p><strong>Reference:</strong> {sale.invoiceNumber}</p></div></div>
-              <div className="border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[#174f20]">Payment summary</h2><div className="mt-3 grid gap-1 text-xs"><p><strong>Amount paid:</strong> {formatMoney(sale.amountPaid)}</p><p><strong>Balance due:</strong> {formatMoney(sale.balanceDue)}</p><p><strong>Status:</strong> {statusLabel}</p></div></div>
+              <div className="border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[var(--document-primary)]">Payment information</h2>{documentBrand === "vlingoSystems" ? <div className="mt-3 grid gap-1 text-xs"><p><strong>Account Name:</strong> Vlingo Systems Nig. Ltd.</p><p><strong>Bank:</strong> Lotus Bank</p><p><strong>Account Number:</strong> 1008302826</p><p><strong>Reference:</strong> {sale.invoiceNumber}</p></div> : <div className="mt-3 grid gap-1 text-xs"><p>Confirm Kada Builders Mart payment instructions with the sales desk.</p><p><strong>Payment reference:</strong> {sale.invoiceNumber}</p></div>}</div>
+              <div className="border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[var(--document-primary)]">Payment summary</h2><div className="mt-3 grid gap-1 text-xs"><p><strong>Amount paid:</strong> {formatMoney(sale.amountPaid)}</p><p><strong>Balance due:</strong> {formatMoney(sale.balanceDue)}</p><p><strong>Status:</strong> {statusLabel}</p></div></div>
             </section>
           ) : (
-            <section className="mt-7 border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[#174f20]">Payment acknowledgement</h2><p className="mt-3 text-xs leading-5 text-[#3f463f]">This receipt confirms that Vlingo Systems Nigeria Limited received {formatMoney(receipt?.amount ?? sale.amountPaid)} from {sale.customerName || "the customer"} by {titleCase(receipt?.method ?? sale.paymentMethod ?? "the recorded payment method")} on {documentDate(receipt?.at ?? sale.soldAt)} for the items listed above. Payment reference: {receipt?.paymentReference || sale.paymentReference || "Not provided"}.</p></section>
+            <section className="mt-7 border border-black/10 p-4"><h2 className="text-xs font-black uppercase tracking-[0.1em] text-[var(--document-primary)]">Payment acknowledgement</h2><p className="mt-3 text-xs leading-5 text-[#3f463f]">This receipt confirms that {brand.businessName} received {formatMoney(receipt?.amount ?? sale.amountPaid)} from {sale.customerName || "the customer"} by {titleCase(receipt?.method ?? sale.paymentMethod ?? "the recorded payment method")} on {documentDate(receipt?.at ?? sale.soldAt)} for the items listed above. Payment reference: {receipt?.paymentReference || sale.paymentReference || "Not provided"}.</p></section>
           )}
 
-          {sale.notes ? <section className="mt-5 bg-[#f7f7f3] p-4 text-xs leading-5"><strong className="text-[#174f20]">NOTE:</strong> {sale.notes}</section> : null}
+          {sale.notes ? <section className="mt-5 bg-[#f7f7f3] p-4 text-xs leading-5"><strong className="text-[var(--document-primary)]">NOTE:</strong> {sale.notes}</section> : null}
 
-          {type === "invoice" ? <section className="mt-5 text-[10px] leading-5 text-[#4f574f]"><h2 className="font-black uppercase tracking-[0.1em] text-[#174f20]">Terms</h2><ul className="mt-1 list-disc pl-4"><li>This invoice is valid for 14 days from the invoice date.</li><li>Prices and availability may be reviewed after the validity period.</li><li>Payment must use the invoice number as its transaction reference.</li><li>Product warranties remain subject to the applicable manufacturer or supplier conditions.</li></ul></section> : null}
+          {type === "invoice" ? <section className="mt-5 text-[10px] leading-5 text-[#4f574f]"><h2 className="font-black uppercase tracking-[0.1em] text-[var(--document-primary)]">Terms</h2><ul className="mt-1 list-disc pl-4"><li>This invoice is valid for 14 days from the invoice date.</li><li>Prices and availability may be reviewed after the validity period.</li><li>Payment must use the invoice number as its transaction reference.</li><li>Product warranties remain subject to the applicable manufacturer or supplier conditions.</li></ul></section> : null}
 
-          <footer className="pos-document-signoff mt-8 grid gap-6 border-t-2 border-[#c7a13a] pt-5 sm:grid-cols-2 sm:items-end">
-            <div><p className="text-[10px] text-[#5e665e]">Prepared by:</p><p className="text-xs font-bold text-[#174f20]">Vlingo Systems Nigeria Limited</p></div>
-            {type === "receipt" ? <AuthorizedDocumentSignature /> : null}
+          <footer className="pos-document-signoff mt-8 grid gap-6 border-t-2 border-[var(--document-accent)] pt-5 sm:grid-cols-2 sm:items-end">
+            <div><p className="text-[10px] text-[#5e665e]">Prepared by:</p><p className="text-xs font-bold text-[var(--document-primary)]">{brand.businessName}</p></div>
+            {type === "receipt" ? documentBrand === "vlingoSystems" ? <AuthorizedDocumentSignature /> : <KadaDocumentSignature date={documentDate(receipt?.at ?? sale.soldAt)} /> : null}
           </footer>
         </div>
-        <div className="bg-[#174f20] px-6 py-2 text-center text-[9px] font-semibold tracking-[0.08em] text-white sm:px-10">Vlingo Systems Nigeria Limited &nbsp;|&nbsp; Solar • Energy • Infrastructure Solutions</div>
+        <div className="bg-[var(--document-primary)] px-6 py-2 text-center text-[9px] font-semibold tracking-[0.08em] text-white sm:px-10">{brand.businessName} &nbsp;|&nbsp; {brand.footer}</div>
       </article>
     </section>
   );

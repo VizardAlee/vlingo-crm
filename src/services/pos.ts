@@ -5,7 +5,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
 import { orgCollectionPath } from "@/services/firestore-paths";
-import type { Member, PosSale, RentalPaymentMethod } from "@/types/crm";
+import type { Member, PosDocumentBrand, PosSale, RentalPaymentMethod } from "@/types/crm";
 
 function dateValue(value: unknown) {
   return value && typeof value === "object" && "toDate" in value
@@ -55,6 +55,7 @@ export interface CreatePosSaleInput {
   customerPhone?: string;
   customerEmail?: string;
   customerAddress?: string;
+  documentBrand: PosDocumentBrand;
   lines: Array<{ offeringId: string; quantity: number; discountAmount?: number }>;
   taxRate?: number;
   amountPaid?: number;
