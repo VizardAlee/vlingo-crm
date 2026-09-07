@@ -217,12 +217,37 @@ describe("Beacon Firestore rules", () => {
 
     const inventoryDb = testEnv.authenticatedContext("inventory-1").firestore();
     const offeringRef = doc(inventoryDb, "organizations/org-a/offerings/inverter");
+    const brandRef = doc(inventoryDb, "organizations/org-a/inventoryBrands/sorotec");
+    await assertFails(updateDoc(brandRef, {
+      contactName: "Updated Partner",
+      organizationId: "org-a",
+    }));
+    await assertFails(deleteDoc(brandRef));
     await assertSucceeds(updateDoc(offeringRef, {
       name: "5kVA hybrid inverter",
       organizationId: "org-a",
       updatedBy: "inventory-1",
     }));
     await assertFails(deleteDoc(offeringRef));
+  });
+
+  it("allows only the one-time brand id initialization after brand creation", async () => {
+    await seedMember("inventory-1", "org-a", ["inventory.manageCatalog"], "inventoryManager");
+    const inventoryDb = testEnv.authenticatedContext("inventory-1").firestore();
+    const brandRef = doc(inventoryDb, "organizations/org-a/inventoryBrands/new-brand");
+    await assertSucceeds(setDoc(brandRef, {
+      branchId: "head-office",
+      code: "NEW",
+      createdBy: "inventory-1",
+      isDeleted: false,
+      name: "New Brand",
+      organizationId: "org-a",
+      status: "active",
+      updatedBy: "inventory-1",
+    }));
+    await assertSucceeds(updateDoc(brandRef, { brandId: "new-brand" }));
+    await assertFails(updateDoc(brandRef, { brandId: "changed-brand" }));
+    await assertFails(updateDoc(brandRef, { status: "inactive" }));
   });
 
   it("allows scoped partner comments but blocks direct stock writes", async () => {

@@ -122,6 +122,14 @@ service cloud.firestore {
         get(/databases/$(database)/documents/organizations/$(orgId)/inventoryBrands/$(request.resource.data.brandId)).data.status == "active");
     }
 
+    function canInitializeInventoryBrandId(orgId, brandId) {
+      return hasPermission(orgId, "inventory.manageCatalog") &&
+        canReadRecordBranch(orgId) &&
+        !resource.data.keys().hasAny(["brandId"]) &&
+        request.resource.data.brandId == brandId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["brandId"]);
+    }
+
     function canCreateDeals(orgId) {
       return hasPermission(orgId, "deals.create");
     }
@@ -411,7 +419,7 @@ service cloud.firestore {
       match /inventoryBrands/{brandId} {
         allow read: if canAccessInventoryBrand(orgId, resource.data.brandId);
         allow create: if hasPermission(orgId, "inventory.manageCatalog") && hasMetadata(orgId);
-        allow update: if hasPermission(orgId, "inventory.manageCatalog") && organizationUnchanged(orgId) && canReadRecordBranch(orgId);
+        allow update: if canInitializeInventoryBrandId(orgId, brandId);
         allow delete: if false;
       }
 

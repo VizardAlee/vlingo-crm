@@ -38,6 +38,7 @@ import {
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import {
   addInventoryComment,
+  archiveInventoryBrand,
   archiveInventoryOffering,
   createInventoryBrand,
   listInventoryBalances,
@@ -47,6 +48,7 @@ import {
   listInventoryLocations,
   listInventoryMovements,
   recordInventoryMovement,
+  updateInventoryBrand,
 } from "@/services/inventory";
 import type {
   InventoryBalance,
@@ -176,6 +178,8 @@ export function InventoryDashboard() {
     contactName: "",
     contactEmail: "",
   });
+  const [editingBrandId, setEditingBrandId] = useState<string | null>(null);
+  const [archivingBrandId, setArchivingBrandId] = useState<string | null>(null);
   const [commentForm, setCommentForm] = useState({
     brandId: "",
     message: "",
@@ -588,16 +592,24 @@ export function InventoryDashboard() {
     if (!user) return;
     setSaving("brand");
     try {
-      await createInventoryBrand(
-        { ...brandForm, status: "active" },
-        {
+      if (editingBrandId) {
+        await updateInventoryBrand({
+          ...brandForm,
+          brandId: editingBrandId,
           organizationId: activeOrganizationId,
-          branchId: activeBranchId,
-          userId: user.uid,
-          userEmail: member?.email,
-          userName: member?.displayName,
-        },
-      );
+        });
+      } else {
+        await createInventoryBrand(
+          { ...brandForm, status: "active" },
+          {
+            organizationId: activeOrganizationId,
+            branchId: activeBranchId,
+            userId: user.uid,
+            userEmail: member?.email,
+            userName: member?.displayName,
+          },
+        );
+      }
       setBrandForm({
         name: "",
         code: "",
@@ -605,17 +617,63 @@ export function InventoryDashboard() {
         contactName: "",
         contactEmail: "",
       });
-      toast({ title: "Brand created", variant: "success" });
+      setEditingBrandId(null);
+      toast({ title: editingBrandId ? "Brand updated" : "Brand created", variant: "success" });
       await load();
     } catch (nextError) {
       toast({
-        title: "Unable to create brand",
+        title: editingBrandId ? "Unable to update brand" : "Unable to create brand",
         description:
           nextError instanceof Error ? nextError.message : "Try again.",
         variant: "error",
       });
     } finally {
       setSaving(null);
+    }
+  }
+
+  function startEditingBrand(brand: InventoryBrand) {
+    setEditingBrandId(brand.id);
+    setBrandForm({
+      code: brand.code ?? "",
+      contactEmail: brand.contactEmail ?? "",
+      contactName: brand.contactName ?? "",
+      description: brand.description ?? "",
+      name: brand.name,
+    });
+  }
+
+  function cancelEditingBrand() {
+    setEditingBrandId(null);
+    setBrandForm({ name: "", code: "", description: "", contactName: "", contactEmail: "" });
+  }
+
+  async function archiveBrand(brand: InventoryBrand) {
+    const confirmed = window.confirm(
+      `Delete ${brand.name} from active brands? Existing historical records will be preserved. Products, stock, open purchases, reservations, and Brand Representative assignments must be cleared first.`,
+    );
+    if (!confirmed) return;
+
+    setArchivingBrandId(brand.id);
+    setError(null);
+    try {
+      await archiveInventoryBrand({
+        brandId: brand.id,
+        organizationId: activeOrganizationId,
+      });
+      if (editingBrandId === brand.id) cancelEditingBrand();
+      toast({
+        title: "Brand deleted",
+        description: `${brand.name} was removed from active brands while its history was preserved.`,
+        variant: "success",
+      });
+      await load();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to delete this brand.";
+      setError(message);
+      toast({ title: "Unable to delete brand", description: message, variant: "error" });
+    } finally {
+      setArchivingBrandId(null);
     }
   }
 
@@ -1533,7 +1591,7 @@ export function InventoryDashboard() {
         <div className="grid gap-5 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Brands</CardTitle>
+              <CardTitle>{editingBrandId ? "Edit brand" : "Brands"}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
               <form className="grid gap-3" onSubmit={submitBrand}>
@@ -1594,10 +1652,17 @@ export function InventoryDashboard() {
                     }
                   />
                 </Field>
-                <Button disabled={saving === "brand"} type="submit">
-                  <Plus className="h-4 w-4" />
-                  Create brand
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={saving === "brand"} type="submit">
+                    {editingBrandId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {saving === "brand" ? "Saving" : editingBrandId ? "Save brand" : "Create brand"}
+                  </Button>
+                  {editingBrandId ? (
+                    <Button disabled={saving === "brand"} onClick={cancelEditingBrand} type="button" variant="outline">
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
               </form>
               <div className="grid gap-2">
                 {brands.map((brand) => (
@@ -1612,7 +1677,17 @@ export function InventoryDashboard() {
                         {brand.contactEmail || "No partner contact"}
                       </p>
                     </div>
-                    <Badge tone="success">{brand.status}</Badge>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Badge tone="success">{brand.status}</Badge>
+                      <Button disabled={saving === "brand" || archivingBrandId === brand.id} onClick={() => startEditingBrand(brand)} size="sm" type="button" variant="outline">
+                        <Pencil className="h-4 w-4" />
+                        Edit
+                      </Button>
+                      <Button className="text-danger" disabled={saving === "brand" || archivingBrandId === brand.id} onClick={() => void archiveBrand(brand)} size="sm" type="button" variant="outline">
+                        <Archive className="h-4 w-4" />
+                        {archivingBrandId === brand.id ? "Deleting" : "Delete"}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

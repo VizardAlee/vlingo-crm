@@ -167,7 +167,7 @@ export async function listInventoryBrands(
       snapshot.docs.map(
         (item) => ({ id: item.id, ...item.data() }) as InventoryBrand,
       ),
-    );
+    ).filter((brand) => brand.status === "active" && brand.isDeleted !== true);
   }
   const firestore = assertDb();
   const snapshot = await getDocs(
@@ -175,6 +175,7 @@ export async function listInventoryBrands(
   );
   return snapshot.docs
     .map((item) => ({ id: item.id, ...item.data() }) as InventoryBrand)
+    .filter((brand) => brand.status === "active" && brand.isDeleted !== true)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -367,6 +368,35 @@ export function createInventoryBrand(
     );
     return id;
   });
+}
+
+export async function updateInventoryBrand(input: {
+  organizationId: string;
+  brandId: string;
+  name: string;
+  code?: string;
+  description?: string;
+  contactName?: string;
+  contactEmail?: string;
+}) {
+  if (!functions) throw new Error("Firebase Functions are not configured.");
+  const result = await httpsCallable<typeof input, { ok: boolean }>(
+    functions,
+    "updateInventoryBrand",
+  )(input);
+  return result.data;
+}
+
+export async function archiveInventoryBrand(input: {
+  organizationId: string;
+  brandId: string;
+}) {
+  if (!functions) throw new Error("Firebase Functions are not configured.");
+  const result = await httpsCallable<typeof input, { ok: boolean }>(
+    functions,
+    "archiveInventoryBrand",
+  )(input);
+  return result.data;
 }
 
 export function createInventorySupplier(

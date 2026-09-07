@@ -2769,6 +2769,190 @@ export const archiveInventoryOffering = onCall(
   },
 );
 
+function optionalTrimmedString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export const updateInventoryBrand = onCall(
+  callableOptions,
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const organizationId = requireString(request.data?.organizationId, "organizationId");
+    const brandId = requireString(request.data?.brandId, "brandId");
+    const name = requireString(request.data?.name, "name");
+    const code = optionalTrimmedString(request.data?.code).toUpperCase();
+    const contactName = optionalTrimmedString(request.data?.contactName);
+    const contactEmail = optionalTrimmedString(request.data?.contactEmail).toLowerCase();
+    const description = optionalTrimmedString(request.data?.description);
+    const actor = await getActiveMember(request.auth.uid, organizationId);
+    if (!hasActorPermission(actor, "inventory.manageCatalog")) {
+      throw new HttpsError("permission-denied", "You do not have permission to edit brands.");
+    }
+
+    const organizationPath = `organizations/${organizationId}`;
+    const brandRef = db.doc(`${organizationPath}/inventoryBrands/${brandId}`);
+    const [brandSnapshot, brandSnapshots] = await Promise.all([
+      brandRef.get(),
+      db.collection(`${organizationPath}/inventoryBrands`).get(),
+    ]);
+    if (!brandSnapshot.exists || brandSnapshot.data()?.isDeleted === true) {
+      throw new HttpsError("not-found", "Brand not found.");
+    }
+    const previous = brandSnapshot.data() ?? {};
+    assertCanAccessRecordBranch(actor, previous);
+
+    const duplicate = brandSnapshots.docs.find((snapshot) => {
+      if (snapshot.id === brandId || snapshot.data().isDeleted === true) return false;
+      const candidate = snapshot.data();
+      return (
+        String(candidate.name ?? "").trim().toLowerCase() === name.toLowerCase() ||
+        Boolean(code && String(candidate.code ?? "").trim().toLowerCase() === code.toLowerCase())
+      );
+    });
+    if (duplicate) {
+      throw new HttpsError("already-exists", "Another active brand already uses this name or code.");
+    }
+
+    const [offerings, balances] = await Promise.all([
+      db.collection(`${organizationPath}/offerings`).where("brandId", "==", brandId).get(),
+      db.collection(`${organizationPath}/inventoryBalances`).where("brandId", "==", brandId).get(),
+    ]);
+    const auditRef = db.collection(`${organizationPath}/auditLogs`).doc();
+    const writer = db.bulkWriter();
+    writer.update(brandRef, {
+      code,
+      contactEmail,
+      contactName,
+      description,
+      name,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+    });
+    offerings.docs.forEach((snapshot) => {
+      if (snapshot.data().isDeleted !== true) {
+        writer.update(snapshot.ref, {
+          brandName: name,
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: actor.id,
+        });
+      }
+    });
+    balances.docs.forEach((snapshot) => {
+      writer.update(snapshot.ref, {
+        brandName: name,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      });
+    });
+    writer.set(auditRef, {
+      action: "inventoryBrand.update",
+      actorId: actor.id,
+      actorName: actor.displayName,
+      branchId: String(previous.branchId ?? actor.branchId),
+      createdAt: FieldValue.serverTimestamp(),
+      entityId: brandId,
+      entityType: "inventoryBrand",
+      newValue: { code, contactEmail, contactName, description, name },
+      organizationId,
+      previousValue: previous,
+    });
+    await writer.close();
+
+    return { ok: true };
+  },
+);
+
+export const archiveInventoryBrand = onCall(
+  callableOptions,
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const organizationId = requireString(request.data?.organizationId, "organizationId");
+    const brandId = requireString(request.data?.brandId, "brandId");
+    const actor = await getActiveMember(request.auth.uid, organizationId);
+    if (!hasActorPermission(actor, "inventory.manageCatalog")) {
+      throw new HttpsError("permission-denied", "You do not have permission to delete brands.");
+    }
+
+    const organizationPath = `organizations/${organizationId}`;
+    const brandRef = db.doc(`${organizationPath}/inventoryBrands/${brandId}`);
+    const brandSnapshot = await brandRef.get();
+    if (!brandSnapshot.exists) {
+      throw new HttpsError("not-found", "Brand not found.");
+    }
+    const brand = brandSnapshot.data() ?? {};
+    assertCanAccessRecordBranch(actor, brand);
+    if (brand.isDeleted === true) return { ok: true };
+
+    const [offerings, balances, reservations, assignedMembers, purchaseOrders] = await Promise.all([
+      db.collection(`${organizationPath}/offerings`).where("brandId", "==", brandId).get(),
+      db.collection(`${organizationPath}/inventoryBalances`).where("brandId", "==", brandId).get(),
+      db.collection(`${organizationPath}/inventoryReservations`).where("brandId", "==", brandId).get(),
+      db.collection(`${organizationPath}/members`).where("partnerBrandIds", "array-contains", brandId).get(),
+      db.collection(`${organizationPath}/inventoryPurchaseOrders`).get(),
+    ]);
+
+    if (offerings.docs.some((snapshot) => snapshot.data().isDeleted !== true)) {
+      throw new HttpsError("failed-precondition", "Archive or reassign every product linked to this brand before deleting it.");
+    }
+    if (balances.docs.some((snapshot) => {
+      const balance = snapshot.data();
+      return Math.abs(Number(balance.quantityOnHand ?? 0)) > 0.000001 || Math.abs(Number(balance.quantityReserved ?? 0)) > 0.000001;
+    })) {
+      throw new HttpsError("failed-precondition", "Clear all stock balances for this brand before deleting it.");
+    }
+    if (reservations.docs.some((snapshot) => snapshot.data().isDeleted !== true && snapshot.data().reservationStatus === "active")) {
+      throw new HttpsError("failed-precondition", "Release or fulfill active reservations for this brand before deleting it.");
+    }
+    if (assignedMembers.docs.some((snapshot) => snapshot.data().status === "active")) {
+      throw new HttpsError("failed-precondition", "Remove this brand from active Brand Representative accounts before deleting it.");
+    }
+    const hasOpenPurchaseOrder = purchaseOrders.docs.some((snapshot) => {
+      const purchaseOrder = snapshot.data();
+      if (purchaseOrder.isDeleted === true || ["cancelled", "rejected"].includes(purchaseOrder.approvalStatus) || purchaseOrder.receivingStatus === "received") return false;
+      return Array.isArray(purchaseOrder.lines) && purchaseOrder.lines.some((line: unknown) => {
+        if (!line || typeof line !== "object") return false;
+        const value = line as Record<string, unknown>;
+        return value.brandId === brandId || value.offeringBrandId === brandId;
+      });
+    });
+    if (hasOpenPurchaseOrder) {
+      throw new HttpsError("failed-precondition", "Complete or cancel open purchase orders for this brand before deleting it.");
+    }
+
+    const auditRef = db.collection(`${organizationPath}/auditLogs`).doc();
+    const batch = db.batch();
+    batch.update(brandRef, {
+      deletedAt: FieldValue.serverTimestamp(),
+      deletedBy: actor.id,
+      isDeleted: true,
+      status: "inactive",
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+    });
+    batch.set(auditRef, {
+      action: "inventoryBrand.archive",
+      actorId: actor.id,
+      actorName: actor.displayName,
+      branchId: String(brand.branchId ?? actor.branchId),
+      createdAt: FieldValue.serverTimestamp(),
+      entityId: brandId,
+      entityType: "inventoryBrand",
+      newValue: { isDeleted: true, status: "inactive" },
+      organizationId,
+      previousValue: brand,
+    });
+    await batch.commit();
+
+    return { ok: true };
+  },
+);
+
 type StockLocationSnapshot = {
   exists: boolean;
   id: string;

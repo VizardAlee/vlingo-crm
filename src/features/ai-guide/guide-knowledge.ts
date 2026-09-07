@@ -532,6 +532,8 @@ export const guideTopics: GuideTopic[] = [
       "edit inventory",
       "delete inventory",
       "archive product",
+      "edit brand",
+      "delete brand",
     ],
     title: "Manage products and services",
     steps: [
@@ -544,6 +546,8 @@ export const guideTopics: GuideTopic[] = [
       "Initial stock is only for quantities already on hand when the product is first created. Use Inventory for later procurement receipts, transfers, issues, returns, counts, and adjustments.",
       "Authorized users can choose Edit beside an item in Inventory to change its catalog details. Quantity is never edited directly; use an audited stock adjustment instead.",
       "Choose Delete to remove an unused item from active inventory. The server archives it rather than erasing history, and blocks deletion until on-hand stock, reserved stock, active reservations, batch or serial stock, and open purchase orders are cleared.",
+      "Authorized catalog managers can edit brand details under Inventory > Setup. The brand ID stays unchanged, while the new name is synchronized to linked active products and current balances.",
+      "Deleting a brand archives it and preserves historical records. The server blocks deletion while active products, stock, reservations, open purchase orders, or active Brand Representative assignments still reference the brand.",
       "The product defaults to the creator's assigned branch. A user with all-branch access can select another active admin-created branch before saving.",
       "Link leads and deals to products/services so users do not re-enter the same information.",
       "Keep prices, status, category, stock, and service details current so sales and finance flows stay accurate.",
