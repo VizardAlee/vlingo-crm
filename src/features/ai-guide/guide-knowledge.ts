@@ -52,7 +52,9 @@ export function buildGuideMemberContext(member: GuideMemberContext) {
       )
     : [];
   const isSuperAdmin = roles.includes("superAdmin");
-  const accessibleAreas = isSuperAdmin
+  const isOperationsManager = roles.includes("operationsManager");
+  const hasFullRoleAccess = isSuperAdmin || isOperationsManager;
+  const accessibleAreas = hasFullRoleAccess
     ? guideAreaPermissions.map(([area]) => area)
     : guideAreaPermissions
         .filter(([, requiredPermissions]) =>
@@ -70,7 +72,7 @@ Current signed-in user:
 - Branch access: ${isSuperAdmin || member.branchAccess === "all" ? "all branches" : "assigned branch only"}
 - Brand representative branch scope: All organization branches
 - Accessible areas inferred from current permissions: ${accessibleAreas.length ? accessibleAreas.join(", ") : "AI Guide only"}
-- Explicit permissions: ${isSuperAdmin ? "Unrestricted super admin access" : permissions.length ? permissions.join(", ") : "None recorded"}
+- Explicit permissions: ${isSuperAdmin ? "Unrestricted super admin access" : isOperationsManager ? "Full operational access within authorized branches" : permissions.length ? permissions.join(", ") : "None recorded"}
 
 Permission guidance rules:
 - Tailor instructions to this user's roles, permissions, ownership, and branch scope.
@@ -505,7 +507,9 @@ export const guideTopics: GuideTopic[] = [
     title: "Understand roles and branch access",
     steps: [
       "Super admins have unrestricted app access and can switch branches.",
-      "Managers generally see records in their branch or branches they are allowed to access.",
+      "Operations Managers have the complete operational, inventory, POS, finance, reporting, audit, and user-management permission set inside their authorized branch or branches.",
+      "An Operations Manager cannot use that access to manage users in another branch, grant all-branch access, or assign a privileged role such as Super Admin or Operations Manager; those organization-wide changes remain restricted to Super Admins.",
+      "Other managers generally see records in their branch or branches they are allowed to access.",
       "Sales executives see their own assigned leads and workflows unless a manager assigns more to them.",
       "Sidebar links are hidden when the user's role does not include access to that area.",
       "If a user sees a permission error, check their member document permissions, branchId, branchAccess, and assigned record ownership.",

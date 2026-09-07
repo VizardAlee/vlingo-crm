@@ -72,7 +72,9 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
   operationsManager: [
     "dashboard.viewExecutive",
     "leads.create",
+    "leads.readAssigned",
     "leads.readAll",
+    "leads.updateAssigned",
     "leads.assign",
     "clients.create",
     "clients.read",
@@ -108,7 +110,13 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "tasks.update",
     "activities.create",
     "activities.read",
+    "finance.create",
+    "finance.update",
+    "finance.approve",
+    "reports.viewFinancial",
     "users.manage",
+    "roles.manage",
+    "auditLogs.read",
   ],
   salesManager: ["leads.create", "leads.readAll", "leads.updateAssigned", "leads.assign", "clients.create", "clients.read", "clients.update", "deals.create", "deals.read", "deals.update", "installations.create", "installations.read", "marketing.read", "offerings.read", "inventory.read", "inventory.viewReports", "inventory.reserve", "pos.read", "pos.sell", "tasks.create", "tasks.read", "activities.create", "activities.read"],
   salesExecutive: ["leads.create", "leads.readAssigned", "leads.updateAssigned", "clients.create", "clients.read", "deals.create", "deals.read", "deals.update", "installations.create", "installations.read", "offerings.read", "inventory.read", "inventory.reserve", "pos.read", "pos.sell", "tasks.create", "tasks.read", "activities.create", "activities.read"],
@@ -131,8 +139,16 @@ export function hasPermission(member: Member | null, permission: Permission) {
     return false;
   }
 
-  if (memberRoles(member).includes("superAdmin")) {
+  const roles = memberRoles(member);
+  if (roles.includes("superAdmin")) {
     return true;
+  }
+
+  // Role-derived access makes permission upgrades effective for existing
+  // Operations Managers without requiring every member document to be saved
+  // again. Firestore rules and callable functions apply the same rule.
+  if (roles.includes("operationsManager")) {
+    return rolePermissions.operationsManager.includes(permission);
   }
 
   return (member.permissions ?? []).includes(permission);

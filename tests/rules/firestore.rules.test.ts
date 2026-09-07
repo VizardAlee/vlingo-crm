@@ -867,6 +867,43 @@ describe("Beacon Firestore rules", () => {
     }));
   });
 
+  it("gives operations managers role-derived privileges only inside their branch", async () => {
+    await seedMember("operations-1", "org-a", [], "operationsManager", { branchAccess: "own" });
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      for (const branchId of ["head-office", "kano"]) {
+        await setDoc(doc(adminDb, `organizations/org-a/financePayments/payment-${branchId}`), {
+          amount: 500000,
+          branchId,
+          createdBy: "accountant-1",
+          isDeleted: false,
+          organizationId: "org-a",
+          receiptNumber: `RCT-${branchId}`,
+          updatedBy: "accountant-1",
+          verificationStatus: "pending",
+        });
+      }
+    });
+
+    const db = testEnv.authenticatedContext("operations-1").firestore();
+    const ownBranchPayment = doc(db, "organizations/org-a/financePayments/payment-head-office");
+    const otherBranchPayment = doc(db, "organizations/org-a/financePayments/payment-kano");
+    await assertSucceeds(getDoc(ownBranchPayment));
+    await assertFails(getDoc(otherBranchPayment));
+    await assertSucceeds(updateDoc(ownBranchPayment, {
+      organizationId: "org-a",
+      updatedBy: "operations-1",
+      verificationStatus: "verified",
+      verifiedBy: "operations-1",
+    }));
+    await assertFails(updateDoc(otherBranchPayment, {
+      organizationId: "org-a",
+      updatedBy: "operations-1",
+      verificationStatus: "verified",
+      verifiedBy: "operations-1",
+    }));
+  });
+
   it("blocks finance records without finance permission", async () => {
     await seedMember("sales-1", "org-a", ["leads.readAssigned"]);
     const db = testEnv.authenticatedContext("sales-1").firestore();

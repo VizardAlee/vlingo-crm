@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accessRuleForPath, isRetiredRoute, navigation, reportsAccessPermissions } from "../../src/components/layout/navigation";
-import { defaultAppRoute, hasAnyPermission, hasNotificationOversight, hasOrganizationReportAccess, hasPermission, rolePermissions } from "../../src/lib/permissions";
+import { canAccessAllBranches, canAccessBranch, defaultAppRoute, hasAnyPermission, hasNotificationOversight, hasOrganizationReportAccess, hasPermission, rolePermissions } from "../../src/lib/permissions";
 import type { Member } from "../../src/types/crm";
 
 describe("route access rules", () => {
@@ -67,6 +67,30 @@ describe("route access rules", () => {
 
     expect(hasPermission(member, "finance.approve")).toBe(true);
     expect(hasAnyPermission(member, ["offerings.create"])).toBe(true);
+  });
+
+  it("gives operations managers every app permission but retains their branch boundary", () => {
+    const member = {
+      branchAccess: "own",
+      branchId: "head-office",
+      displayName: "Operations Manager",
+      email: "operations@example.com",
+      id: "operations-1",
+      organizationId: "org-a",
+      permissions: [],
+      role: "operationsManager",
+      status: "active",
+      updatedBy: "system",
+      createdBy: "system",
+    } satisfies Member;
+
+    expect(new Set(rolePermissions.operationsManager)).toEqual(new Set(rolePermissions.superAdmin));
+    for (const permission of rolePermissions.superAdmin) {
+      expect(hasPermission(member, permission), permission).toBe(true);
+    }
+    expect(canAccessBranch(member, "head-office")).toBe(true);
+    expect(canAccessBranch(member, "kano")).toBe(false);
+    expect(canAccessAllBranches(member)).toBe(false);
   });
 
   it("limits notification oversight to active managerial roles", () => {

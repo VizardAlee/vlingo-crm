@@ -58,7 +58,7 @@ function firstAssignableRole(options: RoleName[]) {
 function canAssignRole(currentMember: Member | null, role: RoleName) {
   const permissions = rolePermissions[role];
   const roleIsPrivileged = role === "superAdmin" || role === "managingDirector" || permissions.some((permission) => ["users.manage", "roles.manage"].includes(permission));
-  return !roleIsPrivileged || hasPermission(currentMember, "roles.manage");
+  return !roleIsPrivileged || memberRoles(currentMember).includes("superAdmin");
 }
 
 function roleLabel(role: RoleName) {
@@ -156,7 +156,7 @@ export function UsersManagement() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const assignableRoles = useMemo(() => roles.filter((role) => canAssignRole(member, role)), [member]);
-  const canGrantAllBranches = hasPermission(member, "roles.manage") || canAccessAllBranches(member);
+  const canGrantAllBranches = memberRoles(member).includes("superAdmin");
   const defaultAssignableRole = firstAssignableRole(assignableRoles);
 
   const loadUsers = useCallback(async () => {
@@ -164,10 +164,16 @@ export function UsersManagement() {
     setLoading(true);
     try {
       const [nextBranches, nextMembers, nextBrands] = await Promise.all([listBranches(activeOrganizationId), listMembers(activeOrganizationId), listInventoryBrands(activeOrganizationId, member)]);
-      setBranches(nextBranches);
-      setMembers(nextMembers);
+      const visibleBranches = canAccessAllBranches(member)
+        ? nextBranches
+        : nextBranches.filter((branch) => branch.id === member?.branchId);
+      const visibleMembers = canAccessAllBranches(member)
+        ? nextMembers
+        : nextMembers.filter((target) => target.branchId === member?.branchId || target.id === user?.uid);
+      setBranches(visibleBranches);
+      setMembers(visibleMembers);
       setBrands(nextBrands);
-      setInvite((value) => ({ ...value, branchId: nextBranches[0]?.id ?? value.branchId }));
+      setInvite((value) => ({ ...value, branchId: visibleBranches[0]?.id ?? value.branchId }));
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to load users.";
       setError(message);
@@ -175,7 +181,7 @@ export function UsersManagement() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, member, toast]);
+  }, [activeOrganizationId, member, toast, user?.uid]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

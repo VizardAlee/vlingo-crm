@@ -37,12 +37,12 @@ service cloud.firestore {
 
     function hasPermission(orgId, permission) {
       return isActiveMember(orgId) &&
-        (hasRole(orgId, ["superAdmin"]) || permissions(orgId).hasAny([permission]));
+        (hasRole(orgId, ["superAdmin", "operationsManager"]) || permissions(orgId).hasAny([permission]));
     }
 
     function hasAnyPermission(orgId, allowed) {
       return isActiveMember(orgId) &&
-        (hasRole(orgId, ["superAdmin"]) || permissions(orgId).hasAny(allowed));
+        (hasRole(orgId, ["superAdmin", "operationsManager"]) || permissions(orgId).hasAny(allowed));
     }
 
     function canAccessAnyBranch(orgId) {

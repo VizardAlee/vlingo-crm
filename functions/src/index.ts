@@ -138,7 +138,9 @@ const legacyRolePermissions = {
   operationsManager: [
     "dashboard.viewExecutive",
     "leads.create",
+    "leads.readAssigned",
     "leads.readAll",
+    "leads.updateAssigned",
     "leads.assign",
     "clients.create",
     "clients.read",
@@ -186,7 +188,13 @@ const legacyRolePermissions = {
     "tasks.update",
     "activities.create",
     "activities.read",
+    "finance.create",
+    "finance.update",
+    "finance.approve",
+    "reports.viewFinancial",
     "users.manage",
+    "roles.manage",
+    "auditLogs.read",
   ],
   salesManager: [
     "leads.create",
@@ -731,7 +739,7 @@ async function getActiveMember(
 }
 
 function assertCanAssignRole(actor: ActorContext, role: RoleName) {
-  if (isPrivilegedRole(role) && !hasActorPermission(actor, "roles.manage")) {
+  if (isPrivilegedRole(role) && !hasActorRole(actor, "superAdmin")) {
     throw new HttpsError(
       "permission-denied",
       "You cannot assign privileged roles.",
@@ -747,10 +755,19 @@ function assertCanGrantBranchAccess(
   actor: ActorContext,
   branchAccess: BranchAccess,
 ) {
-  if (branchAccess === "all" && !hasActorPermission(actor, "roles.manage")) {
+  if (branchAccess === "all" && !hasActorRole(actor, "superAdmin")) {
     throw new HttpsError(
       "permission-denied",
       "Only super admins can grant all-branch access.",
+    );
+  }
+}
+
+function assertCanManageBranch(actor: ActorContext, branchId: string) {
+  if (!canActorAccessBranch(actor, branchId)) {
+    throw new HttpsError(
+      "permission-denied",
+      "You cannot manage users outside your authorized branch.",
     );
   }
 }
@@ -759,9 +776,15 @@ function assertCanManageTargetMember(
   actor: ActorContext,
   target: DocumentData | undefined,
 ) {
+  if (target?.branchId && !canActorAccessBranch(actor, target.branchId)) {
+    throw new HttpsError(
+      "permission-denied",
+      "You cannot manage users outside your authorized branch.",
+    );
+  }
   if (
     isPrivilegedMember(target) &&
-    !hasActorPermission(actor, "roles.manage")
+    !hasActorRole(actor, "superAdmin")
   ) {
     throw new HttpsError(
       "permission-denied",
@@ -786,6 +809,8 @@ function hasActorRole(member: ActorContext, role: RoleName) {
 function hasActorPermission(member: ActorContext, permission: string) {
   return (
     hasActorRole(member, "superAdmin") ||
+    (hasActorRole(member, "operationsManager") &&
+      rolePermissions.operationsManager.includes(permission)) ||
     member.permissions.includes(permission)
   );
 }
@@ -796,7 +821,7 @@ function hasAnyActorPermission(
 ) {
   return (
     hasActorRole(member, "superAdmin") ||
-    permissions.some((permission) => member.permissions.includes(permission))
+    permissions.some((permission) => hasActorPermission(member, permission))
   );
 }
 
@@ -1329,6 +1354,7 @@ export const provisionOrganizationMember = onCall(
           ? request.data.phoneNumber.trim()
           : "";
       const actor = await getActor(request.auth.uid, organizationId);
+      assertCanManageBranch(actor, branchId);
       assertCanAssignRoles(actor, roles);
       assertCanGrantBranchAccess(actor, branchAccess);
       const partnerBrandIds = await requirePartnerBrandIds(
@@ -1957,6 +1983,7 @@ export const updateOrganizationMemberRole = onCall(
     const roles = requireRoles(request.data?.roles, request.data?.role);
     const role = roles[0];
     const actor = await getActor(request.auth.uid, organizationId);
+    assertCanManageBranch(actor, branchId);
     assertCanAssignRoles(actor, roles);
     assertCanGrantBranchAccess(actor, branchAccess);
     const partnerBrandIds = await requirePartnerBrandIds(
