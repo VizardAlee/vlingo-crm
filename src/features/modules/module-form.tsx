@@ -18,12 +18,13 @@ import { DealQuoteLinesEditor } from "@/features/modules/deal-quote-lines-editor
 import { summarizeDealQuote } from "@/features/modules/deal-quote-utils";
 import { dealCategoryFromFormValue, dealCreateVisibleFieldNames, dealTypeFromFormValue, dealTypesForCategory, dealVisibleFieldNames } from "@/features/modules/deal-form-logic";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
+import { isInventoryOfferingType, parseInitialStockQuantity } from "@/features/modules/offering-opening-stock";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
 import { canAccessAllBranches, canAccessBranch, effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, createReference, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import { createInventoryBrand, listInventoryBrands } from "@/services/inventory";
+import { createInventoryBrand, listInventoryBrands, recordInventoryMovement } from "@/services/inventory";
 import { listBranches, listMembers } from "@/services/users";
 import type { Branch, BusinessVertical, Client, DealQuoteLine, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
@@ -289,6 +290,10 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [offeringBranchId, setOfferingBranchId] = useState(
     String(existing?.branchId ?? member?.branchId ?? activeBranchId),
   );
+  const [initialStockQuantity, setInitialStockQuantity] = useState("");
+  const [initialStockDate, setInitialStockDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [initialStockBatchNumber, setInitialStockBatchNumber] = useState("");
+  const [initialStockNotes, setInitialStockNotes] = useState("");
   const [brandCreatorOpen, setBrandCreatorOpen] = useState(false);
   const [brandForm, setBrandForm] = useState({ name: "", code: "", contactName: "", contactEmail: "", description: "" });
   const [brandSaving, setBrandSaving] = useState(false);
@@ -353,6 +358,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const selectedInterestCategory = useWatch({ control, name: "interestCategory" });
   const selectedOfferingVertical = useWatch({ control, name: "vertical" });
   const selectedOfferingType = useWatch({ control, name: "type" });
+  const selectedTrackingMode = useWatch({ control, name: "trackingMode" });
+  const canEnterInitialStock = config.collection === "offerings" && !id &&
+    isInventoryOfferingType(selectedOfferingType) && hasPermission(member, "inventory.receive");
   const effectiveDealCategory = config.collection === "deals"
     ? dealCategoryFromFormValue(selectedDealCategory)
       || dealCategoryFromFormValue(existing?.dealCategory)
@@ -915,6 +923,23 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
 
     setError(null);
     setValidationErrors({});
+    let openingQuantity = 0;
+    if (canEnterInitialStock) {
+      try {
+        openingQuantity = parseInitialStockQuantity(initialStockQuantity);
+      } catch (quantityError) {
+        const message = quantityError instanceof Error ? quantityError.message : "Enter a valid initial stock quantity.";
+        setError(message);
+        toast({ title: "Check initial stock", description: message, variant: "error" });
+        return;
+      }
+      if (openingQuantity > 0 && selectedTrackingMode === "batch" && !initialStockBatchNumber.trim()) {
+        const message = "Enter the batch number for this opening stock.";
+        setError(message);
+        toast({ title: "Batch number required", description: message, variant: "error" });
+        return;
+      }
+    }
     if (usesDealQuoteBuilder) {
       if (!dealQuoteLines.length) {
         const message = "Add at least one product or service to the installation quotation.";
@@ -1157,11 +1182,41 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
       } else {
         const createdId = await createOrgRecord(config.collection, parsedData, context, config.prefix);
         await writeAuditLog(context, "record.create", config.collection, createdId, parsedData);
+        if (config.collection === "offerings" && openingQuantity > 0) {
+          try {
+            await recordInventoryMovement({
+              batchNumber: selectedTrackingMode === "batch" ? initialStockBatchNumber.trim() : undefined,
+              branchId: recordBranchId,
+              externalReference: "Opening balance",
+              movementPurpose: "other",
+              movementType: "receipt",
+              notes: initialStockNotes.trim() || "Opening stock entered during product creation.",
+              occurredAt: initialStockDate
+                ? new Date(`${initialStockDate}T12:00:00`).toISOString()
+                : undefined,
+              offeringId: createdId,
+              organizationId: activeOrganizationId,
+              quantity: openingQuantity,
+              toLocationId: recordBranchId,
+            });
+          } catch (movementError) {
+            const message = movementError instanceof Error ? movementError.message : "Unable to record opening stock.";
+            toast({
+              title: "Product saved, but opening stock failed",
+              description: `${message} Open the product or Inventory to add the opening balance without creating the product again.`,
+              variant: "error",
+            });
+            router.push(`/offerings/${createdId}`);
+            return;
+          }
+        }
       }
 
       toast({
         title: id ? "Record updated" : "Record created",
-        description: `${moduleSingularTitle(config)} ${id ? "updated" : "created"} successfully.`,
+        description: config.collection === "offerings" && openingQuantity > 0
+          ? `${moduleSingularTitle(config)} created with ${openingQuantity} units of opening stock.`
+          : `${moduleSingularTitle(config)} ${id ? "updated" : "created"} successfully.`,
         variant: "success",
       });
       router.push(config.route);
@@ -1382,8 +1437,9 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                   all-branch access can choose another branch before saving.
                 </p>
                 <p className="mt-2 text-xs font-medium text-primary">
-                  Quantity is not entered on the product form. Save the product,
-                  then use Inventory to enter opening stock or receive procured stock.
+                  You can enter existing opening stock below when creating an
+                  inventory product. Future receipts, purchases, transfers, and
+                  adjustments remain in Inventory.
                 </p>
               </div>
               <Field label="Product branch">
@@ -1403,6 +1459,59 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                   ))}
                 </Select>
               </Field>
+              {!id && isInventoryOfferingType(selectedOfferingType) ? (
+                hasPermission(member, "inventory.receive") ? (
+                  <div className="grid gap-3 border-t pt-4">
+                    <div>
+                      <h3 className="text-sm font-semibold">Initial stock (optional)</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Use this only for stock already on hand when the product is first created. It will be recorded as an opening-balance receipt at the selected branch.
+                      </p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Initial quantity">
+                        <Input
+                          inputMode="decimal"
+                          min="0"
+                          placeholder="0"
+                          step="any"
+                          type="number"
+                          value={initialStockQuantity}
+                          onChange={(event) => setInitialStockQuantity(event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Stock date">
+                        <Input
+                          max={new Date().toISOString().slice(0, 10)}
+                          type="date"
+                          value={initialStockDate}
+                          onChange={(event) => setInitialStockDate(event.target.value)}
+                        />
+                      </Field>
+                      {selectedTrackingMode === "batch" ? (
+                        <Field label="Batch number">
+                          <Input
+                            placeholder="Required when quantity is entered"
+                            value={initialStockBatchNumber}
+                            onChange={(event) => setInitialStockBatchNumber(event.target.value)}
+                          />
+                        </Field>
+                      ) : null}
+                      <Field label="Opening stock note">
+                        <Input
+                          placeholder="Optional reference or explanation"
+                          value={initialStockNotes}
+                          onChange={(event) => setInitialStockNotes(event.target.value)}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="border-t pt-3 text-xs text-muted-foreground">
+                    You can create this product, but a user with inventory receiving permission must enter its opening stock.
+                  </p>
+                )
+              ) : null}
             </section>
           ) : null}
           <div className="grid gap-6">
