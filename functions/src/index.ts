@@ -2619,6 +2619,156 @@ export const deliverNotificationPush = onDocumentCreated(
   },
 );
 
+export const archiveInventoryOffering = onCall(
+  callableOptions,
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const organizationId = requireString(
+      request.data?.organizationId,
+      "organizationId",
+    );
+    const offeringId = requireString(request.data?.offeringId, "offeringId");
+    const actor = await getActiveMember(request.auth.uid, organizationId);
+    if (!hasActorPermission(actor, "inventory.manageCatalog")) {
+      throw new HttpsError(
+        "permission-denied",
+        "You do not have permission to delete inventory items.",
+      );
+    }
+
+    const organizationPath = `organizations/${organizationId}`;
+    const offeringRef = db.doc(`${organizationPath}/offerings/${offeringId}`);
+    const offeringSnapshot = await offeringRef.get();
+    if (!offeringSnapshot.exists) {
+      throw new HttpsError("not-found", "Inventory item not found.");
+    }
+    const offering = offeringSnapshot.data() ?? {};
+    assertCanAccessRecordBranch(actor, offering);
+    if (offering.isDeleted === true) {
+      return { ok: true };
+    }
+    if (!offering.brandId) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Only inventory products can be deleted from Inventory.",
+      );
+    }
+
+    const [balances, reservations, lots, serials, purchaseOrders] =
+      await Promise.all([
+        db
+          .collection(`${organizationPath}/inventoryBalances`)
+          .where("offeringId", "==", offeringId)
+          .get(),
+        db
+          .collection(`${organizationPath}/inventoryReservations`)
+          .where("offeringId", "==", offeringId)
+          .get(),
+        db
+          .collection(`${organizationPath}/inventoryLots`)
+          .where("offeringId", "==", offeringId)
+          .get(),
+        db
+          .collection(`${organizationPath}/inventorySerials`)
+          .where("offeringId", "==", offeringId)
+          .get(),
+        db.collection(`${organizationPath}/inventoryPurchaseOrders`).get(),
+      ]);
+
+    const hasStockBalance = balances.docs.some((snapshot) => {
+      const balance = snapshot.data();
+      return (
+        Math.abs(Number(balance.quantityOnHand ?? 0)) > 0.000001 ||
+        Math.abs(Number(balance.quantityReserved ?? 0)) > 0.000001
+      );
+    });
+    const hasLotStock = lots.docs.some(
+      (snapshot) =>
+        Math.abs(Number(snapshot.data().quantityOnHand ?? 0)) > 0.000001 ||
+        Math.abs(Number(snapshot.data().quantityReserved ?? 0)) > 0.000001,
+    );
+    const hasActiveSerial = serials.docs.some((snapshot) =>
+      ["available", "reserved"].includes(String(snapshot.data().status ?? "")),
+    );
+    if (hasStockBalance || hasLotStock || hasActiveSerial) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Reduce on-hand and reserved stock to zero before deleting this inventory item.",
+      );
+    }
+
+    const hasActiveReservation = reservations.docs.some((snapshot) => {
+      const reservation = snapshot.data();
+      return (
+        reservation.isDeleted !== true &&
+        reservation.reservationStatus === "active"
+      );
+    });
+    if (hasActiveReservation) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Release or fulfill active reservations before deleting this inventory item.",
+      );
+    }
+
+    const hasOpenPurchaseOrder = purchaseOrders.docs.some((snapshot) => {
+      const purchaseOrder = snapshot.data();
+      if (
+        purchaseOrder.isDeleted === true ||
+        ["cancelled", "rejected"].includes(purchaseOrder.approvalStatus) ||
+        purchaseOrder.receivingStatus === "received"
+      ) {
+        return false;
+      }
+      return Array.isArray(purchaseOrder.lines) && purchaseOrder.lines.some(
+        (line: unknown) => {
+          if (!line || typeof line !== "object") return false;
+          const value = line as Record<string, unknown>;
+          return (
+            value.offeringId === offeringId &&
+            Number(value.receivedQuantity ?? 0) < Number(value.quantity ?? 0)
+          );
+        },
+      );
+    });
+    if (hasOpenPurchaseOrder) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Complete or cancel open purchase orders for this item before deleting it.",
+      );
+    }
+
+    const auditRef = db.collection(`${organizationPath}/auditLogs`).doc();
+    const batch = db.batch();
+    batch.update(offeringRef, {
+      deletedAt: FieldValue.serverTimestamp(),
+      deletedBy: actor.id,
+      isDeleted: true,
+      status: "archived",
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+    });
+    batch.set(auditRef, {
+      action: "inventoryOffering.archive",
+      actorId: actor.id,
+      actorName: actor.displayName,
+      branchId: String(offering.branchId ?? actor.branchId),
+      createdAt: FieldValue.serverTimestamp(),
+      entityId: offeringId,
+      entityType: "offering",
+      newValue: { isDeleted: true, status: "archived" },
+      organizationId,
+      previousValue: offering,
+    });
+    await batch.commit();
+
+    return { ok: true };
+  },
+);
+
 type StockLocationSnapshot = {
   exists: boolean;
   id: string;

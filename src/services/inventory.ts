@@ -636,3 +636,15 @@ export async function recordInventoryMovement(
   )(input);
   return result.data;
 }
+
+export async function archiveInventoryOffering(input: {
+  organizationId: string;
+  offeringId: string;
+}) {
+  if (!functions) throw new Error("Firebase Functions are not configured.");
+  const result = await httpsCallable<typeof input, { ok: boolean }>(
+    functions,
+    "archiveInventoryOffering",
+  )(input);
+  return result.data;
+}

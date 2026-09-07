@@ -196,6 +196,35 @@ describe("Beacon Firestore rules", () => {
     await assertSucceeds(setDoc(doc(inventoryDb, "organizations/org-a/offerings/branded"), { ...base, brandId: "sorotec", brandName: "Sorotec" }));
   });
 
+  it("allows authorized catalog edits but blocks direct inventory deletion", async () => {
+    await seedMember("inventory-1", "org-a", ["inventory.manageCatalog", "offerings.read", "offerings.update"], "inventoryManager");
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      await setDoc(doc(adminDb, "organizations/org-a/inventoryBrands/sorotec"), { brandId: "sorotec", branchId: "head-office", organizationId: "org-a", status: "active" });
+      await setDoc(doc(adminDb, "organizations/org-a/offerings/inverter"), {
+        brandId: "sorotec",
+        brandName: "Sorotec",
+        branchId: "head-office",
+        createdBy: "inventory-1",
+        isDeleted: false,
+        name: "5kVA inverter",
+        organizationId: "org-a",
+        status: "active",
+        type: "solarEquipment",
+        updatedBy: "inventory-1",
+      });
+    });
+
+    const inventoryDb = testEnv.authenticatedContext("inventory-1").firestore();
+    const offeringRef = doc(inventoryDb, "organizations/org-a/offerings/inverter");
+    await assertSucceeds(updateDoc(offeringRef, {
+      name: "5kVA hybrid inverter",
+      organizationId: "org-a",
+      updatedBy: "inventory-1",
+    }));
+    await assertFails(deleteDoc(offeringRef));
+  });
+
   it("allows scoped partner comments but blocks direct stock writes", async () => {
     await seedMember("partner-1", "org-a", ["inventory.read", "inventory.viewReports", "inventory.comment"], "brandPartner", { partnerBrandIds: ["sorotec"] });
     const partnerDb = testEnv.authenticatedContext("partner-1").firestore();

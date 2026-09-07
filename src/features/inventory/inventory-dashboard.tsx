@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import {
+  Archive,
   Download,
   MessageSquare,
   PackageCheck,
+  Pencil,
   Plus,
   RefreshCw,
   Send,
@@ -36,6 +38,7 @@ import {
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import {
   addInventoryComment,
+  archiveInventoryOffering,
   createInventoryBrand,
   listInventoryBalances,
   listInventoryBrands,
@@ -150,6 +153,7 @@ export function InventoryDashboard() {
   const [comments, setComments] = useState<InventoryComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [archivingItemId, setArchivingItemId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [movement, setMovement] = useState({
     movementType: "receipt" as InventoryMovementType,
@@ -191,6 +195,7 @@ export function InventoryDashboard() {
     "inventory.transfer",
   ]);
   const canSetup = hasPermission(member, "inventory.manageCatalog");
+  const canEditItems = hasPermission(member, "offerings.update");
   const canProcure = hasAnyPermission(member, [
     "inventory.procure",
     "inventory.receive",
@@ -305,9 +310,13 @@ export function InventoryDashboard() {
           ? Promise.resolve([])
           : listInventoryLocations(activeOrganizationId, member),
       ]);
+      const activeOfferingIds = new Set(nextItems.map((item) => item.id));
+      const activeBalances = nextBalances.filter((balance) =>
+        activeOfferingIds.has(balance.offeringId),
+      );
       const branchBalances = isPartner
-        ? nextBalances
-        : nextBalances.filter((balance) => balance.branchId === activeBranchId);
+        ? activeBalances
+        : activeBalances.filter((balance) => balance.branchId === activeBranchId);
       const branchOfferingIds = new Set(
         branchBalances.map((balance) => balance.offeringId),
       );
@@ -331,7 +340,7 @@ export function InventoryDashboard() {
         : nextComments.filter((comment) => comment.branchId === activeBranchId);
       setBrands(nextBrands);
       setReportItems(nextItems.filter((item) => Boolean(item.brandId)));
-      setReportBalances(nextBalances);
+      setReportBalances(activeBalances);
       setReportMovements(nextMovements);
       setItems(branchItems.filter((item) => Boolean(item.brandId)));
       setBalances(branchBalances);
@@ -359,6 +368,34 @@ export function InventoryDashboard() {
       setLoading(false);
     }
   }, [activeBranchId, activeOrganizationId, isPartner, member]);
+
+  async function archiveItem(item: Offering) {
+    const confirmed = window.confirm(
+      `Delete ${item.name} from active inventory? Its movement and sales history will be preserved. This is allowed only after its stock and reservations reach zero.`,
+    );
+    if (!confirmed) return;
+
+    setArchivingItemId(item.id);
+    setError(null);
+    try {
+      await archiveInventoryOffering({
+        offeringId: item.id,
+        organizationId: activeOrganizationId,
+      });
+      toast({
+        title: "Inventory item deleted",
+        description: `${item.name} was archived. Its audit and movement history remain available.`,
+        variant: "success",
+      });
+      await load();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to delete this inventory item.";
+      setError(message);
+      toast({ title: "Unable to delete inventory item", description: message, variant: "error" });
+    } finally {
+      setArchivingItemId(null);
+    }
+  }
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -892,6 +929,7 @@ export function InventoryDashboard() {
                     <th className="px-4 py-3">Reorder</th>
                     {!isPartner ? <th className="px-4 py-3">Value</th> : null}
                     <th className="px-4 py-3">Status</th>
+                    {canEditItems || canSetup ? <th className="px-4 py-3">Actions</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -933,6 +971,31 @@ export function InventoryDashboard() {
                             {low ? "Low stock" : "Healthy"}
                           </Badge>
                         </td>
+                        {canEditItems || canSetup ? (
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-2">
+                              {canEditItems ? (
+                                <ButtonLink href={`/offerings/${item.id}/edit`} size="sm" variant="outline">
+                                  <Pencil className="h-4 w-4" />
+                                  Edit
+                                </ButtonLink>
+                              ) : null}
+                              {canSetup ? (
+                                <Button
+                                  className="text-danger"
+                                  disabled={archivingItemId === item.id}
+                                  onClick={() => void archiveItem(item)}
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <Archive className="h-4 w-4" />
+                                  {archivingItemId === item.id ? "Deleting" : "Delete"}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}
@@ -940,7 +1003,7 @@ export function InventoryDashboard() {
                     <tr>
                       <td
                         className="px-4 py-8 text-center text-muted-foreground"
-                        colSpan={isPartner ? 7 : 8}
+                        colSpan={(isPartner ? 7 : 8) + (canEditItems || canSetup ? 1 : 0)}
                       >
                         No branded inventory items are available yet.
                       </td>

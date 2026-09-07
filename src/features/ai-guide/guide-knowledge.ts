@@ -529,6 +529,9 @@ export const guideTopics: GuideTopic[] = [
       "solar",
       "materials",
       "services",
+      "edit inventory",
+      "delete inventory",
+      "archive product",
     ],
     title: "Manage products and services",
     steps: [
@@ -539,6 +542,8 @@ export const guideTopics: GuideTopic[] = [
       "The importer can match an existing brand by name, code, or ID. Users with all-branch access can map a branch column or choose a default branch; branch-limited users always import to their assigned branch.",
       "When creating an inventory product, a user with inventory receiving permission can enter optional Initial stock. The selected product branch becomes the stock location, and saving creates an opening-balance receipt with a date and audit trail. Leave the quantity blank or at zero when there is no existing stock.",
       "Initial stock is only for quantities already on hand when the product is first created. Use Inventory for later procurement receipts, transfers, issues, returns, counts, and adjustments.",
+      "Authorized users can choose Edit beside an item in Inventory to change its catalog details. Quantity is never edited directly; use an audited stock adjustment instead.",
+      "Choose Delete to remove an unused item from active inventory. The server archives it rather than erasing history, and blocks deletion until on-hand stock, reserved stock, active reservations, batch or serial stock, and open purchase orders are cleared.",
       "The product defaults to the creator's assigned branch. A user with all-branch access can select another active admin-created branch before saving.",
       "Link leads and deals to products/services so users do not re-enter the same information.",
       "Keep prices, status, category, stock, and service details current so sales and finance flows stay accurate.",
