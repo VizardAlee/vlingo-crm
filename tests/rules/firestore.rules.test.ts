@@ -231,11 +231,12 @@ describe("Beacon Firestore rules", () => {
     await assertFails(deleteDoc(offeringRef));
   });
 
-  it("allows only the one-time brand id initialization after brand creation", async () => {
+  it("requires protected server actions for brand creation and mutation", async () => {
     await seedMember("inventory-1", "org-a", ["inventory.manageCatalog"], "inventoryManager");
     const inventoryDb = testEnv.authenticatedContext("inventory-1").firestore();
     const brandRef = doc(inventoryDb, "organizations/org-a/inventoryBrands/new-brand");
-    await assertSucceeds(setDoc(brandRef, {
+    await assertFails(setDoc(brandRef, {
+      brandId: "new-brand",
       branchId: "head-office",
       code: "NEW",
       createdBy: "inventory-1",
@@ -245,9 +246,6 @@ describe("Beacon Firestore rules", () => {
       status: "active",
       updatedBy: "inventory-1",
     }));
-    await assertSucceeds(updateDoc(brandRef, { brandId: "new-brand" }));
-    await assertFails(updateDoc(brandRef, { brandId: "changed-brand" }));
-    await assertFails(updateDoc(brandRef, { status: "inactive" }));
   });
 
   it("allows scoped partner comments but blocks direct stock writes", async () => {

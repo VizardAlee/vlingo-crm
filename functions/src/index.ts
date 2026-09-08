@@ -2773,6 +2773,84 @@ function optionalTrimmedString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+export const createInventoryBrand = onCall(
+  callableOptions,
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const organizationId = requireString(request.data?.organizationId, "organizationId");
+    const branchId = requireString(request.data?.branchId, "branchId");
+    const name = requireString(request.data?.name, "name");
+    const code = optionalTrimmedString(request.data?.code).toUpperCase();
+    const contactName = optionalTrimmedString(request.data?.contactName);
+    const contactEmail = optionalTrimmedString(request.data?.contactEmail).toLowerCase();
+    const description = optionalTrimmedString(request.data?.description);
+    const actor = await getActiveMember(request.auth.uid, organizationId);
+    if (!hasActorPermission(actor, "inventory.manageCatalog")) {
+      throw new HttpsError("permission-denied", "You do not have permission to create brands.");
+    }
+    if (!canActorAccessBranch(actor, branchId)) {
+      throw new HttpsError("permission-denied", "You cannot create brands outside your authorized branch.");
+    }
+
+    const organizationPath = `organizations/${organizationId}`;
+    const brandSnapshots = await db.collection(`${organizationPath}/inventoryBrands`).get();
+    const duplicate = brandSnapshots.docs.find((snapshot) => {
+      const candidate = snapshot.data();
+      if (candidate.isDeleted === true) return false;
+      return (
+        String(candidate.name ?? "").trim().toLowerCase() === name.toLowerCase() ||
+        Boolean(code && String(candidate.code ?? "").trim().toLowerCase() === code.toLowerCase())
+      );
+    });
+    if (duplicate) {
+      throw new HttpsError("already-exists", "Another active brand already uses this name or code.");
+    }
+
+    const brandRef = db.collection(`${organizationPath}/inventoryBrands`).doc();
+    const auditRef = db.collection(`${organizationPath}/auditLogs`).doc();
+    const brand = {
+      brandId: brandRef.id,
+      branchId,
+      code,
+      contactEmail,
+      contactName,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: actor.id,
+      createdByEmail: actor.email,
+      createdByName: actor.displayName,
+      description,
+      isDeleted: false,
+      name,
+      organizationId,
+      referenceNumber: `BRD-${brandRef.id.slice(0, 8).toUpperCase()}`,
+      status: "active",
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+      updatedByEmail: actor.email,
+      updatedByName: actor.displayName,
+    };
+    const batch = db.batch();
+    batch.set(brandRef, brand);
+    batch.set(auditRef, {
+      action: "inventoryBrand.create",
+      actorId: actor.id,
+      actorName: actor.displayName,
+      branchId,
+      createdAt: FieldValue.serverTimestamp(),
+      entityId: brandRef.id,
+      entityType: "inventoryBrand",
+      newValue: { code, contactEmail, contactName, description, name, status: "active" },
+      organizationId,
+    });
+    await batch.commit();
+
+    return { brandId: brandRef.id, ok: true };
+  },
+);
+
 export const updateInventoryBrand = onCall(
   callableOptions,
   async (request) => {

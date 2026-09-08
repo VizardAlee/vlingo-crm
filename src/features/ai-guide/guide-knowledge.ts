@@ -538,7 +538,7 @@ export const guideTopics: GuideTopic[] = [
     title: "Manage products and services",
     steps: [
       "Use Products/Services for catalog items such as solar equipment, installation packages, materials, consultancy, maintenance, and services.",
-      "For an inventory product, select its brand. An admin or manager with inventory.manageCatalog can use Create brand beside the Brand field when the required brand is not in the dropdown.",
+      "For an inventory product, select its brand. Super Admins, Operations Managers, and other authorized inventory managers can use Create brand beside the Brand field when the required brand is not in the dropdown. Operations Managers can create and manage brands within their authorized branch.",
       "Enter the product details and save the record; the SKU/item code is generated automatically and cannot be entered manually. Barcode/GTIN is optional.",
       "To create many products, open Products/Services and choose Import CSV/Excel. Upload a file, map each file column to a system field, review valid and rejected rows, and import the valid rows. A downloadable CSV template is available.",
       "The importer can match an existing brand by name, code, or ID. Users with all-branch access can map a branch column or choose a default branch; branch-limited users always import to their assigned branch.",

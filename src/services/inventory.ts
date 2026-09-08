@@ -350,24 +350,16 @@ export function createInventoryBrand(
   >,
   context: WriteContext,
 ) {
-  return createOrgRecord(
-    "inventoryBrands",
-    { ...data, brandId: "pending" },
-    context,
-    "BRD",
-  ).then(async (id) => {
-    const firestore = assertDb();
-    const { updateDoc, doc: firestoreDoc } = await import("firebase/firestore");
-    await updateDoc(
-      firestoreDoc(
-        firestore,
-        orgCollectionPath(context.organizationId, "inventoryBrands"),
-        id,
-      ),
-      { brandId: id },
-    );
-    return id;
-  });
+  if (!functions) throw new Error("Firebase Functions are not configured.");
+  const input = {
+    ...data,
+    branchId: context.branchId,
+    organizationId: context.organizationId,
+  };
+  return httpsCallable<typeof input, { brandId: string; ok: boolean }>(
+    functions,
+    "createInventoryBrand",
+  )(input).then((result) => result.data.brandId);
 }
 
 export async function updateInventoryBrand(input: {
