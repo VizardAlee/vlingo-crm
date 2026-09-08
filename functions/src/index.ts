@@ -19,6 +19,7 @@ import {
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import nodemailer from "nodemailer";
 import { syncTaskToGoogleCalendar } from "./google-calendar.js";
+import { isValidPosPaymentMethod } from "./pos-payment.js";
 
 initializeApp();
 
@@ -3539,16 +3540,6 @@ export const recordInventoryMovement = onCall(
   },
 );
 
-const posPaymentMethods = new Set([
-  "cash",
-  "bankTransfer",
-  "card",
-  "cheque",
-  "mobileMoney",
-  "onlinePayment",
-  "other",
-]);
-
 function money(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -3621,7 +3612,7 @@ export const createPosSale = onCall(callableOptions, async (request) => {
     throw new HttpsError("invalid-argument", "Amount paid cannot be negative.");
   }
   const paymentMethod = typeof request.data?.paymentMethod === "string" ? request.data.paymentMethod : "";
-  if (amountPaid > 0 && !posPaymentMethods.has(paymentMethod)) {
+  if (amountPaid > 0 && !isValidPosPaymentMethod(paymentMethod)) {
     throw new HttpsError("invalid-argument", "Select a payment method for the amount received.");
   }
   const customerName = typeof request.data?.customerName === "string" && request.data.customerName.trim()
@@ -3866,7 +3857,7 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
   const saleId = requireString(request.data?.saleId, "saleId");
   const amount = money(requireNumber(request.data?.amount, "amount"));
   const paymentMethod = requireString(request.data?.paymentMethod, "paymentMethod");
-  if (amount <= 0 || !posPaymentMethods.has(paymentMethod)) {
+  if (amount <= 0 || !isValidPosPaymentMethod(paymentMethod)) {
     throw new HttpsError("invalid-argument", "Enter a positive amount and valid payment method.");
   }
   const actor = await getActiveMember(request.auth.uid, organizationId);
