@@ -193,6 +193,8 @@ export function InventoryDashboard() {
   });
   const [overviewPage, setOverviewPage] = useState(1);
   const [overviewPageSize, setOverviewPageSize] = useState(25);
+  const [balancePage, setBalancePage] = useState(1);
+  const [balancePageSize, setBalancePageSize] = useState(12);
   const isPartner = memberRoles(member).includes("brandPartner");
   const canMoveStock = hasAnyPermission(member, [
     "inventory.receive",
@@ -441,6 +443,28 @@ export function InventoryDashboard() {
         currentOverviewPage * overviewPageSize,
       ),
     [currentOverviewPage, itemTotals, overviewPageSize],
+  );
+  const sortedBalances = useMemo(
+    () =>
+      [...balances].sort(
+        (left, right) =>
+          left.locationName.localeCompare(right.locationName) ||
+          left.offeringName.localeCompare(right.offeringName),
+      ),
+    [balances],
+  );
+  const balancePageCount = Math.max(
+    1,
+    Math.ceil(sortedBalances.length / balancePageSize),
+  );
+  const currentBalancePage = Math.min(balancePage, balancePageCount);
+  const paginatedBalances = useMemo(
+    () =>
+      sortedBalances.slice(
+        (currentBalancePage - 1) * balancePageSize,
+        currentBalancePage * balancePageSize,
+      ),
+    [balancePageSize, currentBalancePage, sortedBalances],
   );
   const totalUnits = itemTotals.reduce((sum, item) => sum + item.quantity, 0);
   const inventoryValue = itemTotals.reduce(
@@ -1143,11 +1167,34 @@ export function InventoryDashboard() {
             ) : null}
           </Card>
           <Card>
-            <CardHeader>
-              <CardTitle>Balances by location</CardTitle>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Balances by location</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {sortedBalances.length
+                    ? `Showing ${(currentBalancePage - 1) * balancePageSize + 1}–${Math.min(currentBalancePage * balancePageSize, sortedBalances.length)} of ${sortedBalances.length}`
+                    : "No location balances"}
+                </p>
+              </div>
+              <Field className="w-full sm:w-40" label="Balances per page">
+                <Select
+                  aria-label="Balances per page"
+                  onChange={(event) => {
+                    setBalancePageSize(Number(event.target.value));
+                    setBalancePage(1);
+                  }}
+                  value={balancePageSize}
+                >
+                  {[6, 12, 24, 48].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </CardHeader>
             <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {balances.map((balance) => (
+              {paginatedBalances.map((balance) => (
                 <div className="rounded-md border p-3" key={balance.id}>
                   <div className="flex justify-between gap-3">
                     <div>
@@ -1162,7 +1209,46 @@ export function InventoryDashboard() {
                   </div>
                 </div>
               ))}
+              {!sortedBalances.length ? (
+                <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">
+                  No inventory balances are available for your permitted
+                  branches and brands.
+                </div>
+              ) : null}
             </CardContent>
+            {sortedBalances.length > balancePageSize ? (
+              <div className="flex flex-col gap-3 border-t p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-muted-foreground">
+                  Page {currentBalancePage} of {balancePageCount}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={currentBalancePage <= 1}
+                    onClick={() =>
+                      setBalancePage((page) => Math.max(1, page - 1))
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    disabled={currentBalancePage >= balancePageCount}
+                    onClick={() =>
+                      setBalancePage((page) =>
+                        Math.min(balancePageCount, page + 1),
+                      )
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </Card>
           {isPartner ? (
             <Card>
