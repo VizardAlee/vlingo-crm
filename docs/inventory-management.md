@@ -26,6 +26,8 @@ Payment and receiving are intentionally separate. A credit purchase can be recei
 
 Use Inventory > Add / move stock > **Enter existing / opening stock** to establish quantities the business already owned before using the system. This creates an audited positive adjustment at the selected location. Use **Receive stock without a purchase order** only for a direct delivery that is not tied to an approved order. Approved purchase-order deliveries must be received from Purchasing so the order and stock ledger remain synchronized.
 
+Authorized users can also choose **Edit** beside a product in the Inventory overview and use **Adjust current stock**. Select the affected branch, choose whether to add missing stock or remove excess stock, enter only the difference, and provide the adjustment date and reason. This creates a separate audited movement; it never overwrites the original opening-stock entry. Reserved stock cannot be removed, and batch-controlled products require the affected batch number.
+
 ### Batch and serial traceability
 
 Set each catalog item's Traceability field to `none`, `batch`, or `serial`, and optionally record a barcode/GTIN. Batch movements require a batch number and may include an expiry date. Serial numbers are currently optional; when supplied, enter exactly one unique number per unit to activate per-unit tracing. Camera scanning uses the browser Barcode Detector API when available; USB/Bluetooth scanners and manual entry work in all supported browsers.

@@ -11,6 +11,15 @@ export function parseInitialStockQuantity(value: string) {
   return quantity;
 }
 
+export function parseStockAdjustmentQuantity(value: string) {
+  const quantity = Number(value);
+  if (!value.trim() || !Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error("Adjustment quantity must be greater than zero.");
+  }
+
+  return quantity;
+}
+
 export function isInventoryOfferingType(type: unknown) {
   return type === "material" || type === "solarEquipment";
 }

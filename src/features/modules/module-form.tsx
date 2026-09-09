@@ -18,15 +18,15 @@ import { DealQuoteLinesEditor } from "@/features/modules/deal-quote-lines-editor
 import { summarizeDealQuote } from "@/features/modules/deal-quote-utils";
 import { dealCategoryFromFormValue, dealCreateVisibleFieldNames, dealTypeFromFormValue, dealTypesForCategory, dealVisibleFieldNames } from "@/features/modules/deal-form-logic";
 import { type FormField, type ModuleConfig } from "@/features/modules/module-config";
-import { isInventoryOfferingType, parseInitialStockQuantity } from "@/features/modules/offering-opening-stock";
+import { isInventoryOfferingType, parseInitialStockQuantity, parseStockAdjustmentQuantity } from "@/features/modules/offering-opening-stock";
 import { fieldTourTarget, formTourSteps } from "@/features/modules/form-tour";
 import { activitySchema, clientSchema, dealSchema, developmentProjectSchema, leadSchema, marketingCampaignSchema, offeringSchema, propertySchema, rentalTenancySchema, taskSchema, unitSchema } from "@/lib/validation/schemas";
 import { canAccessAllBranches, canAccessBranch, effectiveBranchId, hasPermission, isAssignedOnlySalesUser } from "@/lib/permissions";
 import { cn, createReference, titleCase } from "@/lib/utils";
 import { createOrgRecord, listOrgRecords, updateOrgRecord, writeAuditLog } from "@/services/repository";
-import { createInventoryBrand, listInventoryBrands, recordInventoryMovement } from "@/services/inventory";
+import { createInventoryBrand, listInventoryBalances, listInventoryBrands, listInventoryLocations, recordInventoryMovement } from "@/services/inventory";
 import { listBranches, listMembers } from "@/services/users";
-import type { Branch, BusinessVertical, Client, DealQuoteLine, DealType, InventoryBrand, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
+import type { Branch, BusinessVertical, Client, DealQuoteLine, DealType, InventoryBalance, InventoryBrand, InventoryLocation, Lead, Member, Offering, Property, PropertyStakeholder, PropertyUnit } from "@/types/crm";
 
 const schemaByCollection: Record<string, ZodType> = {
   activities: activitySchema,
@@ -294,6 +294,16 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [initialStockDate, setInitialStockDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [initialStockBatchNumber, setInitialStockBatchNumber] = useState("");
   const [initialStockNotes, setInitialStockNotes] = useState("");
+  const [stockBalances, setStockBalances] = useState<InventoryBalance[]>([]);
+  const [stockLocations, setStockLocations] = useState<InventoryLocation[]>([]);
+  const [stockAdjustmentDirection, setStockAdjustmentDirection] = useState<"increase" | "decrease">("increase");
+  const [stockAdjustmentLocationId, setStockAdjustmentLocationId] = useState("");
+  const [stockAdjustmentQuantity, setStockAdjustmentQuantity] = useState("");
+  const [stockAdjustmentDate, setStockAdjustmentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [stockAdjustmentReference, setStockAdjustmentReference] = useState("");
+  const [stockAdjustmentNotes, setStockAdjustmentNotes] = useState("");
+  const [stockAdjustmentBatchNumber, setStockAdjustmentBatchNumber] = useState("");
+  const [stockAdjustmentSaving, setStockAdjustmentSaving] = useState(false);
   const [brandCreatorOpen, setBrandCreatorOpen] = useState(false);
   const [brandForm, setBrandForm] = useState({ name: "", code: "", contactName: "", contactEmail: "", description: "" });
   const [brandSaving, setBrandSaving] = useState(false);
@@ -361,6 +371,15 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const selectedTrackingMode = useWatch({ control, name: "trackingMode" });
   const canEnterInitialStock = config.collection === "offerings" && !id &&
     isInventoryOfferingType(selectedOfferingType) && hasPermission(member, "inventory.receive");
+  const canAdjustExistingStock = config.collection === "offerings" && Boolean(id) &&
+    isInventoryOfferingType(selectedOfferingType ?? existing?.type) && hasPermission(member, "inventory.adjust");
+  const stockAdjustmentTrackingMode = String(existing?.trackingMode ?? "none");
+  const selectedStockBalance = stockBalances.find(
+    (balance) => balance.locationId === stockAdjustmentLocationId,
+  );
+  const selectedStockLocation = stockLocations.find(
+    (location) => location.id === stockAdjustmentLocationId,
+  );
   const effectiveDealCategory = config.collection === "deals"
     ? dealCategoryFromFormValue(selectedDealCategory)
       || dealCategoryFromFormValue(existing?.dealCategory)
@@ -482,6 +501,50 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     });
     return () => { mounted = false; };
   }, [activeBranchId, activeOrganizationId, config.collection, existing?.branchId, member]);
+
+  useEffect(() => {
+    if (!canAdjustExistingStock || !id) {
+      return;
+    }
+
+    let mounted = true;
+    Promise.all([
+      listInventoryBalances(activeOrganizationId, member),
+      listInventoryLocations(activeOrganizationId, member),
+    ]).then(([balanceItems, locationItems]) => {
+      if (!mounted) return;
+      const itemBalances = balanceItems.filter(
+        (balance) => balance.offeringId === id,
+      );
+      const activeLocations = locationItems.filter(
+        (location) => location.status === "active" && !location.isLegacy,
+      );
+      setStockBalances(itemBalances);
+      setStockLocations(activeLocations);
+      setStockAdjustmentLocationId((current) => {
+        if (activeLocations.some((location) => location.id === current)) {
+          return current;
+        }
+        const preferredLocationId =
+          itemBalances.find((balance) => balance.locationId === offeringBranchId)
+            ?.locationId ??
+          itemBalances[0]?.locationId ??
+          activeLocations.find((location) => location.id === offeringBranchId)
+            ?.id ??
+          activeLocations[0]?.id ??
+          "";
+        return preferredLocationId;
+      });
+    }).catch(() => {
+      if (!mounted) return;
+      setStockBalances([]);
+      setStockLocations([]);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeOrganizationId, canAdjustExistingStock, id, member, offeringBranchId]);
 
   useEffect(() => {
     if (config.collection !== "deals" && config.collection !== "leads" && config.collection !== "properties" && config.collection !== "propertyUnits" && config.collection !== "rentalTenancies" && config.collection !== "developmentProjects" && config.collection !== "marketingCampaigns" && config.collection !== "tasks") {
@@ -911,6 +974,106 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
     setLeadLocationField("geoCapturedAt", "");
     setLeadLocationField("geoLatitude", "");
     setLeadLocationField("geoLongitude", "");
+  }
+
+  async function applyStockAdjustment() {
+    if (!id || !canAdjustExistingStock) return;
+
+    let quantity = 0;
+    try {
+      quantity = parseStockAdjustmentQuantity(stockAdjustmentQuantity);
+    } catch (adjustmentError) {
+      const message = adjustmentError instanceof Error
+        ? adjustmentError.message
+        : "Enter a valid adjustment quantity.";
+      toast({ title: "Check stock adjustment", description: message, variant: "error" });
+      return;
+    }
+
+    if (!selectedStockLocation) {
+      toast({
+        title: "Select a stock location",
+        description: "Choose the branch whose stock quantity should change.",
+        variant: "error",
+      });
+      return;
+    }
+    if (!stockAdjustmentNotes.trim()) {
+      toast({
+        title: "Reason required",
+        description: "Enter why this stock correction is being made.",
+        variant: "error",
+      });
+      return;
+    }
+    if (stockAdjustmentTrackingMode === "batch" && !stockAdjustmentBatchNumber.trim()) {
+      toast({
+        title: "Batch number required",
+        description: "Choose the batch affected by this stock correction.",
+        variant: "error",
+      });
+      return;
+    }
+
+    const onHand = Number(selectedStockBalance?.quantityOnHand ?? 0);
+    const reserved = Number(selectedStockBalance?.quantityReserved ?? 0);
+    if (stockAdjustmentDirection === "decrease" && quantity > onHand - reserved) {
+      toast({
+        title: "Not enough available stock",
+        description: `Only ${Math.max(0, onHand - reserved)} unreserved units can be removed from this location.`,
+        variant: "error",
+      });
+      return;
+    }
+
+    setStockAdjustmentSaving(true);
+    try {
+      const decreasing = stockAdjustmentDirection === "decrease";
+      const result = await recordInventoryMovement({
+        batchNumber: stockAdjustmentTrackingMode === "batch"
+          ? stockAdjustmentBatchNumber.trim()
+          : undefined,
+        branchId: selectedStockLocation.branchId,
+        externalReference: stockAdjustmentReference.trim() || "Product edit stock correction",
+        fromLocationId: decreasing ? selectedStockLocation.id : undefined,
+        movementPurpose: "other",
+        movementType: decreasing ? "adjustmentOut" : "adjustmentIn",
+        notes: stockAdjustmentNotes.trim(),
+        occurredAt: stockAdjustmentDate
+          ? new Date(`${stockAdjustmentDate}T12:00:00`).toISOString()
+          : undefined,
+        offeringId: id,
+        organizationId: activeOrganizationId,
+        quantity,
+        toLocationId: decreasing ? undefined : selectedStockLocation.id,
+      });
+      const refreshedBalances = await listInventoryBalances(
+        activeOrganizationId,
+        member,
+      );
+      setStockBalances(
+        refreshedBalances.filter((balance) => balance.offeringId === id),
+      );
+      setStockAdjustmentQuantity("");
+      setStockAdjustmentReference("");
+      setStockAdjustmentNotes("");
+      setStockAdjustmentBatchNumber("");
+      toast({
+        title: "Stock quantity adjusted",
+        description: result.referenceNumber,
+        variant: "success",
+      });
+    } catch (adjustmentError) {
+      toast({
+        title: "Unable to adjust stock",
+        description: adjustmentError instanceof Error
+          ? adjustmentError.message
+          : "Try again.",
+        variant: "error",
+      });
+    } finally {
+      setStockAdjustmentSaving(false);
+    }
   }
 
   async function onSubmit(values: FormValues) {
@@ -1431,15 +1594,18 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           {config.collection === "offerings" ? (
             <section className="grid gap-3 rounded-md border bg-muted/30 p-4">
               <div>
-                <h2 className="text-base font-semibold">Inventory branch</h2>
+                <h2 className="text-base font-semibold">
+                  {id ? "Product inventory" : "Inventory branch"}
+                </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  New products default to your assigned branch. Users with
-                  all-branch access can choose another branch before saving.
+                  {id
+                    ? "The product's catalog branch remains fixed. Stock can be held and corrected at any branch you are authorized to access."
+                    : "New products default to your assigned branch. Users with all-branch access can choose another branch before saving."}
                 </p>
                 <p className="mt-2 text-xs font-medium text-primary">
-                  You can enter existing opening stock below when creating an
-                  inventory product. Future receipts, purchases, transfers, and
-                  adjustments remain in Inventory.
+                  {id
+                    ? "Use Adjust current stock below to correct the balance while preserving the inventory audit trail."
+                    : "You can enter existing opening stock below when creating an inventory product. Future receipts, purchases, transfers, and adjustments remain in Inventory."}
                 </p>
               </div>
               <Field label="Product branch">
@@ -1511,6 +1677,140 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
                     You can create this product, but a user with inventory receiving permission must enter its opening stock.
                   </p>
                 )
+              ) : null}
+              {canAdjustExistingStock ? (
+                <div className="grid gap-4 border-t pt-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      Adjust current stock
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Correct the quantity without rewriting the original
+                      opening record. The adjustment is saved separately in
+                      the movement ledger with your name, date, and reason.
+                    </p>
+                  </div>
+                  {stockLocations.length ? (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Field label="Branch / stock location">
+                          <Select
+                            required
+                            value={stockAdjustmentLocationId}
+                            onChange={(event) =>
+                              setStockAdjustmentLocationId(event.target.value)
+                            }
+                          >
+                            {stockLocations.map((location) => (
+                              <option key={location.id} value={location.id}>
+                                {location.name} ({location.code})
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <div className="rounded-md border bg-background p-3 text-sm">
+                          <p className="text-xs uppercase text-muted-foreground">
+                            Current balance
+                          </p>
+                          <p className="mt-1 text-xl font-bold">
+                            {Number(selectedStockBalance?.quantityOnHand ?? 0)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {Number(selectedStockBalance?.quantityReserved ?? 0)} reserved ·{" "}
+                            {Math.max(
+                              0,
+                              Number(selectedStockBalance?.quantityOnHand ?? 0) -
+                                Number(selectedStockBalance?.quantityReserved ?? 0),
+                            )}{" "}
+                            available
+                          </p>
+                        </div>
+                        <Field label="Correction type">
+                          <Select
+                            value={stockAdjustmentDirection}
+                            onChange={(event) =>
+                              setStockAdjustmentDirection(
+                                event.target.value as "increase" | "decrease",
+                              )
+                            }
+                          >
+                            <option value="increase">Add missing stock</option>
+                            <option value="decrease">Remove excess stock</option>
+                          </Select>
+                        </Field>
+                        <Field label="Adjustment quantity">
+                          <Input
+                            inputMode="decimal"
+                            min="0.000001"
+                            placeholder="Enter the difference"
+                            step="any"
+                            type="number"
+                            value={stockAdjustmentQuantity}
+                            onChange={(event) =>
+                              setStockAdjustmentQuantity(event.target.value)
+                            }
+                          />
+                        </Field>
+                        {stockAdjustmentTrackingMode === "batch" ? (
+                          <Field label="Affected batch number">
+                            <Input
+                              placeholder="Required for batch-tracked products"
+                              value={stockAdjustmentBatchNumber}
+                              onChange={(event) =>
+                                setStockAdjustmentBatchNumber(event.target.value)
+                              }
+                            />
+                          </Field>
+                        ) : null}
+                        <Field label="Adjustment date">
+                          <Input
+                            max={new Date().toISOString().slice(0, 10)}
+                            type="date"
+                            value={stockAdjustmentDate}
+                            onChange={(event) =>
+                              setStockAdjustmentDate(event.target.value)
+                            }
+                          />
+                        </Field>
+                        <Field label="Reference (optional)">
+                          <Input
+                            placeholder="Count sheet, memo, or other reference"
+                            value={stockAdjustmentReference}
+                            onChange={(event) =>
+                              setStockAdjustmentReference(event.target.value)
+                            }
+                          />
+                        </Field>
+                        <Field label="Reason for correction">
+                          <Input
+                            placeholder="Required for the audit trail"
+                            value={stockAdjustmentNotes}
+                            onChange={(event) =>
+                              setStockAdjustmentNotes(event.target.value)
+                            }
+                          />
+                        </Field>
+                      </div>
+                      <div>
+                        <Button
+                          disabled={stockAdjustmentSaving}
+                          onClick={() => void applyStockAdjustment()}
+                          type="button"
+                          variant="outline"
+                        >
+                          {stockAdjustmentSaving
+                            ? "Applying adjustment"
+                            : "Apply stock adjustment"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      No active branch is available for this stock adjustment.
+                      Ask an administrator to activate a branch and refresh.
+                    </p>
+                  )}
+                </div>
               ) : null}
             </section>
           ) : null}
