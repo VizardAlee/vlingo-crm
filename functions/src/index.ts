@@ -20,6 +20,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import nodemailer from "nodemailer";
 import { syncTaskToGoogleCalendar } from "./google-calendar.js";
 import { isValidPosPaymentMethod } from "./pos-payment.js";
+import { resolvePosPrice } from "./pos-pricing.js";
 
 initializeApp();
 
@@ -3590,6 +3591,7 @@ export const createPosSale = onCall(callableOptions, async (request) => {
     const line = (raw ?? {}) as Record<string, unknown>;
     const offeringId = requireString(line.offeringId, "offeringId");
     const quantity = requireNumber(line.quantity, "quantity");
+    const unitPrice = line.unitPrice === undefined ? undefined : requireNumber(line.unitPrice, "unitPrice");
     const discountAmount = line.discountAmount === undefined ? 0 : requireNumber(line.discountAmount, "discountAmount");
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new HttpsError("invalid-argument", "Sale quantities must be positive whole numbers.");
@@ -3597,7 +3599,10 @@ export const createPosSale = onCall(callableOptions, async (request) => {
     if (discountAmount < 0) {
       throw new HttpsError("invalid-argument", "Line discounts cannot be negative.");
     }
-    return { offeringId, quantity, discountAmount: money(discountAmount) };
+    if (unitPrice !== undefined && unitPrice < 0) {
+      throw new HttpsError("invalid-argument", "Adjusted unit prices cannot be negative.");
+    }
+    return { offeringId, quantity, unitPrice, discountAmount: money(discountAmount) };
   });
   if (new Set(normalizedLines.map((line) => line.offeringId)).size !== normalizedLines.length) {
     throw new HttpsError("invalid-argument", "Each product can appear only once in a sale.");
@@ -3679,10 +3684,17 @@ export const createPosSale = onCall(callableOptions, async (request) => {
       if (available < line.quantity) {
         throw new HttpsError("failed-precondition", `${offering.name ?? "A product"} has only ${available} available units in this branch.`);
       }
-      const unitPrice = money(Number(offering.sellingPrice ?? 0));
-      if (unitPrice < 0) {
+      let pricing;
+      try {
+        pricing = resolvePosPrice({
+          requestedUnitPrice: line.unitPrice,
+          retailPrice: offering.sellingPrice,
+          wholesalePrice: offering.wholesalePrice,
+        });
+      } catch {
         throw new HttpsError("failed-precondition", `${offering.name ?? "A product"} has an invalid selling price.`);
       }
+      const { unitPrice } = pricing;
       const gross = money(unitPrice * line.quantity);
       if (line.discountAmount > gross) {
         throw new HttpsError("invalid-argument", `Discount exceeds the value of ${offering.name ?? "a product"}.`);
@@ -3694,7 +3706,11 @@ export const createPosSale = onCall(callableOptions, async (request) => {
         brandName: String(offering.brandName ?? ""),
         sku: String(offering.sku ?? ""),
         quantity: line.quantity,
+        catalogRetailPrice: pricing.catalogRetailPrice,
+        ...(pricing.catalogWholesalePrice === undefined ? {} : { catalogWholesalePrice: pricing.catalogWholesalePrice }),
         unitPrice,
+        priceSource: pricing.priceSource,
+        priceAdjustment: pricing.priceAdjustment,
         discountAmount: line.discountAmount,
         lineTotal: money(gross - line.discountAmount),
         unitCost: money(Number(offering.costPrice ?? 0)),

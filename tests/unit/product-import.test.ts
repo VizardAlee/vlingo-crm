@@ -28,13 +28,14 @@ describe("product spreadsheet import", () => {
   });
 
   it("resolves brands and branches while excluding quantity from the product payload", () => {
-    const rows = [{ Name: "5kVA Inverter", Vertical: "Solar", Type: "Solar Equipment", Category: "Inverters", Brand: "SOR", Branch: "KAN", Price: "850,000", Quantity: "25" }];
+    const rows = [{ Name: "5kVA Inverter", Vertical: "Solar", Type: "Solar Equipment", Category: "Inverters", Brand: "SOR", Branch: "KAN", Price: "850,000", Wholesale: "800,000", Quantity: "25" }];
     const mapping = {
       branch: "Branch",
       brand: "Brand",
       category: "Category",
       name: "Name",
       sellingPrice: "Price",
+      wholesalePrice: "Wholesale",
       type: "Type",
       vertical: "Vertical",
     };
@@ -44,6 +45,7 @@ describe("product spreadsheet import", () => {
     expect(preview.branchId).toBe("kano");
     expect(preview.data.brandId).toBe("brand-sorotec");
     expect(preview.data.sellingPrice).toBe(850000);
+    expect(preview.data.wholesalePrice).toBe(800000);
     expect(preview.data).not.toHaveProperty("quantity");
     expect(preview.data).not.toHaveProperty("stockQuantity");
   });

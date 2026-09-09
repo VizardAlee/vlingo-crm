@@ -312,6 +312,7 @@ export const moduleConfigs: Record<string, ModuleConfig> = {
       { name: "trackingMode", label: "Traceability", options: ["none", "batch", "serial"], section: "Commercials and inventory settings", type: "select" },
       { name: "unitOfMeasure", label: "Unit of measure", options: unitOfMeasureOptions, section: "Commercials and inventory settings", type: "select" },
       { name: "sellingPrice", label: "Selling price", section: "Commercials and inventory settings", type: "number" },
+      { helpText: "Optional default price for bulk or trade customers.", name: "wholesalePrice", label: "Wholesale price", section: "Commercials and inventory settings", type: "number" },
       { name: "costPrice", label: "Cost price", section: "Commercials and inventory settings", type: "number" },
       { name: "reorderLevel", label: "Reorder level", section: "Commercials and inventory settings", type: "number" },
       { name: "supplierName", label: "Supplier / partner", section: "Commercials and inventory settings", type: "text" },
@@ -614,7 +615,7 @@ export function columnsFor(moduleKey: ModuleKey): ColumnDef<Record<string, unkno
       { header: "Vertical", cell: ({ row }) => titleCase(String(row.original.vertical ?? "")) },
       { header: "Type", cell: ({ row }) => titleCase(String(row.original.type ?? "")) },
       { header: "Category", cell: ({ row }) => String(row.original.category ?? "Not set") },
-      { header: "Price", cell: ({ row }) => formatCurrency(Number(row.original.sellingPrice ?? 0)) },
+      { header: "Price", cell: ({ row }) => <span className="grid gap-0.5"><span>{formatCurrency(Number(row.original.sellingPrice ?? 0))} retail</span>{row.original.wholesalePrice !== undefined && row.original.wholesalePrice !== "" ? <span className="text-xs text-muted-foreground">{formatCurrency(Number(row.original.wholesalePrice))} wholesale</span> : null}</span> },
       { header: "Stock", cell: ({ row }) => row.original.stockQuantity === undefined || row.original.stockQuantity === "" ? "Not tracked" : String(row.original.stockQuantity) },
       statusColumn,
     ];

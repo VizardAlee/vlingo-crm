@@ -56,7 +56,7 @@ export interface CreatePosSaleInput {
   customerEmail?: string;
   customerAddress?: string;
   documentBrand: PosDocumentBrand;
-  lines: Array<{ offeringId: string; quantity: number; discountAmount?: number }>;
+  lines: Array<{ offeringId: string; quantity: number; unitPrice: number; discountAmount?: number }>;
   taxRate?: number;
   amountPaid?: number;
   paymentMethod?: RentalPaymentMethod;

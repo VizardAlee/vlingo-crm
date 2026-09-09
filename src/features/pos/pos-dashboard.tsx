@@ -17,7 +17,7 @@ import { listInventoryBalances, listInventoryItems } from "@/services/inventory"
 import { createPosSale, listPosSales, recordPosSalePayment } from "@/services/pos";
 import type { InventoryBalance, Offering, PosDocumentBrand, PosSale, RentalPaymentMethod } from "@/types/crm";
 
-type CartLine = { offeringId: string; quantity: number; discountAmount: number };
+type CartLine = { offeringId: string; quantity: number; unitPrice: number; discountAmount: number };
 const paymentMethods: Array<{ value: RentalPaymentMethod; label: string }> = [
   { value: "cash", label: "Cash" },
   { value: "pos", label: "Card / POS terminal" },
@@ -106,7 +106,7 @@ export function PosDashboard() {
   const cartDetails = useMemo(() => cart.flatMap((line) => {
     const item = items.find((entry) => entry.id === line.offeringId);
     if (!item) return [];
-    const gross = Number(item.sellingPrice ?? 0) * line.quantity;
+    const gross = line.unitPrice * line.quantity;
     return [{ ...line, item, gross, total: Math.max(0, gross - line.discountAmount), available: Number(stock.get(item.id) ?? 0) }];
   }), [cart, items, stock]);
   const subtotal = cartDetails.reduce((sum, line) => sum + line.gross, 0);
@@ -125,7 +125,7 @@ export function PosDashboard() {
       const existing = current.find((line) => line.offeringId === offeringId);
       const available = Number(stock.get(offeringId) ?? 0);
       if (existing) return current.map((line) => line.offeringId === offeringId ? { ...line, quantity: Math.min(available, line.quantity + 1) } : line);
-      return [...current, { offeringId, quantity: 1, discountAmount: 0 }];
+      return [...current, { offeringId, quantity: 1, unitPrice: Number(items.find((item) => item.id === offeringId)?.sellingPrice ?? 0), discountAmount: 0 }];
     });
   }
 
@@ -177,7 +177,7 @@ export function PosDashboard() {
         customerAddress: customer.address,
         documentBrand,
         notes: customer.notes,
-        lines: cart.map((line) => ({ offeringId: line.offeringId, quantity: line.quantity, discountAmount: line.discountAmount })),
+        lines: cart.map((line) => ({ offeringId: line.offeringId, quantity: line.quantity, unitPrice: line.unitPrice, discountAmount: line.discountAmount })),
         taxRate: Number(payment.taxRate || 0),
         amountPaid: Number(payment.amountPaid || 0),
         paymentMethod: payment.method,
@@ -257,7 +257,7 @@ export function PosDashboard() {
                   {searchableItems.map((item) => (
                     <button className="flex items-center justify-between gap-3 rounded-md border p-3 text-left transition hover:border-primary hover:bg-primary/5" key={item.id} onClick={() => addToCart(item.id)} type="button">
                       <span className="min-w-0"><strong className="block truncate text-sm">{item.name}</strong><span className="block truncate text-xs text-muted-foreground">{item.brandName} · {item.sku || "No SKU"} · {stock.get(item.id)} available</span></span>
-                      <span className="shrink-0 text-sm font-semibold">{formatCurrency(item.sellingPrice)}</span>
+                      <span className="shrink-0 text-right text-sm font-semibold"><span className="block">{formatCurrency(item.sellingPrice)}</span>{item.wholesalePrice !== undefined ? <span className="block text-xs font-normal text-muted-foreground">Wholesale {formatCurrency(item.wholesalePrice)}</span> : null}</span>
                     </button>
                   ))}
                   {!searchableItems.length ? <div className="col-span-full rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No saleable stock matches this search in the active branch.</div> : null}
@@ -282,8 +282,15 @@ export function PosDashboard() {
               <div className="grid max-h-[400px] gap-3 overflow-y-auto">
                 {cartDetails.map((line) => (
                   <div className="rounded-md border p-3" key={line.offeringId}>
-                    <div className="flex justify-between gap-3"><div><strong className="text-sm">{line.item.name}</strong><p className="text-xs text-muted-foreground">{formatCurrency(line.item.sellingPrice)} each · {line.available} available</p></div><Button aria-label="Remove product" onClick={() => setCart((value) => value.filter((entry) => entry.offeringId !== line.offeringId))} size="icon" type="button" variant="ghost"><Trash2 className="h-4 w-4" /></Button></div>
+                    <div className="flex justify-between gap-3"><div><strong className="text-sm">{line.item.name}</strong><p className="text-xs text-muted-foreground">Retail {formatCurrency(line.item.sellingPrice)}{line.item.wholesalePrice !== undefined ? ` · Wholesale ${formatCurrency(line.item.wholesalePrice)}` : ""} · {line.available} available</p></div><Button aria-label="Remove product" onClick={() => setCart((value) => value.filter((entry) => entry.offeringId !== line.offeringId))} size="icon" type="button" variant="ghost"><Trash2 className="h-4 w-4" /></Button></div>
                     <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2"><Button disabled={line.quantity <= 1} onClick={() => stepQuantity(line.offeringId, line.quantity - 1)} size="icon" type="button" variant="outline"><Minus className="h-4 w-4" /></Button><Input aria-label="Quantity" inputMode="numeric" max={line.available} min="1" onBlur={() => finishQuantity(line.offeringId, line.available)} onChange={(event) => typeQuantity(line.offeringId, event.target.value)} onFocus={(event) => event.currentTarget.select()} step="1" type="number" value={quantityDrafts[line.offeringId] ?? String(line.quantity)} /><Button disabled={line.quantity >= line.available} onClick={() => stepQuantity(line.offeringId, line.quantity + 1)} size="icon" type="button" variant="outline"><Plus className="h-4 w-4" /></Button></div>
+                    <Field className="mt-3" label="Unit selling price">
+                      <Input aria-label="Unit selling price" inputMode="decimal" min="0" onChange={(event) => updateCart(line.offeringId, { unitPrice: Math.max(0, Number(event.target.value)) })} onFocus={(event) => event.currentTarget.select()} step="0.01" type="number" value={line.unitPrice} />
+                      <span className="flex flex-wrap gap-2 pt-1">
+                        <Button onClick={() => updateCart(line.offeringId, { unitPrice: Number(line.item.sellingPrice ?? 0) })} size="sm" type="button" variant="outline">Use retail</Button>
+                        {line.item.wholesalePrice !== undefined ? <Button onClick={() => updateCart(line.offeringId, { unitPrice: Number(line.item.wholesalePrice) })} size="sm" type="button" variant="outline">Use wholesale</Button> : null}
+                      </span>
+                    </Field>
                     <Field className="mt-3" label="Line discount"><Input max={line.gross} min="0" onChange={(event) => updateCart(line.offeringId, { discountAmount: Math.max(0, Number(event.target.value)) })} type="number" value={line.discountAmount} /></Field>
                     <p className="mt-3 text-right text-sm font-semibold">{formatCurrency(line.total)}</p>
                   </div>

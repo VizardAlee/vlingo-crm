@@ -449,6 +449,7 @@ export interface Offering extends EntityMetadata {
   trackingMode?: "none" | "batch" | "serial";
   unitOfMeasure?: string;
   sellingPrice?: number;
+  wholesalePrice?: number;
   costPrice?: number;
   stockQuantity?: number;
   brandId?: string;
@@ -722,7 +723,11 @@ export interface PosSaleLine {
   brandName: string;
   sku?: string;
   quantity: number;
+  catalogRetailPrice?: number;
+  catalogWholesalePrice?: number;
   unitPrice: number;
+  priceSource?: "retail" | "wholesale" | "adjusted";
+  priceAdjustment?: number;
   discountAmount: number;
   lineTotal: number;
   unitCost?: number;

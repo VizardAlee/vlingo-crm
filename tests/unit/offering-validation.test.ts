@@ -23,6 +23,18 @@ describe("offering inventory validation", () => {
     expect(offeringSchema.safeParse({ ...baseOffering, type: "consultancy", vertical: "generalServices" }).success).toBe(true);
   });
 
+  it("preserves an optional wholesale price", () => {
+    const result = offeringSchema.parse({
+      ...baseOffering,
+      brandId: "sorotec",
+      sellingPrice: 1000,
+      wholesalePrice: 850,
+    });
+
+    expect(result.sellingPrice).toBe(1000);
+    expect(result.wholesalePrice).toBe(850);
+  });
+
   it("strips legacy stock quantity from catalog submissions", () => {
     const result = offeringSchema.parse({
       ...baseOffering,

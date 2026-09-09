@@ -291,6 +291,7 @@ export const offeringSchema = z.object({
   trackingMode: z.enum(["none", "batch", "serial"]).optional(),
   unitOfMeasure: z.string().optional(),
   sellingPrice: optionalNumber,
+  wholesalePrice: optionalNumber,
   costPrice: optionalNumber,
   reorderLevel: optionalNumber,
   supplierName: z.string().optional(),
