@@ -14,12 +14,40 @@ export function formatCurrency(value: number | null | undefined) {
   }).format(value ?? 0);
 }
 
-export function formatDate(value: Date | string | null | undefined) {
-  if (!value) {
+export function formatDate(value: unknown) {
+  if (value === null || value === undefined || value === "") {
     return "Not set";
   }
 
-  return format(typeof value === "string" ? new Date(value) : value, "MMM d, yyyy");
+  let date: Date | null = null;
+  if (value instanceof Date) {
+    date = value;
+  } else if (typeof value === "string" || typeof value === "number") {
+    date = new Date(value);
+  } else if (typeof value === "object") {
+    if ("toDate" in value && typeof value.toDate === "function") {
+      const converted = value.toDate();
+      date = converted instanceof Date ? converted : null;
+    } else {
+      const timestamp = value as {
+        _nanoseconds?: unknown;
+        _seconds?: unknown;
+        nanoseconds?: unknown;
+        seconds?: unknown;
+      };
+      const seconds = Number(timestamp.seconds ?? timestamp._seconds);
+      const nanoseconds = Number(
+        timestamp.nanoseconds ?? timestamp._nanoseconds ?? 0,
+      );
+      if (Number.isFinite(seconds) && Number.isFinite(nanoseconds)) {
+        date = new Date(seconds * 1_000 + nanoseconds / 1_000_000);
+      }
+    }
+  }
+
+  return date && !Number.isNaN(date.getTime())
+    ? format(date, "MMM d, yyyy")
+    : "Not set";
 }
 
 export function formatPhone(value: string | null | undefined) {

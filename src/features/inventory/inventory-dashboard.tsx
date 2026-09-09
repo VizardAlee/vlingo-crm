@@ -191,6 +191,8 @@ export function InventoryDashboard() {
     dateFrom: "",
     dateTo: "",
   });
+  const [overviewPage, setOverviewPage] = useState(1);
+  const [overviewPageSize, setOverviewPageSize] = useState(25);
   const isPartner = memberRoles(member).includes("brandPartner");
   const canMoveStock = hasAnyPermission(member, [
     "inventory.receive",
@@ -426,6 +428,19 @@ export function InventoryDashboard() {
           ),
       })),
     [balances, items],
+  );
+  const overviewPageCount = Math.max(
+    1,
+    Math.ceil(itemTotals.length / overviewPageSize),
+  );
+  const currentOverviewPage = Math.min(overviewPage, overviewPageCount);
+  const paginatedItemTotals = useMemo(
+    () =>
+      itemTotals.slice(
+        (currentOverviewPage - 1) * overviewPageSize,
+        currentOverviewPage * overviewPageSize,
+      ),
+    [currentOverviewPage, itemTotals, overviewPageSize],
   );
   const totalUnits = itemTotals.reduce((sum, item) => sum + item.quantity, 0);
   const inventoryValue = itemTotals.reduce(
@@ -972,8 +987,31 @@ export function InventoryDashboard() {
             ) : null}
           </div>
           <Card>
-            <CardHeader>
-              <CardTitle>Stock by item</CardTitle>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Stock by item</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {itemTotals.length
+                    ? `Showing ${(currentOverviewPage - 1) * overviewPageSize + 1}–${Math.min(currentOverviewPage * overviewPageSize, itemTotals.length)} of ${itemTotals.length}`
+                    : "No inventory items"}
+                </p>
+              </div>
+              <Field className="w-full sm:w-36" label="Items per page">
+                <Select
+                  aria-label="Items per page"
+                  onChange={(event) => {
+                    setOverviewPageSize(Number(event.target.value));
+                    setOverviewPage(1);
+                  }}
+                  value={overviewPageSize}
+                >
+                  {[10, 25, 50, 100].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </CardHeader>
             <CardContent className="overflow-x-auto p-0">
               <table className="w-full min-w-[840px] text-left text-sm">
@@ -991,7 +1029,7 @@ export function InventoryDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {itemTotals.map((item) => {
+                  {paginatedItemTotals.map((item) => {
                     const available = item.quantity - item.reserved;
                     const low =
                       item.reorderLevel !== undefined &&
@@ -1070,6 +1108,39 @@ export function InventoryDashboard() {
                 </tbody>
               </table>
             </CardContent>
+            {itemTotals.length > overviewPageSize ? (
+              <div className="flex flex-col gap-3 border-t p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-muted-foreground">
+                  Page {currentOverviewPage} of {overviewPageCount}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={currentOverviewPage <= 1}
+                    onClick={() =>
+                      setOverviewPage((page) => Math.max(1, page - 1))
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    disabled={currentOverviewPage >= overviewPageCount}
+                    onClick={() =>
+                      setOverviewPage((page) =>
+                        Math.min(overviewPageCount, page + 1),
+                      )
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </Card>
           <Card>
             <CardHeader>
