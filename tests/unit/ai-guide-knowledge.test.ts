@@ -30,6 +30,9 @@ describe("AI Guide knowledge", () => {
     expect(procurement).toContain("Procure and receive inventory");
     expect(procurement).toContain("no purchase approval step");
     expect(procurement).toContain("later activity for audit");
+    expect(procurement).toContain("Find purchase orders");
+    expect(procurement).toContain("Create product");
+    expect(procurement).toContain("Stock count approvals");
     expect(procurement).toContain("Partial receipts");
     expect(reservation).toContain("Reserve stock for work or a sale");
     expect(reservation).toContain("on hand but is removed from the available quantity");

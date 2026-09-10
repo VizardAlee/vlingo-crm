@@ -288,8 +288,18 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
   const [inventoryBrands, setInventoryBrands] = useState<InventoryBrand[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [offeringBranchId, setOfferingBranchId] = useState(
-    String(existing?.branchId ?? member?.branchId ?? activeBranchId),
+    String(
+      existing?.branchId ??
+        initialValues?.branchId ??
+        member?.branchId ??
+        activeBranchId,
+    ),
   );
+  const requestedReturnTo = String(initialValues?.returnTo ?? "");
+  const returnTo =
+    requestedReturnTo.startsWith("/") && !requestedReturnTo.startsWith("//")
+      ? requestedReturnTo
+      : config.route;
   const [initialStockQuantity, setInitialStockQuantity] = useState("");
   const [initialStockDate, setInitialStockDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [initialStockBatchNumber, setInitialStockBatchNumber] = useState("");
@@ -1382,7 +1392,7 @@ export function ModuleForm({ config, existing, id, initialValues }: { config: Mo
           : `${moduleSingularTitle(config)} ${id ? "updated" : "created"} successfully.`,
         variant: "success",
       });
-      router.push(config.route);
+      router.push(returnTo);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Unable to save record.";
       setError(message);

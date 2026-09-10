@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import {
   Archive,
   Download,
@@ -126,7 +127,7 @@ const tabLabels: Record<Tab, string> = {
   counts: "Stock counts",
   reservations: "Reservations",
   traceability: "Traceability",
-  approvals: "Approvals",
+  approvals: "Stock count approvals",
   comments: "Comments",
   setup: "Setup",
 };
@@ -142,6 +143,7 @@ function inventoryDate(value: Date | string) {
 
 export function InventoryDashboard() {
   const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("overview");
   const [brands, setBrands] = useState<InventoryBrand[]>([]);
@@ -215,6 +217,13 @@ export function InventoryDashboard() {
   ]);
   const canReserve = hasPermission(member, "inventory.reserve");
   const canApprove = hasPermission(member, "inventory.approve");
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "procurement" && canProcure) {
+      const timeout = window.setTimeout(() => setTab("procurement"), 0);
+      return () => window.clearTimeout(timeout);
+    }
+  }, [canProcure, searchParams]);
   const availableMovementOptions = useMemo(
     () =>
       movementOptions.filter((option) =>

@@ -4,9 +4,11 @@ import {
   Banknote,
   Check,
   ClipboardCheck,
+  ExternalLink,
   PackagePlus,
   Plus,
   RefreshCw,
+  Search,
   RotateCcw,
   ShieldCheck,
   Truck,
@@ -14,7 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/state";
@@ -176,9 +178,11 @@ export function InventoryEnterprisePanel({
   >({});
   const [traceSearch, setTraceSearch] = useState("");
   const [purchaseSearch, setPurchaseSearch] = useState("");
+  const [purchaseStatus, setPurchaseStatus] = useState("all");
   const [purchasePage, setPurchasePage] = useState(1);
   const [purchasePageSize, setPurchasePageSize] = useState(10);
   const canProcure = hasPermission(member, "inventory.procure");
+  const canCreateProduct = hasPermission(member, "offerings.create");
   const canRecordPayment =
     canProcure || hasPermission(member, "finance.update");
   const canCount = hasPermission(member, "inventory.count");
@@ -193,18 +197,36 @@ export function InventoryEnterprisePanel({
     poForm.taxAmount;
   const filteredPurchaseOrders = useMemo(() => {
     const search = purchaseSearch.trim().toLowerCase();
-    if (!search) return purchaseOrders;
-    return purchaseOrders.filter((order) =>
-      [
+    return purchaseOrders.filter((order) => {
+      const balanceDue = Number(order.balanceDue ?? order.totalAmount);
+      const matchesStatus =
+        purchaseStatus === "all" ||
+        (purchaseStatus === "active" &&
+          ["approved", "pendingApproval"].includes(order.approvalStatus)) ||
+        (purchaseStatus === "outstanding" && balanceDue > 0) ||
+        (purchaseStatus === "awaitingReceipt" &&
+          order.receivingStatus !== "received") ||
+        (purchaseStatus === "received" &&
+          order.receivingStatus === "received") ||
+        (purchaseStatus === "cancelled" &&
+          order.approvalStatus === "cancelled");
+      if (!matchesStatus) return false;
+      if (!search) return true;
+      return [
         order.referenceNumber,
         order.supplierName,
-        order.approvalStatus,
         order.receivingStatus,
         order.paymentStatus,
-        ...order.lines.map((line) => line.offeringName),
-      ].some((value) => String(value ?? "").toLowerCase().includes(search)),
-    );
-  }, [purchaseOrders, purchaseSearch]);
+        order.paymentReference,
+        order.installationProjectName,
+        ...order.lines.flatMap((line) => [
+          line.offeringName,
+          line.brandName,
+          line.sku,
+        ]),
+      ].some((value) => String(value ?? "").toLowerCase().includes(search));
+    });
+  }, [purchaseOrders, purchaseSearch, purchaseStatus]);
   const purchasePageCount = Math.max(
     1,
     Math.ceil(filteredPurchaseOrders.length / purchasePageSize),
@@ -603,6 +625,72 @@ export function InventoryEnterprisePanel({
   if (mode === "procurement")
     return (
       <div className="grid gap-5 xl:grid-cols-2">
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-primary" />
+              Find purchase orders
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Search by PO number, supplier, product, brand, SKU, project, or
+              payment reference. Purchase orders become active immediately;
+              there is no purchase approval step, and every action remains in
+              the audit trail.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto_auto] md:items-end">
+            <Field label="Search purchases">
+              <Input
+                placeholder="Search PO, supplier, product, brand, SKU..."
+                value={purchaseSearch}
+                onChange={(event) => {
+                  setPurchaseSearch(event.target.value);
+                  setPurchasePage(1);
+                }}
+              />
+            </Field>
+            <Field label="Status">
+              <Select
+                value={purchaseStatus}
+                onChange={(event) => {
+                  setPurchaseStatus(event.target.value);
+                  setPurchasePage(1);
+                }}
+              >
+                <option value="all">All purchase orders</option>
+                <option value="active">Active</option>
+                <option value="outstanding">Payment outstanding</option>
+                <option value="awaitingReceipt">Awaiting receipt</option>
+                <option value="received">Fully received</option>
+                <option value="cancelled">Cancelled</option>
+              </Select>
+            </Field>
+            {(purchaseSearch || purchaseStatus !== "all") ? (
+              <Button
+                onClick={() => {
+                  setPurchaseSearch("");
+                  setPurchaseStatus("all");
+                  setPurchasePage(1);
+                }}
+                type="button"
+                variant="outline"
+              >
+                Clear filters
+              </Button>
+            ) : null}
+            <Button
+              onClick={() =>
+                document
+                  .getElementById("purchase-orders-list")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              type="button"
+              variant="secondary"
+            >
+              View {filteredPurchaseOrders.length} matching
+            </Button>
+          </CardContent>
+        </Card>
         {canProcure ? (
           <Card>
             <CardHeader>
@@ -721,10 +809,44 @@ export function InventoryEnterprisePanel({
         {canProcure ? (
           <Card>
             <CardHeader>
-              <CardTitle>New purchase order</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle>New purchase order</CardTitle>
+                {canCreateProduct ? (
+                  <ButtonLink
+                    href={`/offerings/new?status=active&trackingMode=none&branchId=${encodeURIComponent(activeBranchId)}&returnTo=${encodeURIComponent("/inventory?tab=procurement")}`}
+                    rel="noopener noreferrer"
+                    size="sm"
+                    target="_blank"
+                    variant="outline"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create product
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </ButtonLink>
+                ) : null}
+              </div>
+              {canCreateProduct ? (
+                <p className="text-xs text-muted-foreground">
+                  A new tab preserves this purchase draft. Create the missing
+                  product there, return here, then refresh products.
+                </p>
+              ) : null}
             </CardHeader>
             <CardContent>
               <form className="grid gap-3" onSubmit={submitPurchaseOrder}>
+                {canCreateProduct ? (
+                  <Button
+                    className="w-full sm:w-fit"
+                    disabled={loading}
+                    onClick={() => void refreshAll()}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh products
+                  </Button>
+                ) : null}
                 <Field label="Supplier">
                   <Select
                     required
@@ -962,8 +1084,8 @@ export function InventoryEnterprisePanel({
             </CardContent>
           </Card>
         ) : null}
-        <Card className="xl:col-span-2">
-          <CardHeader className="grid gap-3 lg:grid-cols-[1fr_260px_150px] lg:items-end">
+        <Card className="scroll-mt-4 xl:col-span-2" id="purchase-orders-list">
+          <CardHeader className="grid gap-3 lg:grid-cols-[1fr_150px] lg:items-end">
             <div>
               <CardTitle>Purchase orders and receiving</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -972,16 +1094,6 @@ export function InventoryEnterprisePanel({
                   : "No matching purchase orders"}
               </p>
             </div>
-            <Field label="Search orders">
-              <Input
-                placeholder="PO, supplier, product, or status"
-                value={purchaseSearch}
-                onChange={(event) => {
-                  setPurchaseSearch(event.target.value);
-                  setPurchasePage(1);
-                }}
-              />
-            </Field>
             <Field label="Orders per page">
               <Select
                 value={purchasePageSize}
