@@ -10,6 +10,17 @@ describe("AI Guide knowledge", () => {
     expect(answer).toContain("Export CSV");
   });
 
+  it("explains consolidated organization reporting", () => {
+    const answer = fallbackGuideAnswer(
+      "How do I generate an organization inventory, sales, purchase and finance report?",
+    );
+
+    expect(answer).toContain("Organization overview");
+    expect(answer).toContain("Executive, Sales, Inventory, Purchasing, Projects, Finance, and CRM");
+    expect(answer).toContain("current point-in-time figures");
+    expect(answer).toContain("A4 PDF");
+  });
+
   it("guides users through enterprise inventory workflows", () => {
     const procurement = fallbackGuideAnswer("How do I create and receive a purchase order?");
     const reservation = fallbackGuideAnswer("How do I reserve stock for a project?");

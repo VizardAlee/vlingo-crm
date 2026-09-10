@@ -287,7 +287,9 @@ export async function GET(request: Request) {
     const leads = allLeads.filter((record) => withinPeriod(record, start, end));
     const clients = Array.from(mergedClients.values()).filter((record) => withinPeriod(record, start, end));
     const deals = allDeals.filter((record) => withinPeriod(record, start, end));
-    const tasks = allTasks.filter((record) => withinPeriod(record, start, end));
+    const tasks = allTasks.filter((record) =>
+      withinPeriod(record, start, end, "updatedAt"),
+    );
     const leadActivities = allLeadActivities.filter((record) => withinPeriod(record, start, end));
     const allPayments = await attributablePayments(
       organizationId,
@@ -349,7 +351,7 @@ export async function GET(request: Request) {
       period,
       periodEnd: end?.toISOString() ?? null,
       periodStart: start?.toISOString() ?? null,
-      revenueAttributionNote: "Verified revenue linked to your owned leads and deals is included. Older retired-module and other-income receipts without a revenue owner are excluded.",
+      revenueAttributionNote: "Verified revenue explicitly attributed to you, including POS collections you recorded and compatible receipts linked to your owned leads or deals, is included. Older retired-module and other-income receipts without a revenue owner are excluded.",
       timeline: leadTimeline(allLeads, allLeadActivities, allTasks, decoded.uid, start, end),
     });
   } catch (error) {

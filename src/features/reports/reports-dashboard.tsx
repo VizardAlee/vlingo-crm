@@ -1,9 +1,8 @@
 "use client";
 
 import { BarChart3, CheckCircle2, ChevronDown, ChevronUp, Clock3, ContactRound, Download, FileDown, Loader2, MessageSquareText, Sparkles, Target, TrendingUp, UserRound, Users } from "lucide-react";
-import { where, type QueryConstraint } from "firebase/firestore";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,10 +10,9 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { ErrorState, LoadingState } from "@/components/ui/state";
 import { useAuth } from "@/features/auth/auth-provider";
-import { effectiveBranchId, hasOrganizationReportAccess } from "@/lib/permissions";
+import { OrganizationReports } from "@/features/reports/organization-reports";
+import { hasOrganizationReportAccess } from "@/lib/permissions";
 import { formatCurrency, statusTone, titleCase } from "@/lib/utils";
-import { getDashboardMetrics, type DashboardMetrics } from "@/services/dashboard";
-import { listOrgRecords } from "@/services/repository";
 
 type ReportMode = "personal" | "organization";
 type ReportPeriod = "30" | "90" | "365" | "all" | "custom";
@@ -190,28 +188,16 @@ async function downloadA4Report(report: PersonalReport, summary: string) {
   pdf.save(`vlingo-performance-${report.member.displayName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
-function countBy(items: Record<string, unknown>[], key: string) {
-  return items.reduce<Record<string, number>>((acc, item) => {
-    const value = String(item[key] ?? "notSet");
-    acc[value] = (acc[value] ?? 0) + 1;
-    return acc;
-  }, {});
-}
-
 function toRows(counts: Record<string, number>) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
 
-async function safeList(organizationId: string, collectionName: "leads" | "tasks", constraints: QueryConstraint[] = []) {
-  try {
-    return await listOrgRecords<Record<string, unknown> & { id: string }>(organizationId, collectionName, constraints);
-  } catch {
-    return [];
-  }
-}
-
 function csvDownload(rows: Array<Array<string | number>>, filename: string) {
-  const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = rows.map((row) => row.map((value) => {
+    const text = String(value);
+    const safe = /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  }).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
@@ -237,7 +223,7 @@ function BreakdownCard({ rows, title, currency = false }: { rows: [string, numbe
 }
 
 export function ReportsDashboard() {
-  const { activeBranchId, activeOrganizationId, member, user } = useAuth();
+  const { activeOrganizationId, member, user } = useAuth();
   const [defaultDates] = useState(() => initialReportDates());
   const [mode, setMode] = useState<ReportMode>("personal");
   const [period, setPeriod] = useState<ReportPeriod>("90");
@@ -251,9 +237,6 @@ export function ReportsDashboard() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [timelineExpanded, setTimelineExpanded] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState("all");
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [leads, setLeads] = useState<Record<string, unknown>[]>([]);
-  const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const automaticLoadKey = useRef("");
@@ -320,27 +303,16 @@ export function ReportsDashboard() {
             setAiLoading(false);
           }
         }
-      } else {
-        if (!canViewOrganizationReports) throw new Error("Your role does not include organization-wide reporting.");
-        const branchId = effectiveBranchId(member, activeBranchId);
-        const branchConstraints = branchId ? [where("branchId", "==", branchId)] : [];
-        const [nextMetrics, nextLeads, nextTasks] = await Promise.all([
-          getDashboardMetrics(activeOrganizationId, { branchId }),
-          safeList(activeOrganizationId, "leads", branchConstraints),
-          safeList(activeOrganizationId, "tasks", branchConstraints),
-        ]);
-        setMetrics(nextMetrics);
-        setLeads(nextLeads);
-        setTasks(nextTasks);
       }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to load reports.");
     } finally {
       setLoading(false);
     }
-  }, [activeBranchId, activeMode, activeOrganizationId, canViewOrganizationReports, member, user]);
+  }, [activeMode, activeOrganizationId, member, user]);
 
   useEffect(() => {
+    if (activeMode !== "personal") return;
     const loadKey = `${activeOrganizationId}:${user?.uid ?? "signed-out"}:${activeMode}`;
     if (loading || automaticLoadKey.current === loadKey) return;
     automaticLoadKey.current = loadKey;
@@ -378,13 +350,6 @@ export function ReportsDashboard() {
     }
   }
 
-  const organizationRows = useMemo(() => ({
-    leadStatus: toRows(countBy(leads, "status")),
-    source: toRows(countBy(leads, "source")),
-    task: toRows(countBy(tasks, "status")),
-  }), [leads, tasks]);
-  const estimatedPipeline = useMemo(() => leads.reduce((total, item) => total + Number(item.budgetMaximum ?? item.budgetMinimum ?? 0), 0), [leads]);
-
   function exportSummary() {
     if (activeMode === "personal" && personal) {
       const rows: Array<Array<string | number>> = [
@@ -413,15 +378,6 @@ export function ReportsDashboard() {
       csvDownload(rows, `vlingo-personal-performance-${new Date().toISOString().slice(0, 10)}.csv`);
       return;
     }
-    if (!metrics) return;
-    csvDownload([
-      ["Metric", "Value"],
-      ["Total leads", metrics.totalLeads],
-      ["Qualified leads", metrics.qualifiedLeads],
-      ["Active clients", metrics.activeClients],
-      ["Overdue follow-ups", metrics.overdueFollowUps],
-      ["Estimated pipeline", metrics.pipelineValue],
-    ], `vlingo-organization-report-${new Date().toISOString().slice(0, 10)}.csv`);
   }
 
   const personalCards = personal ? [
@@ -436,11 +392,6 @@ export function ReportsDashboard() {
     { icon: TrendingUp, label: "Verified amount generated", value: formatCurrency(personal.metrics.amountGenerated) },
     { icon: Target, label: "Open pipeline", value: formatCurrency(personal.metrics.pipelineValue) },
   ] : [];
-  const organizationCards = metrics ? [
-    ["Total leads", metrics.totalLeads.toLocaleString()], ["Qualified leads", metrics.qualifiedLeads.toLocaleString()],
-    ["Active clients", metrics.activeClients.toLocaleString()],
-    ["Overdue follow-ups", metrics.overdueFollowUps.toLocaleString()], ["Estimated pipeline", formatCurrency(metrics.pipelineValue || estimatedPipeline)],
-  ] : [];
   const maxMonthlyRevenue = Math.max(1, ...(personal?.breakdowns.revenueByMonth.map((row) => row.value) ?? []));
   const timelineKinds = Array.from(new Set(personal?.timeline.map((item) => item.kind) ?? [])).sort();
   const filteredTimeline = (personal?.timeline ?? []).filter((item) => timelineFilter === "all" || item.kind === timelineFilter);
@@ -454,8 +405,8 @@ export function ReportsDashboard() {
           <p className="mt-1 text-sm text-muted-foreground">Measure assigned work, conversion, pipeline, and verified revenue from live CRM records.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
-          <Button disabled={activeMode === "personal" ? !personal : !metrics} onClick={exportSummary} type="button" variant="outline"><Download className="h-4 w-4" />CSV</Button>
-          {activeMode === "personal" ? <Button disabled={!personal || !aiSummary || downloadingPdf || aiLoading} onClick={() => void downloadPdf()} type="button" variant="secondary">{downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}{downloadingPdf ? "Preparing" : "A4 PDF"}</Button> : null}
+          {activeMode === "personal" ? <Button disabled={!personal} onClick={exportSummary} type="button" variant="outline"><Download className="h-4 w-4" />CSV</Button> : null}
+          {activeMode === "personal" ? <Button disabled={!personal || downloadingPdf || aiLoading} onClick={() => void downloadPdf()} type="button" variant="secondary">{downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}{downloadingPdf ? "Preparing" : "A4 PDF"}</Button> : null}
         </div>
       </div>
 
@@ -482,19 +433,13 @@ export function ReportsDashboard() {
               {loading ? "Generating" : "Generate AI report"}
             </Button>
           </div>
-        ) : (
-          <Button className="h-11 w-full sm:w-fit" disabled={loading} onClick={() => void loadReports({ from: defaultDates.from, includeAi: false, period: "90", to: defaultDates.to })} type="button">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
-            {loading ? "Refreshing" : "Refresh overview"}
-          </Button>
-        )}
+        ) : null}
         {activeMode === "personal" ? <p className="text-xs leading-5 text-muted-foreground">The AI summary uses one AI Guide question from your daily allowance. Only aggregate report figures are sent for summarization.</p> : null}
       </div>
 
       {error ? <ErrorState message={error} /> : null}
       {loading ? <LoadingState label="Generating report from live CRM data" /> : null}
       {!loading && activeMode === "personal" && !personal ? <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Choose a date range and generate your personal performance report.</div> : null}
-      {!loading && activeMode === "organization" && !metrics ? <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Generate the organization overview for your current branch scope.</div> : null}
 
       {activeMode === "personal" && personal ? (
         <>
@@ -570,16 +515,7 @@ export function ReportsDashboard() {
         </>
       ) : null}
 
-      {activeMode === "organization" && metrics ? (
-        <>
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{organizationCards.map(([label, value]) => <Card key={label}><CardContent className="grid gap-2 p-4"><p className="text-xs text-muted-foreground md:text-sm">{label}</p><p className="break-all text-xl font-semibold md:text-2xl">{value}</p></CardContent></Card>)}</div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <BreakdownCard rows={organizationRows.leadStatus} title="Lead pipeline" /><BreakdownCard rows={organizationRows.source} title="Lead sources" />
-            <BreakdownCard rows={metrics.businessPipeline.map((item) => [item.name, item.value])} title="Business pipeline value" /><BreakdownCard rows={metrics.leadInterestCategories.map((item) => [item.name, item.value])} title="Lead interest mix" />
-            <BreakdownCard rows={organizationRows.task} title="Task status" />
-          </div>
-        </>
-      ) : null}
+      {activeMode === "organization" ? <OrganizationReports /> : null}
     </section>
   );
 }

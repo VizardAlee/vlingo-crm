@@ -433,6 +433,11 @@ export const guideTopics: GuideTopic[] = [
       "revenue report",
       "conversion rate",
       "my performance",
+      "organization report",
+      "inventory report",
+      "sales report",
+      "purchase report",
+      "finance report",
       "csv",
     ],
     title: "Review personal performance",
@@ -445,6 +450,10 @@ export const guideTopics: GuideTopic[] = [
       "Verified amount generated counts attributed payments only after finance verification; pending payments are shown separately.",
       "Use Export CSV to download the personal summary and breakdowns.",
       "Organization overview is available only to admins and authorized executive, finance, audit, operations, or sales-management roles.",
+      "In Organization overview, choose the date range, branch, and product brand, then use the Executive, Sales, Inventory, Purchasing, Projects, Finance, and CRM tabs.",
+      "The organization report combines completed POS sales, current stock balances, inventory movements, purchase orders and supplier exposure, installation-project profitability, verified cash collections, approved expenses, and current CRM activity.",
+      "Use CSV for spreadsheet analysis or A4 PDF for a printable consolidated report; both exports work without requesting an AI summary.",
+      "Inventory balances and value are current point-in-time figures. The chosen dates limit movements and other activity. When a brand filter is selected, finance and CRM totals remain branch-and-date scoped because those records do not consistently carry a product brand.",
     ],
   },
   {
@@ -614,7 +623,7 @@ Main routes and modules:
 - Documents: attach and manage business documents.
 - Tasks and Activities: complete dated follow-up information, creator/updater identity, audit-friendly notes, and Google Calendar sync for assigned tasks.
 - Notifications: persistent read/unread records plus optional browser push alerts, scoped to the user unless they have oversight access.
-- Reports: every active user can review their own lead/client/deal/task performance and attributed verified revenue for selectable periods and export CSV. Executive/financial permissions additionally unlock Organization overview.
+- Reports: every active user can review their own lead/client/deal/task performance and attributed verified revenue for selectable periods and export CSV or A4 PDF. Authorized organization reporting adds date, branch, and brand filters plus Executive, Sales, Inventory, Purchasing, Projects, Finance, and CRM views using completed POS sales, current stock, movements, purchase orders, supplier exposure, installation-project profitability, verified cash, approved expenses, and CRM activity. Organization CSV and A4 PDF exports do not depend on AI.
 - AI Guide: persistent daily conversation, follow-up questions, Markdown answers, daily quota, and a response character limit.
 - PWA and offline: installable app shell, browser notifications, cached pages, and queued supported writes; live backend actions still require connectivity.
 - Settings: organization name/logo/theme, branches, users and renewable invite links, multiple roles, Google Calendar, email SMTP, and audit logs.
