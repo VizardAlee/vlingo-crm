@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,9 @@ import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasAnyPermission, rolePermissions } from "@/lib/permissions";
 import { titleCase } from "@/lib/utils";
+import { listAuditLogs } from "@/services/audit-logs";
 import { getOrganization, updateOrganization, uploadOrganizationLogo } from "@/services/organization";
-import type { Organization } from "@/types/crm";
+import type { AuditLog, Organization } from "@/types/crm";
 
 const defaultOrganizationForm = {
   legalName: "Vlingo Systems Nig. Ltd.",
@@ -21,6 +22,15 @@ const defaultOrganizationForm = {
   primaryColor: "#14550f",
   status: "active" as Organization["status"],
 };
+
+function formatAuditTimestamp(value: Date | undefined) {
+  if (!value || Number.isNaN(value.getTime())) return "Time unavailable";
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Africa/Lagos",
+  }).format(value);
+}
 
 function organizationTourTarget(name: string) {
   return `organization-${name}`;
@@ -341,6 +351,52 @@ export function RoleSettings() {
 }
 
 export function AuditLogSettings() {
+  const { activeBranchId, activeOrganizationId, member } = useAuth();
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      void listAuditLogs(activeOrganizationId, activeBranchId)
+        .then((records) => {
+          if (active) setLogs(records);
+        })
+        .catch((nextError: unknown) => {
+          if (active)
+            setError(
+              nextError instanceof Error
+                ? nextError.message
+                : "Unable to load the audit trail.",
+            );
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [activeBranchId, activeOrganizationId]);
+
+  const visibleLogs = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return logs;
+    return logs.filter((log) =>
+      [log.action, log.actorName, log.entityType, log.entityId]
+        .some((value) => String(value ?? "").toLowerCase().includes(needle)),
+    );
+  }, [logs, search]);
+
+  if (!hasAnyPermission(member, ["auditLogs.read"])) {
+    return <PermissionDenied />;
+  }
+
   return (
     <section className="grid min-w-0 gap-5">
       <div className="rounded-md bg-white p-4 shadow-sm md:bg-transparent md:p-0 md:shadow-none">
@@ -348,8 +404,56 @@ export function AuditLogSettings() {
         <p className="mt-1 text-sm text-muted-foreground">Protected event history for security-sensitive operations.</p>
       </div>
       <Card>
-        <CardHeader><CardTitle>Protected Audit Trail</CardTitle></CardHeader>
-        <CardContent className="text-sm text-muted-foreground">Audit logs are write-protected in Firestore rules for ordinary users. Client writes are scaffolded for development, while production audit writes should use Cloud Functions.</CardContent>
+        <CardHeader className="grid gap-3 md:grid-cols-[1fr_320px] md:items-end">
+          <div>
+            <CardTitle>Protected audit trail</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Showing the latest 250 protected events for the active branch.
+            </p>
+          </div>
+          <Field label="Search events">
+            <Input
+              placeholder="Action, user, record, or ID"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </Field>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {loading ? <LoadingState label="Loading audit trail" /> : null}
+          {error ? <ErrorState message={error} /> : null}
+          {!loading && !error
+            ? visibleLogs.map((log) => (
+                <div className="rounded-md border p-3" key={log.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">
+                        {log.action.split(".").map(titleCase).join(" / ")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {log.actorName || log.actorId} ·{" "}
+                        {formatAuditTimestamp(log.createdAt)}
+                      </p>
+                    </div>
+                    <Badge tone="muted">{titleCase(log.entityType)}</Badge>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-muted-foreground">
+                    Record: {log.entityId}
+                  </p>
+                  {log.newValue ? (
+                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/60 p-2 text-xs">
+                      {JSON.stringify(log.newValue, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              ))
+            : null}
+          {!loading && !error && !visibleLogs.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No matching audit events were found for this branch.
+            </p>
+          ) : null}
+        </CardContent>
       </Card>
     </section>
   );

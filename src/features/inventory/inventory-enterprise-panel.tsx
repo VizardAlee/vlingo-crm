@@ -24,6 +24,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import {
+  cancelPurchaseOrder,
   closeStockReservation,
   createInventorySupplier,
   createPurchaseOrder,
@@ -155,8 +156,10 @@ export function InventoryEnterprisePanel({
         locationId: string;
         quantity: number;
         batchNumber: string;
+        deliveryReference: string;
         expiryDate: string;
         serialText: string;
+        receivedAt: string;
       }
     >
   >({});
@@ -172,6 +175,9 @@ export function InventoryEnterprisePanel({
     >
   >({});
   const [traceSearch, setTraceSearch] = useState("");
+  const [purchaseSearch, setPurchaseSearch] = useState("");
+  const [purchasePage, setPurchasePage] = useState(1);
+  const [purchasePageSize, setPurchasePageSize] = useState(10);
   const canProcure = hasPermission(member, "inventory.procure");
   const canRecordPayment =
     canProcure || hasPermission(member, "finance.update");
@@ -185,6 +191,33 @@ export function InventoryEnterprisePanel({
   const purchaseOrderTotal =
     poForm.lines.reduce((sum, line) => sum + line.quantity * line.unitCost, 0) +
     poForm.taxAmount;
+  const filteredPurchaseOrders = useMemo(() => {
+    const search = purchaseSearch.trim().toLowerCase();
+    if (!search) return purchaseOrders;
+    return purchaseOrders.filter((order) =>
+      [
+        order.referenceNumber,
+        order.supplierName,
+        order.approvalStatus,
+        order.receivingStatus,
+        order.paymentStatus,
+        ...order.lines.map((line) => line.offeringName),
+      ].some((value) => String(value ?? "").toLowerCase().includes(search)),
+    );
+  }, [purchaseOrders, purchaseSearch]);
+  const purchasePageCount = Math.max(
+    1,
+    Math.ceil(filteredPurchaseOrders.length / purchasePageSize),
+  );
+  const currentPurchasePage = Math.min(purchasePage, purchasePageCount);
+  const paginatedPurchaseOrders = useMemo(
+    () =>
+      filteredPurchaseOrders.slice(
+        (currentPurchasePage - 1) * purchasePageSize,
+        currentPurchasePage * purchasePageSize,
+      ),
+    [currentPurchasePage, filteredPurchaseOrders, purchasePageSize],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -303,7 +336,7 @@ export function InventoryEnterprisePanel({
         branchId: activeBranchId,
       });
       toast({
-        title: "Purchase order submitted for approval",
+        title: "Purchase order created",
         description: result.referenceNumber,
         variant: "success",
       });
@@ -326,7 +359,7 @@ export function InventoryEnterprisePanel({
   }
 
   async function decide(
-    entityType: "purchaseOrder" | "stockCount",
+    entityType: "stockCount",
     entityId: string,
     decision: "approved" | "rejected",
   ) {
@@ -363,8 +396,10 @@ export function InventoryEnterprisePanel({
       locationId: locations[0]?.id || "",
       quantity: Math.max(1, line.quantity - line.receivedQuantity),
       batchNumber: "",
+      deliveryReference: "",
       expiryDate: "",
       serialText: "",
+      receivedAt: new Date().toISOString().slice(0, 10),
     };
     setSaving(`receive-${key}`);
     try {
@@ -375,7 +410,9 @@ export function InventoryEnterprisePanel({
         locationId: draft.locationId,
         quantity: draft.quantity,
         batchNumber: draft.batchNumber,
+        deliveryReference: draft.deliveryReference,
         expiryDate: draft.expiryDate,
+        receivedAt: draft.receivedAt,
         serialNumbers: draft.serialText
           .split(/[\n,]+/)
           .map((value) => value.trim())
@@ -414,6 +451,25 @@ export function InventoryEnterprisePanel({
       await refreshAll();
     } catch (nextError) {
       fail("Unable to record supplier payment", nextError);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function cancelOrder(order: InventoryPurchaseOrder) {
+    const reason = window.prompt("Why is this purchase order being cancelled?")?.trim();
+    if (!reason) return;
+    setSaving(`cancel-${order.id}`);
+    try {
+      await cancelPurchaseOrder({
+        organizationId: activeOrganizationId,
+        purchaseOrderId: order.id,
+        reason,
+      });
+      toast({ title: "Purchase order cancelled", variant: "success" });
+      await refreshAll();
+    } catch (nextError) {
+      fail("Unable to cancel purchase order", nextError);
     } finally {
       setSaving(null);
     }
@@ -537,9 +593,6 @@ export function InventoryEnterprisePanel({
       ),
     };
   }, [lots, serials, traceSearch]);
-  const pendingOrders = purchaseOrders.filter(
-    (item) => item.approvalStatus === "pendingApproval",
-  );
   const pendingCounts = counts.filter(
     (item) => item.approvalStatus === "pendingApproval",
   );
@@ -700,7 +753,7 @@ export function InventoryEnterprisePanel({
                       </Select>
                     </Field>
                     <Field label="Quantity">
-                      <Input min={1} required type="number" value={line.quantity} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, quantity: Number(e.target.value) } : item) }))} />
+                      <Input min={0.000001} required step="any" type="number" value={line.quantity} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, quantity: Number(e.target.value) } : item) }))} />
                     </Field>
                     <Field label="Unit cost">
                       <Input min={0} required step="0.01" type="number" value={line.unitCost} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, unitCost: Number(e.target.value) } : item) }))} />
@@ -903,18 +956,50 @@ export function InventoryEnterprisePanel({
                   type="submit"
                 >
                   <PackagePlus className="h-4 w-4" />
-                  Submit for approval
+                  Create purchase order
                 </Button>
               </form>
             </CardContent>
           </Card>
         ) : null}
         <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Purchase orders and receiving</CardTitle>
+          <CardHeader className="grid gap-3 lg:grid-cols-[1fr_260px_150px] lg:items-end">
+            <div>
+              <CardTitle>Purchase orders and receiving</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {filteredPurchaseOrders.length
+                  ? `Showing ${(currentPurchasePage - 1) * purchasePageSize + 1}–${Math.min(currentPurchasePage * purchasePageSize, filteredPurchaseOrders.length)} of ${filteredPurchaseOrders.length}`
+                  : "No matching purchase orders"}
+              </p>
+            </div>
+            <Field label="Search orders">
+              <Input
+                placeholder="PO, supplier, product, or status"
+                value={purchaseSearch}
+                onChange={(event) => {
+                  setPurchaseSearch(event.target.value);
+                  setPurchasePage(1);
+                }}
+              />
+            </Field>
+            <Field label="Orders per page">
+              <Select
+                value={purchasePageSize}
+                onChange={(event) => {
+                  setPurchasePageSize(Number(event.target.value));
+                  setPurchasePage(1);
+                }}
+              >
+                {[10, 25, 50, 100].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {purchaseOrders.map((order) => (
+            {paginatedPurchaseOrders.map((order) => (
               <div className="rounded-md border p-4" key={order.id}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -929,15 +1014,35 @@ export function InventoryEnterprisePanel({
                   <div className="flex gap-2">
                     <Badge
                       tone={
-                        order.approvalStatus === "approved"
+                        ["approved", "pendingApproval"].includes(
+                          order.approvalStatus,
+                        )
                           ? "success"
                           : order.approvalStatus === "rejected"
                             ? "danger"
                             : "warning"
                       }
                     >
-                      {titleCase(order.approvalStatus)}
+                      {["approved", "pendingApproval"].includes(
+                        order.approvalStatus,
+                      )
+                        ? "Active"
+                        : titleCase(order.approvalStatus)}
                     </Badge>
+                    {canProcure &&
+                    ["pendingApproval", "approved"].includes(order.approvalStatus) &&
+                    order.receivingStatus === "notReceived" &&
+                    Number(order.amountPaid ?? 0) === 0 ? (
+                      <Button
+                        disabled={saving === `cancel-${order.id}`}
+                        onClick={() => void cancelOrder(order)}
+                        size="sm"
+                        type="button"
+                        variant="danger"
+                      >
+                        Cancel
+                      </Button>
+                    ) : null}
                     <Badge tone="info">
                       {titleCase(order.receivingStatus)}
                     </Badge>
@@ -990,7 +1095,9 @@ export function InventoryEnterprisePanel({
                 </div>
                 {canRecordPayment &&
                 Number(order.balanceDue ?? order.totalAmount) > 0 &&
-                !["rejected", "cancelled"].includes(order.approvalStatus)
+                ["approved", "pendingApproval"].includes(
+                  order.approvalStatus,
+                )
                   ? (() => {
                       const paymentDraft = paymentDrafts[order.id] ?? {
                         amount: Number(order.balanceDue ?? order.totalAmount),
@@ -1094,8 +1201,10 @@ export function InventoryEnterprisePanel({
                       locationId: locations[0]?.id || "",
                       quantity: Math.max(1, outstanding),
                       batchNumber: "",
+                      deliveryReference: "",
                       expiryDate: "",
                       serialText: "",
+                      receivedAt: new Date().toISOString().slice(0, 10),
                     };
                     const tracking =
                       items.find((item) => item.id === line.offeringId)
@@ -1108,7 +1217,9 @@ export function InventoryEnterprisePanel({
                             {line.receivedQuantity}/{line.quantity}
                           </span>
                         </div>
-                        {order.approvalStatus === "approved" &&
+                        {["approved", "pendingApproval"].includes(
+                          order.approvalStatus,
+                        ) &&
                         outstanding > 0 ? (
                           <div className="mt-2 grid gap-2 md:grid-cols-3">
                             <Select
@@ -1131,7 +1242,8 @@ export function InventoryEnterprisePanel({
                             </Select>
                             <Input
                               max={outstanding}
-                              min={1}
+                              min={tracking === "serial" ? 1 : 0.000001}
+                              step={tracking === "serial" ? 1 : "any"}
                               type="number"
                               value={draft.quantity}
                               onChange={(e) =>
@@ -1190,6 +1302,35 @@ export function InventoryEnterprisePanel({
                                 }
                               />
                             ) : null}
+                            <Input
+                              aria-label="Delivery or GRN reference"
+                              placeholder="Delivery / GRN reference (optional)"
+                              value={draft.deliveryReference}
+                              onChange={(e) =>
+                                setReceiptDrafts((v) => ({
+                                  ...v,
+                                  [key]: {
+                                    ...draft,
+                                    deliveryReference: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                            <Input
+                              aria-label="Received date"
+                              max={new Date().toISOString().slice(0, 10)}
+                              type="date"
+                              value={draft.receivedAt}
+                              onChange={(e) =>
+                                setReceiptDrafts((v) => ({
+                                  ...v,
+                                  [key]: {
+                                    ...draft,
+                                    receivedAt: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
                             <Button
                               disabled={saving === `receive-${key}`}
                               onClick={() => receiveLine(order, index)}
@@ -1206,10 +1347,43 @@ export function InventoryEnterprisePanel({
                 </div>
               </div>
             ))}
-            {!purchaseOrders.length ? (
+            {!filteredPurchaseOrders.length ? (
               <p className="py-6 text-center text-muted-foreground">
                 No purchase orders yet.
               </p>
+            ) : null}
+            {filteredPurchaseOrders.length > purchasePageSize ? (
+              <div className="flex flex-col gap-3 border-t pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-muted-foreground">
+                  Page {currentPurchasePage} of {purchasePageCount}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={currentPurchasePage <= 1}
+                    onClick={() =>
+                      setPurchasePage((page) => Math.max(1, page - 1))
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    disabled={currentPurchasePage >= purchasePageCount}
+                    onClick={() =>
+                      setPurchasePage((page) =>
+                        Math.min(purchasePageCount, page + 1),
+                      )
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             ) : null}
           </CardContent>
         </Card>
@@ -1746,13 +1920,6 @@ export function InventoryEnterprisePanel({
       </CardHeader>
       <CardContent className="grid gap-3">
         {[
-          ...pendingOrders.map((item) => ({
-            id: item.id,
-            type: "purchaseOrder" as const,
-            title: `${item.referenceNumber} · ${item.supplierName}`,
-            detail: `${formatCurrency(item.totalAmount)} · ${titleCase(item.paymentArrangement ?? "credit")} · ${formatCurrency(Number(item.balanceDue ?? item.totalAmount))} due`,
-            createdBy: item.createdBy,
-          })),
           ...pendingCounts.map((item) => ({
             id: item.id,
             type: "stockCount" as const,
@@ -1804,7 +1971,7 @@ export function InventoryEnterprisePanel({
             ) : null}
           </div>
         ))}
-        {!pendingOrders.length && !pendingCounts.length ? (
+        {!pendingCounts.length ? (
           <p className="py-8 text-center text-muted-foreground">
             No inventory approvals are waiting.
           </p>

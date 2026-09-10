@@ -85,7 +85,7 @@ const movementOptions: Array<{
     type: "receipt",
     permission: "inventory.receive",
     label: "Receive stock without a purchase order",
-    help: "Use for a direct delivery that is not being received from an approved purchase order.",
+    help: "Use for a direct delivery that is not being received from a purchase order.",
   },
   {
     type: "issue",
@@ -256,7 +256,7 @@ export function InventoryDashboard() {
       steps.push({
         target: "inventory-tab-procurement",
         title: "Purchasing",
-        body: "Create paid, part-paid, or credit purchases, submit them for approval, receive deliveries, and track supplier balances.",
+        body: "Create paid, part-paid, or credit purchases, receive deliveries, record supplier payments, and track the complete audit trail.",
       });
     if (canCount)
       steps.push({
@@ -274,7 +274,7 @@ export function InventoryDashboard() {
       steps.push({
         target: "inventory-tab-approvals",
         title: "Approval queue",
-        body: "Approve or reject purchase orders and stock counts created by another user. Creators cannot approve their own submissions.",
+        body: "Approve or reject stock-count variances created by another user. Creators cannot approve their own submissions.",
       });
     steps.push(
       {
@@ -1350,7 +1350,7 @@ export function InventoryDashboard() {
                   <p className="rounded-md bg-muted/60 p-3 text-xs text-muted-foreground">
                     {selectedMovementOption?.help}
                     {effectiveMovementType === "receipt"
-                      ? " Approved purchase orders should be received from Purchasing so the order is updated correctly."
+                      ? " Purchase-order deliveries should be received from Purchasing so the order is updated correctly."
                       : ""}
                   </p>
                   <Field label="Scan item">

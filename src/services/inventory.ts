@@ -430,6 +430,14 @@ export function listInventoryPurchaseOrders(
     "inventoryPurchaseOrders",
     member,
     [where("isDeleted", "==", false)],
+  ).then((records) =>
+    records.sort((left, right) => {
+      const leftDate = dateValue(left.createdAt);
+      const rightDate = dateValue(right.createdAt);
+      const leftTime = leftDate instanceof Date ? leftDate.getTime() : 0;
+      const rightTime = rightDate instanceof Date ? rightDate.getTime() : 0;
+      return rightTime - leftTime;
+    }),
   );
 }
 
@@ -526,9 +534,20 @@ export function recordPurchaseOrderPayment(input: {
   >("recordInventoryPurchaseOrderPayment", input);
 }
 
+export function cancelPurchaseOrder(input: {
+  organizationId: string;
+  purchaseOrderId: string;
+  reason: string;
+}) {
+  return inventoryCallable<typeof input, { ok: boolean }>(
+    "cancelInventoryPurchaseOrder",
+    input,
+  );
+}
+
 export function decideInventoryApproval(input: {
   organizationId: string;
-  entityType: "purchaseOrder" | "stockCount";
+  entityType: "stockCount";
   entityId: string;
   decision: "approved" | "rejected";
   reason?: string;
@@ -546,7 +565,9 @@ export function receivePurchaseOrderLine(input: {
   locationId: string;
   quantity: number;
   batchNumber?: string;
+  deliveryReference?: string;
   expiryDate?: string;
+  receivedAt?: string;
   serialNumbers?: string[];
 }) {
   return inventoryCallable<typeof input, { ok: boolean; movementId: string }>(

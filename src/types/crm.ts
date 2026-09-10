@@ -569,6 +569,9 @@ export interface InventoryPurchaseOrder extends EntityMetadata {
   rejectedAt?: Date;
   rejectedBy?: string;
   rejectionReason?: string;
+  cancellationReason?: string;
+  cancelledAt?: Date | string;
+  cancelledBy?: string;
   notes?: string;
 }
 
@@ -1025,6 +1028,7 @@ export interface FinanceExpense extends EntityMetadata {
     | "tenancy"
     | "development"
     | "installationProject"
+    | "purchaseOrder"
     | "marketing"
     | "offering"
     | "office"

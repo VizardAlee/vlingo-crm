@@ -4024,6 +4024,14 @@ export const createInventoryPurchaseOrder = onCall(
         unitCost: requireNumber(record.unitCost, "unitCost"),
       };
     });
+    if (
+      new Set(normalizedLines.map((line) => line.offeringId)).size !==
+      normalizedLines.length
+    )
+      throw new HttpsError(
+        "invalid-argument",
+        "Add each inventory item only once per purchase order.",
+      );
     if (normalizedLines.some((line) => line.quantity <= 0 || line.unitCost < 0))
       throw new HttpsError(
         "invalid-argument",
@@ -4050,11 +4058,22 @@ export const createInventoryPurchaseOrder = onCall(
       const offering = offeringSnapshots[index].data();
       if (
         !offeringSnapshots[index].exists ||
-        !offering?.brandId
+        !offering?.brandId ||
+        offering?.isDeleted === true ||
+        String(offering?.status ?? "active") !== "active" ||
+        !["material", "solarEquipment"].includes(String(offering?.type ?? ""))
       )
         throw new HttpsError(
           "failed-precondition",
           "Every purchase line must reference an active branded item.",
+        );
+      if (
+        offering?.trackingMode === "serial" &&
+        !Number.isInteger(line.quantity)
+      )
+        throw new HttpsError(
+          "invalid-argument",
+          "Serial-tracked items must be purchased in whole units.",
         );
       return {
         ...line,
@@ -4071,8 +4090,11 @@ export const createInventoryPurchaseOrder = onCall(
     );
     const taxAmount = Math.max(0, Number(request.data?.taxAmount ?? 0));
     const totalAmount = subtotal + taxAmount;
-    if (!Number.isFinite(totalAmount))
-      throw new HttpsError("invalid-argument", "Enter a valid tax amount.");
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0)
+      throw new HttpsError(
+        "invalid-argument",
+        "Purchase order total must be greater than zero.",
+      );
     const hasPaymentArrangement = ["paid", "credit", "partPaid"].includes(
       request.data?.paymentArrangement,
     );
@@ -4121,12 +4143,19 @@ export const createInventoryPurchaseOrder = onCall(
       : null;
     if (
       amountPaid < totalAmount &&
-      hasPaymentArrangement &&
       (!paymentDueAt || Number.isNaN(paymentDueAt.getTime()))
     )
       throw new HttpsError(
         "invalid-argument",
         "A valid payment due date is required when money remains owing.",
+      );
+    const expectedAt = request.data?.expectedAt
+      ? new Date(String(request.data.expectedAt))
+      : null;
+    if (expectedAt && Number.isNaN(expectedAt.getTime()))
+      throw new HttpsError(
+        "invalid-argument",
+        "Enter a valid expected delivery date.",
       );
     const balanceDue = Math.max(0, totalAmount - amountPaid);
     const paymentStatus =
@@ -4135,7 +4164,8 @@ export const createInventoryPurchaseOrder = onCall(
       .collection(`organizations/${organizationId}/inventoryPurchaseOrders`)
       .doc();
     const referenceNumber = inventoryReference("PO", ref.id);
-    await ref.set({
+    const createdAt = new Date();
+    const orderRecord = {
       organizationId,
       branchId,
       referenceNumber,
@@ -4151,17 +4181,17 @@ export const createInventoryPurchaseOrder = onCall(
       paymentStatus,
       amountPaid,
       balanceDue,
-      paymentMethod,
+      paymentMethod: amountPaid > 0 ? paymentMethod : "",
       paymentReference:
         typeof request.data?.paymentReference === "string"
           ? request.data.paymentReference.trim()
           : "",
       paymentDueAt: balanceDue > 0 ? paymentDueAt : null,
-      lastPaymentAt: amountPaid > 0 ? FieldValue.serverTimestamp() : null,
-      expectedAt: request.data?.expectedAt
-        ? new Date(String(request.data.expectedAt))
-        : null,
-      approvalStatus: "pendingApproval",
+      lastPaymentAt: amountPaid > 0 ? createdAt : null,
+      expectedAt,
+      approvalStatus: "approved",
+      approvedAt: createdAt,
+      approvedBy: actor.id,
       receivingStatus: "notReceived",
       notes:
         typeof request.data?.notes === "string"
@@ -4175,7 +4205,80 @@ export const createInventoryPurchaseOrder = onCall(
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: actor.id,
       isDeleted: false,
-    });
+    };
+    const batch = db.batch();
+    batch.set(ref, orderRecord);
+    if (amountPaid > 0) {
+      batch.set(ref.collection("payments").doc("initial"), {
+        organizationId,
+        branchId,
+        purchaseOrderId: ref.id,
+        amount: amountPaid,
+        paymentMethod,
+        paymentReference: orderRecord.paymentReference,
+        paidAt: createdAt,
+        notes: "Supplier payment recorded with purchase order creation.",
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
+      });
+    }
+    batch.set(
+      db.doc(
+        `organizations/${organizationId}/financeExpenses/purchase-${ref.id}`,
+      ),
+      {
+        organizationId,
+        branchId,
+        referenceNumber: inventoryReference("EXP", ref.id),
+        date: createdAt.toISOString().slice(0, 10),
+        category: "Inventory Procurement",
+        vendor: supplierSnapshot.data()?.name ?? "Supplier",
+        amount: totalAmount,
+        method: amountPaid > 0 ? paymentMethod : "",
+        paymentReference: amountPaid > 0 ? orderRecord.paymentReference : "",
+        description: `Inventory purchase ${referenceNumber}`,
+        relatedEntityType: "purchaseOrder",
+        relatedEntityId: ref.id,
+        approvalStatus: balanceDue === 0 ? "paid" : "approved",
+        approvedAt: createdAt.toISOString(),
+        approvedBy: actor.id,
+        paidAt: balanceDue === 0 ? createdAt.toISOString() : "",
+        paidBy: balanceDue === 0 ? actor.id : "",
+        status: "active",
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+        isDeleted: false,
+      },
+    );
+    batch.set(
+      db.collection(`organizations/${organizationId}/auditLogs`).doc(),
+      {
+        action: "inventory.purchaseOrder.create",
+        actorId: actor.id,
+        actorName: actor.displayName,
+        branchId,
+        createdAt: FieldValue.serverTimestamp(),
+        entityId: ref.id,
+        entityType: "inventoryPurchaseOrder",
+        newValue: {
+          amountPaid,
+          balanceDue,
+          paymentArrangement,
+          referenceNumber,
+          supplierId,
+          totalAmount,
+        },
+        organizationId,
+        previousValue: null,
+      },
+    );
+    await batch.commit();
     return { id: ref.id, referenceNumber };
   },
 );
@@ -4218,21 +4321,32 @@ export const recordInventoryPurchaseOrderPayment = onCall(
       `organizations/${organizationId}/inventoryPurchaseOrders/${purchaseOrderId}`,
     );
     const paymentRef = orderRef.collection("payments").doc();
+    const financeExpenseRef = db.doc(
+      `organizations/${organizationId}/financeExpenses/purchase-${purchaseOrderId}`,
+    );
+    const auditRef = db
+      .collection(`organizations/${organizationId}/auditLogs`)
+      .doc();
     let result = {
       amountPaid: 0,
       balanceDue: 0,
       paymentStatus: "unpaid" as "unpaid" | "partPaid" | "paid",
     };
+    let orderBranchId = actor.branchId;
     await db.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(orderRef);
+      const [snapshot, financeExpenseSnapshot] = await Promise.all([
+        transaction.get(orderRef),
+        transaction.get(financeExpenseRef),
+      ]);
       const order = snapshot.data();
       if (!snapshot.exists || !canActorAccessBranch(actor, order?.branchId))
         throw new HttpsError("not-found", "Purchase order was not found.");
-      if (["rejected", "cancelled"].includes(order?.approvalStatus))
+      if (!["approved", "pendingApproval"].includes(order?.approvalStatus))
         throw new HttpsError(
           "failed-precondition",
-          "Payments cannot be added to a rejected or cancelled order.",
+          "Payments can only be recorded on an active purchase order.",
         );
+      orderBranchId = String(order?.branchId ?? actor.branchId);
       const totalAmount = Number(order?.totalAmount ?? 0);
       const currentPaid = Number(order?.amountPaid ?? 0);
       const nextPaid = currentPaid + amount;
@@ -4249,6 +4363,9 @@ export const recordInventoryPurchaseOrderPayment = onCall(
       if (Number.isNaN(paidAt.getTime()))
         throw new HttpsError("invalid-argument", "Enter a valid payment date.");
       transaction.update(orderRef, {
+        approvalStatus: "approved",
+        approvedAt: order?.approvedAt ?? paidAt,
+        approvedBy: order?.approvedBy ?? order?.createdBy ?? actor.id,
         amountPaid: nextPaid,
         balanceDue,
         paymentStatus,
@@ -4276,9 +4393,175 @@ export const recordInventoryPurchaseOrderPayment = onCall(
         createdByEmail: actor.email,
         createdByName: actor.displayName,
       });
+      const existingExpense = financeExpenseSnapshot.data() ?? {};
+      transaction.set(
+        financeExpenseRef,
+        {
+          organizationId,
+          branchId: order?.branchId,
+          referenceNumber:
+            existingExpense.referenceNumber ??
+            inventoryReference("EXP", purchaseOrderId),
+          date:
+            existingExpense.date ?? paidAt.toISOString().slice(0, 10),
+          category: "Inventory Procurement",
+          vendor: order?.supplierName ?? "Supplier",
+          amount: totalAmount,
+          method: paymentMethod,
+          paymentReference:
+            typeof request.data?.paymentReference === "string"
+              ? request.data.paymentReference.trim()
+              : "",
+          description: `Inventory purchase ${order?.referenceNumber ?? purchaseOrderId}`,
+          relatedEntityType: "purchaseOrder",
+          relatedEntityId: purchaseOrderId,
+          approvalStatus: balanceDue === 0 ? "paid" : "approved",
+          approvedAt:
+            existingExpense.approvedAt ?? paidAt.toISOString(),
+          approvedBy: existingExpense.approvedBy ?? order?.approvedBy ?? actor.id,
+          paidAt: balanceDue === 0 ? paidAt.toISOString() : "",
+          paidBy: balanceDue === 0 ? actor.id : "",
+          status: "active",
+          createdAt:
+            existingExpense.createdAt ?? FieldValue.serverTimestamp(),
+          createdBy: existingExpense.createdBy ?? order?.createdBy ?? actor.id,
+          createdByEmail:
+            existingExpense.createdByEmail ?? order?.createdByEmail ?? "",
+          createdByName:
+            existingExpense.createdByName ?? order?.createdByName ?? "",
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: actor.id,
+          isDeleted: false,
+        },
+        { merge: true },
+      );
+      transaction.set(auditRef, {
+        action: "inventory.purchaseOrder.payment",
+        actorId: actor.id,
+        actorName: actor.displayName,
+        branchId: orderBranchId,
+        createdAt: FieldValue.serverTimestamp(),
+        entityId: purchaseOrderId,
+        entityType: "inventoryPurchaseOrder",
+        newValue: {
+          amount,
+          amountPaid: nextPaid,
+          balanceDue,
+          paymentMethod,
+          paymentStatus,
+          paymentReference:
+            typeof request.data?.paymentReference === "string"
+              ? request.data.paymentReference.trim()
+              : "",
+        },
+        organizationId,
+        previousValue: {
+          amountPaid: currentPaid,
+          balanceDue: Math.max(0, totalAmount - currentPaid),
+          paymentStatus: order?.paymentStatus ?? "unpaid",
+        },
+      });
       result = { amountPaid: nextPaid, balanceDue, paymentStatus };
     });
     return { ok: true, ...result };
+  },
+);
+
+export const cancelInventoryPurchaseOrder = onCall(
+  callableOptions,
+  async (request) => {
+    if (!request.auth)
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    const organizationId = requireString(
+      request.data?.organizationId,
+      "organizationId",
+    );
+    const purchaseOrderId = requireString(
+      request.data?.purchaseOrderId,
+      "purchaseOrderId",
+    );
+    const reason = requireString(request.data?.reason, "reason").slice(0, 500);
+    const actor = await getActiveMember(request.auth.uid, organizationId);
+    if (!hasActorPermission(actor, "inventory.procure"))
+      throw new HttpsError(
+        "permission-denied",
+        "You cannot cancel purchase orders.",
+      );
+    const orderRef = db.doc(
+      `organizations/${organizationId}/inventoryPurchaseOrders/${purchaseOrderId}`,
+    );
+    const financeExpenseRef = db.doc(
+      `organizations/${organizationId}/financeExpenses/purchase-${purchaseOrderId}`,
+    );
+    const auditRef = db
+      .collection(`organizations/${organizationId}/auditLogs`)
+      .doc();
+    let orderBranchId = actor.branchId;
+    await db.runTransaction(async (transaction) => {
+      const [snapshot, financeExpenseSnapshot] = await Promise.all([
+        transaction.get(orderRef),
+        transaction.get(financeExpenseRef),
+      ]);
+      const order = snapshot.data();
+      if (!snapshot.exists || !canActorAccessBranch(actor, order?.branchId))
+        throw new HttpsError("not-found", "Purchase order was not found.");
+      if (!["pendingApproval", "approved"].includes(order?.approvalStatus))
+        throw new HttpsError(
+          "failed-precondition",
+          "Only pending or approved purchase orders can be cancelled.",
+        );
+      orderBranchId = String(order?.branchId ?? actor.branchId);
+      const hasReceipts =
+        order?.receivingStatus !== "notReceived" ||
+        (Array.isArray(order?.lines) &&
+          order.lines.some(
+            (line: DocumentData) => Number(line.receivedQuantity ?? 0) > 0,
+          ));
+      if (hasReceipts)
+        throw new HttpsError(
+          "failed-precondition",
+          "A purchase order with received stock cannot be cancelled. Return or adjust the stock first.",
+        );
+      if (Number(order?.amountPaid ?? 0) > 0)
+        throw new HttpsError(
+          "failed-precondition",
+          "A purchase order with recorded supplier payments cannot be cancelled.",
+        );
+      transaction.update(orderRef, {
+        approvalStatus: "cancelled",
+        cancellationReason: reason,
+        cancelledAt: FieldValue.serverTimestamp(),
+        cancelledBy: actor.id,
+        status: "inactive",
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      });
+      if (financeExpenseSnapshot.exists) {
+        transaction.update(financeExpenseRef, {
+          approvalStatus: "void",
+          cancellationReason: reason,
+          status: "inactive",
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: actor.id,
+        });
+      }
+      transaction.set(auditRef, {
+        action: "inventory.purchaseOrder.cancel",
+        actorId: actor.id,
+        actorName: actor.displayName,
+        branchId: orderBranchId,
+        createdAt: FieldValue.serverTimestamp(),
+        entityId: purchaseOrderId,
+        entityType: "inventoryPurchaseOrder",
+        newValue: { approvalStatus: "cancelled", reason },
+        organizationId,
+        previousValue: {
+          approvalStatus: order?.approvalStatus,
+          receivingStatus: order?.receivingStatus,
+        },
+      });
+    });
+    return { ok: true };
   },
 );
 
@@ -4296,7 +4579,7 @@ export const decideInventoryApproval = onCall(
     const decision = requireString(request.data?.decision, "decision");
     if (
       !["approved", "rejected"].includes(decision) ||
-      !["purchaseOrder", "stockCount"].includes(entityType)
+      entityType !== "stockCount"
     )
       throw new HttpsError(
         "invalid-argument",
@@ -4308,12 +4591,8 @@ export const decideInventoryApproval = onCall(
         "permission-denied",
         "You do not have inventory approval permission.",
       );
-    const collectionName =
-      entityType === "purchaseOrder"
-        ? "inventoryPurchaseOrders"
-        : "inventoryStockCounts";
     const ref = db.doc(
-      `organizations/${organizationId}/${collectionName}/${entityId}`,
+      `organizations/${organizationId}/inventoryStockCounts/${entityId}`,
     );
     await db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref);
@@ -4330,7 +4609,7 @@ export const decideInventoryApproval = onCall(
           "failed-precondition",
           "The creator cannot approve their own record.",
         );
-      transaction.update(ref, {
+      const update: DocumentData = {
         approvalStatus: decision,
         approvedAt:
           decision === "approved" ? FieldValue.serverTimestamp() : null,
@@ -4344,7 +4623,8 @@ export const decideInventoryApproval = onCall(
             : "",
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: actor.id,
-      });
+      };
+      transaction.update(ref, update);
     });
     return { ok: true };
   },
@@ -4366,14 +4646,10 @@ export const receiveInventoryPurchaseOrderLine = onCall(
     const locationId = requireString(request.data?.locationId, "locationId");
     const lineIndex = requireNumber(request.data?.lineIndex, "lineIndex");
     const quantity = requireNumber(request.data?.quantity, "quantity");
-    if (
-      !Number.isInteger(lineIndex) ||
-      !Number.isInteger(quantity) ||
-      quantity <= 0
-    )
+    if (!Number.isInteger(lineIndex) || quantity <= 0)
       throw new HttpsError(
         "invalid-argument",
-        "Line and quantity must be positive whole numbers.",
+        "Line must be valid and quantity must be greater than zero.",
       );
     const actor = await getActiveMember(request.auth.uid, organizationId);
     if (!hasActorPermission(actor, "inventory.receive"))
@@ -4392,12 +4668,12 @@ export const receiveInventoryPurchaseOrderLine = onCall(
     if (
       !poBefore.exists ||
       !line ||
-      poData?.approvalStatus !== "approved" ||
-      !canActorAccessBranch(actor, poData.branchId)
+      !["approved", "pendingApproval"].includes(poData?.approvalStatus) ||
+      !canActorAccessBranch(actor, poData?.branchId)
     )
       throw new HttpsError(
         "failed-precondition",
-        "Approved purchase order line was not found.",
+        "Active purchase order line was not found.",
       );
     const offeringId = requireString(line.offeringId, "offeringId");
     const offeringRef = db.doc(
@@ -4414,6 +4690,13 @@ export const receiveInventoryPurchaseOrderLine = onCall(
     );
     const movementRef = db
       .collection(`organizations/${organizationId}/inventoryMovements`)
+      .doc();
+    const receiptRef = poRef.collection("receipts").doc(movementRef.id);
+    const financeExpenseRef = db.doc(
+      `organizations/${organizationId}/financeExpenses/purchase-${purchaseOrderId}`,
+    );
+    const auditRef = db
+      .collection(`organizations/${organizationId}/auditLogs`)
       .doc();
     const offeringBefore = await offeringRef.get();
     const trackingMode =
@@ -4438,16 +4721,30 @@ export const receiveInventoryPurchaseOrderLine = onCall(
           ),
         )
       : [];
+    const receivedAt = request.data?.receivedAt
+      ? new Date(String(request.data.receivedAt))
+      : new Date();
+    if (Number.isNaN(receivedAt.getTime()))
+      throw new HttpsError("invalid-argument", "Enter a valid received date.");
+    const expiryDate = request.data?.expiryDate
+      ? new Date(String(request.data.expiryDate))
+      : null;
+    if (expiryDate && Number.isNaN(expiryDate.getTime()))
+      throw new HttpsError("invalid-argument", "Enter a valid expiry date.");
+    const deliveryReference =
+      typeof request.data?.deliveryReference === "string"
+        ? request.data.deliveryReference.trim().slice(0, 180)
+        : "";
     if (trackingMode === "batch" && !batchNumber)
       throw new HttpsError("invalid-argument", "Batch number is required.");
     if (
       trackingMode === "serial" &&
-      serialNumbers.length > 0 &&
-      serialNumbers.length !== quantity
+      (!Number.isInteger(quantity) ||
+        (serialNumbers.length > 0 && serialNumbers.length !== quantity))
     )
       throw new HttpsError(
         "invalid-argument",
-        "When serial numbers are provided, enter one for every received unit.",
+        "Serial-tracked items must be received in whole units, with one serial number per unit when serials are provided.",
       );
     const lotRef =
       trackingMode === "batch"
@@ -4468,6 +4765,7 @@ export const receiveInventoryPurchaseOrderLine = onCall(
         locationBranchSnapshot,
         balanceSnapshot,
         lotSnapshot,
+        financeExpenseSnapshot,
       ] = await Promise.all([
         transaction.get(poRef),
         transaction.get(offeringRef),
@@ -4475,6 +4773,7 @@ export const receiveInventoryPurchaseOrderLine = onCall(
         transaction.get(locationBranchRef),
         transaction.get(balanceRef),
         lotRef ? transaction.get(lotRef) : null,
+        transaction.get(financeExpenseRef),
       ]);
       const serialSnapshots = await Promise.all(
         serialRefs.map((ref) => transaction.get(ref)),
@@ -4484,7 +4783,12 @@ export const receiveInventoryPurchaseOrderLine = onCall(
         ? ([...currentPo.lines] as DocumentData[])
         : [];
       const currentLine = lines[lineIndex];
-      if (currentPo.approvalStatus !== "approved" || !currentLine)
+      if (
+        !["approved", "pendingApproval"].includes(
+          currentPo.approvalStatus,
+        ) ||
+        !currentLine
+      )
         throw new HttpsError(
           "failed-precondition",
           "Purchase order is no longer receivable.",
@@ -4504,6 +4808,12 @@ export const receiveInventoryPurchaseOrderLine = onCall(
       );
       if (
         !offeringSnapshot.exists ||
+        offering.isDeleted === true ||
+        String(offering.status ?? "active") !== "active" ||
+        !offering.brandId ||
+        !["material", "solarEquipment"].includes(
+          String(offering.type ?? ""),
+        ) ||
         !location ||
         location.branchId !== currentPo.branchId
       )
@@ -4552,9 +4862,7 @@ export const receiveInventoryPurchaseOrderLine = onCall(
           {
             ...common,
             batchNumber,
-            expiryDate: request.data?.expiryDate
-              ? new Date(String(request.data.expiryDate))
-              : null,
+            expiryDate,
             quantityOnHand:
               Number(lotSnapshot?.data()?.quantityOnHand ?? 0) + quantity,
             quantityReserved: Number(
@@ -4578,13 +4886,35 @@ export const receiveInventoryPurchaseOrderLine = onCall(
         serialNumbers,
         purchaseOrderId,
         referenceNumber: inventoryReference("MOV", movementRef.id),
-        externalReference: currentPo.referenceNumber,
-        occurredAt: new Date(),
+        externalReference: deliveryReference || currentPo.referenceNumber,
+        deliveryReference,
+        occurredAt: receivedAt,
         createdAt: FieldValue.serverTimestamp(),
         createdBy: actor.id,
         createdByEmail: actor.email,
         createdByName: actor.displayName,
         isDeleted: false,
+      });
+      transaction.set(receiptRef, {
+        organizationId,
+        branchId: currentPo.branchId,
+        purchaseOrderId,
+        purchaseOrderReference: currentPo.referenceNumber,
+        offeringId,
+        offeringName: offering.name ?? "Inventory item",
+        lineIndex,
+        quantity,
+        locationId,
+        locationName: location.name ?? "",
+        batchNumber,
+        serialNumbers,
+        deliveryReference,
+        receivedAt,
+        movementId: movementRef.id,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
       });
       currentLine.receivedQuantity =
         Number(currentLine.receivedQuantity ?? 0) + quantity;
@@ -4597,6 +4927,10 @@ export const receiveInventoryPurchaseOrderLine = onCall(
         (item) => Number(item.receivedQuantity ?? 0) > 0,
       );
       transaction.update(poRef, {
+        approvalStatus: "approved",
+        approvedAt: currentPo.approvedAt ?? receivedAt,
+        approvedBy:
+          currentPo.approvedBy ?? currentPo.createdBy ?? actor.id,
         lines,
         receivingStatus: allReceived
           ? "received"
@@ -4605,6 +4939,62 @@ export const receiveInventoryPurchaseOrderLine = onCall(
             : "notReceived",
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: actor.id,
+      });
+      if (!financeExpenseSnapshot.exists) {
+        const totalAmount = Number(currentPo.totalAmount ?? 0);
+        const balanceDue = Number(
+          currentPo.balanceDue ?? totalAmount - Number(currentPo.amountPaid ?? 0),
+        );
+        transaction.set(financeExpenseRef, {
+          organizationId,
+          branchId: currentPo.branchId,
+          referenceNumber: inventoryReference("EXP", purchaseOrderId),
+          date: receivedAt.toISOString().slice(0, 10),
+          category: "Inventory Procurement",
+          vendor: currentPo.supplierName ?? "Supplier",
+          amount: totalAmount,
+          method: currentPo.paymentMethod ?? "",
+          paymentReference: currentPo.paymentReference ?? "",
+          description: `Inventory purchase ${currentPo.referenceNumber ?? purchaseOrderId}`,
+          relatedEntityType: "purchaseOrder",
+          relatedEntityId: purchaseOrderId,
+          approvalStatus: balanceDue <= 0 ? "paid" : "approved",
+          approvedAt: receivedAt.toISOString(),
+          approvedBy: currentPo.createdBy ?? actor.id,
+          paidAt: balanceDue <= 0 ? receivedAt.toISOString() : "",
+          paidBy: balanceDue <= 0 ? currentPo.createdBy ?? actor.id : "",
+          status: "active",
+          createdAt: FieldValue.serverTimestamp(),
+          createdBy: currentPo.createdBy ?? actor.id,
+          createdByEmail: currentPo.createdByEmail ?? "",
+          createdByName: currentPo.createdByName ?? "",
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: actor.id,
+          isDeleted: false,
+        });
+      }
+      transaction.set(auditRef, {
+        action: "inventory.purchaseOrder.receive",
+        actorId: actor.id,
+        actorName: actor.displayName,
+        branchId: String(currentPo.branchId ?? actor.branchId),
+        createdAt: FieldValue.serverTimestamp(),
+        entityId: purchaseOrderId,
+        entityType: "inventoryPurchaseOrder",
+        newValue: {
+          deliveryReference,
+          lineIndex,
+          locationId,
+          movementId: movementRef.id,
+          offeringId,
+          quantity,
+          receivedAt: receivedAt.toISOString(),
+        },
+        organizationId,
+        previousValue: {
+          receivedQuantity: Number(currentLine.receivedQuantity ?? 0) - quantity,
+          receivingStatus: currentPo.receivingStatus ?? "notReceived",
+        },
       });
     });
     return { ok: true, movementId: movementRef.id };

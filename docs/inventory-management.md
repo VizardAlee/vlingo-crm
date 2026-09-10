@@ -11,7 +11,7 @@ Inventory is transaction-led. Products remain in the Products/Services catalog, 
 - Direct client writes to balances and movements are denied by Firestore rules.
 - Negative location balances are rejected by the server.
 - Reservations reduce available stock without changing physical on-hand stock.
-- Purchase orders and stock-count variances require a second user with approval permission.
+- Purchase orders become active immediately and preserve a complete audit trail. Stock-count variances require a second user with approval permission.
 - Batch-tracked items maintain required trace records. Serial-tracked items maintain per-unit trace records when optional serial numbers are supplied.
 
 ## Enterprise workflows
@@ -20,11 +20,11 @@ Inventory is transaction-led. Products remain in the Products/Services catalog, 
 
 Create suppliers under Inventory > Purchasing. Purchase orders support multiple catalog lines, tax, expected delivery dates, and partial receipts. Every order records whether it was paid in full, partly paid, or obtained under a credit agreement. Part-paid and credit purchases require a balance due date; authorized inventory or finance users can record later supplier payments until the balance reaches zero.
 
-Payment and receiving are intentionally separate. A credit purchase can be received before it is paid, and paying an order does not add stock. New orders enter `pendingApproval`; their creator cannot approve them. After approval, each line can be received into a stock location. Receiving updates the purchase line, balance, product total, trace register, and movement ledger atomically.
+Payment and receiving are intentionally separate. A credit purchase can be received before it is paid, and paying an order does not add stock. New orders become active immediately without an approval step. Each line can be received into a stock location, including partial deliveries. The order, initial and later payments, delivery/GRN references, receipt dates, received quantities, movements, cancellations, and responsible users are retained for audit. Receiving updates the purchase line, balance, product total, trace register, and movement ledger atomically.
 
 ### Existing and directly received stock
 
-Use Inventory > Add / move stock > **Enter existing / opening stock** to establish quantities the business already owned before using the system. This creates an audited positive adjustment at the selected location. Use **Receive stock without a purchase order** only for a direct delivery that is not tied to an approved order. Approved purchase-order deliveries must be received from Purchasing so the order and stock ledger remain synchronized.
+Use Inventory > Add / move stock > **Enter existing / opening stock** to establish quantities the business already owned before using the system. This creates an audited positive adjustment at the selected location. Use **Receive stock without a purchase order** only for a direct delivery that is not tied to an order. Purchase-order deliveries must be received from Purchasing so the order and stock ledger remain synchronized.
 
 Authorized users can also choose **Edit** beside a product in the Inventory overview and use **Adjust current stock**. Select the affected branch, choose whether to add missing stock or remove excess stock, enter only the difference, and provide the adjustment date and reason. This creates a separate audited movement; it never overwrites the original opening-stock entry. Reserved stock cannot be removed, and batch-controlled products require the affected batch number.
 
@@ -42,7 +42,7 @@ Reservations hold stock for a deal, project, work order, or other purpose. Avail
 
 ### Approval separation
 
-The creator of a purchase order or stock count cannot approve it. `inventoryManager` can procure, count, reserve, and operate stock but cannot approve. Operations managers, finance managers, managing directors, and super admins can approve according to their assigned permissions.
+Purchase orders do not require approval. A user with procurement permission can create an active order, and authorized inventory or finance users can record its payments and receipts; each action is independently attributed and audited. Stock-count variances retain separation of duties: their creator cannot approve them, and a user with `inventory.approve` permission must approve or reject them before posting.
 
 ### Point of Sale
 

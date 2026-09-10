@@ -90,7 +90,7 @@ export const guideTopics: GuideTopic[] = [
       "Open a qualified solar CRM deal and choose Create installation project, or go to Installation Projects and create one directly. A linked deal copies its customer, scope, agreed or quoted total, inventory-product lines, and external service-cost lines into the project plan.",
       "In the deal quotation, catalog inventory lines marked Check stock or Procure into inventory become project material requirements. Adding a requirement is planning only and does not change inventory.",
       "Review availability across the branches you can access. Reserve available stock for the project, then choose Issue to project only when the material physically leaves the location for site work.",
-      "For catalog shortages, create a project-linked purchase order. Paid, part-paid, and credit orders follow the existing approval and receiving workflow; receiving the order adds stock before it is issued to the project.",
+      "For catalog shortages, create a project-linked purchase order. Paid, part-paid, and credit orders become active immediately and keep an auditable payment and receiving trail; receiving the order adds stock before it is issued to the project.",
       "Deal lines marked direct to site, external material, service, labour, transport, or other become project cost lines. They do not create artificial inventory movements.",
       "Create project tasks, activity updates, and documents from the project header. Use Finance to record customer payments and project expenses against the installation project.",
       "Create milestone invoices for deposits, procurement, progress work, commissioning, or the final balance. Open any invoice to print or save the official fixed-A4 Vlingo document.",
@@ -243,8 +243,8 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Go to Inventory, then Purchasing; creating suppliers and purchase orders requires inventory.procure permission.",
       "Create or select an active supplier, add the catalogue items, then choose Paid in full, Credit agreement, or Part payment. Credit and part-paid orders require a balance due date.",
-      "Submit the purchase order for approval. Its creator cannot approve it, so another user with inventory.approve permission must approve or reject it from Approvals.",
-      "After approval, receive each line into a stock location. Partial receipts are allowed and the order remains Part received until every line is complete.",
+      "Save the purchase order. It becomes active immediately; there is no purchase approval step. The system records its creator, branch, supplier, items, costs, payment arrangement, dates, and later activity for audit.",
+      "Receive each delivered line into a stock location. Partial receipts are allowed and the order remains Part received until every line is complete. Capture the received date and, where available, the supplier delivery note or GRN reference.",
       "Stock location options come from active locations created by administrators under Settings > Branches. Closed locations are not offered for new stock activity.",
       "Inventory-created legacy locations cannot receive new stock. If one still has quantity, it appears only as a Legacy cleanup source so the stock can be transferred into an admin-created branch.",
       "For a transfer, the source is the active dashboard branch. Users with access to other branches can choose one of those branches as the destination; both branch ledgers show the transfer.",
@@ -638,7 +638,7 @@ Role behavior:
 - Super admin has no restrictions.
 - Managers are scoped to branches unless granted all-branch access.
 - Sales executives only see their own assigned leads/workflows unless assigned by a manager.
-- Inventory managers can procure, count, reserve, receive, issue, transfer, and adjust stock but do not have approval permission. Users with inventory.approve permission approve purchase orders and stock counts, and creators cannot approve their own submissions.
+- Inventory managers can procure, count, reserve, receive, issue, transfer, and adjust stock. Purchase orders do not require approval; users with inventory.approve permission approve stock-count variances, and creators cannot approve their own count submissions.
 - Brand partners are read-only inventory guests scoped to assigned brands across all branches. They can filter, export, print, and comment on their report, but cannot see cost prices, inventory value, customer/payment data, internal procurement, counts, reservations, approvals, or other brands.
 - Links should be hidden when a role lacks access.
 

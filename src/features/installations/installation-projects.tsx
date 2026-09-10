@@ -401,7 +401,7 @@ export function InstallationProjectDetailPage({ id }: { id: string }) {
     setSaving("procure");
     try {
       await createPurchaseOrder({ organizationId: activeOrganizationId, branchId: project.branchId, supplierId: procurement.supplierId, installationProjectId: id, installationProjectName: project.name, lines: [{ offeringId: procurement.offeringId, quantity: numberValue(procurement.quantity), unitCost: numberValue(procurement.unitCost) }], paymentArrangement: procurement.paymentArrangement, amountPaid: numberValue(procurement.amountPaid), paymentMethod: procurement.paymentArrangement === "credit" ? undefined : procurement.paymentMethod, paymentDueAt: procurement.paymentDueAt || undefined, notes: `Procurement for ${project.referenceNumber}` });
-      toast({ title: "Purchase order submitted", description: "It is linked to this project and follows inventory approval and receiving controls.", variant: "success" });
+      toast({ title: "Purchase order created", description: "It is active, linked to this project, and ready for auditable payment and receiving.", variant: "success" });
       await load();
     } catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Unable to create purchase order."); } finally { setSaving(""); }
   }

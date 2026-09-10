@@ -16,7 +16,8 @@ describe("AI Guide knowledge", () => {
     const partner = fallbackGuideAnswer("What can a brand partner see in inventory?");
 
     expect(procurement).toContain("Procure and receive inventory");
-    expect(procurement).toContain("creator cannot approve");
+    expect(procurement).toContain("no purchase approval step");
+    expect(procurement).toContain("later activity for audit");
     expect(procurement).toContain("Partial receipts");
     expect(reservation).toContain("Reserve stock for work or a sale");
     expect(reservation).toContain("on hand but is removed from the available quantity");

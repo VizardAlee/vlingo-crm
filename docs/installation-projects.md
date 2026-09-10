@@ -7,7 +7,7 @@ Installation Projects is the delivery workspace for customer installations. It c
 1. Qualify the lead, create the client and deal, agree the scope and value, then choose **Create installation project** on the deal.
 2. Add catalog products to **Inventory materials**. These lines are the bill of materials and do not change stock.
 3. Review available quantities across accessible branches. Reserve stock at the correct branch/location, then issue it only when it physically leaves for the project.
-4. Create project-linked purchase orders for catalog shortages. Orders support paid, part-paid, and credit arrangements and still require normal approval and receiving.
+4. Create project-linked purchase orders for catalog shortages. Orders support paid, part-paid, and credit arrangements, become active immediately, and preserve an auditable payment and receiving trail.
 5. Record direct-to-site materials, labour, transportation, subcontractors, permits, equipment hire, and other non-stock work as project costs.
 6. Link tasks, activities, documents, customer receipts, and approved expenses to the project.
 7. Create deposit, procurement, progress, commissioning, or final-balance milestone invoices from the project workspace. Each invoice uses the official Vlingo A4 letterhead, payment details, signature, stamp, and mobile-safe print workflow.
