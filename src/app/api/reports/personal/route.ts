@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { firebaseAdminRecovery } from "@/lib/firebase/admin-errors";
+import { saleLineAmount } from "@/features/reports/organization-report-utils";
 
 export const runtime = "nodejs";
 
@@ -79,7 +80,6 @@ function activeRecords(snapshot: FirebaseFirestore.QuerySnapshot) {
 async function ownedRecords(organizationId: string, collectionName: string, ownerField: string, uid: string) {
   const snapshot = await adminDb.collection(`organizations/${organizationId}/${collectionName}`)
     .where(ownerField, "==", uid)
-    .limit(1000)
     .get();
   return activeRecords(snapshot);
 }
@@ -113,10 +113,10 @@ function chunks<T>(items: T[], size: number) {
 async function attributablePayments(organizationId: string, uid: string, leadIds: string[], dealIds: string[]) {
   const collection = adminDb.collection(`organizations/${organizationId}/financePayments`);
   const queries: Promise<FirebaseFirestore.QuerySnapshot>[] = [
-    collection.where("revenueOwnerId", "==", uid).limit(1000).get(),
+    collection.where("revenueOwnerId", "==", uid).get(),
   ];
   for (const sourceIds of chunks(Array.from(new Set([...leadIds, ...dealIds])), 30)) {
-    queries.push(collection.where("sourceId", "in", sourceIds).limit(1000).get());
+    queries.push(collection.where("sourceId", "in", sourceIds).get());
   }
   const snapshots = await Promise.all(queries);
   const leadIdSet = new Set(leadIds);
@@ -137,6 +137,38 @@ async function attributablePayments(organizationId: string, uid: string, leadIds
 
 function amountForDeal(deal: RecordData) {
   return Number(deal.agreedAmount ?? deal.quoteTotal ?? deal.offerAmount ?? deal.quoteSubtotal ?? deal.reservationAmount ?? deal.depositAmount ?? 0);
+}
+
+function salesMonthRows(sales: RecordData[], start: Date | null) {
+  const months = start
+    ? Math.min(
+        12,
+        Math.max(1, Math.ceil((Date.now() - start.getTime()) / 2_629_746_000)),
+      )
+    : 12;
+  const rows = Array.from({ length: months }, (_, index) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setHours(0, 0, 0, 0);
+    date.setMonth(date.getMonth() - (months - 1 - index));
+    return {
+      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      label: date.toLocaleDateString("en-NG", {
+        month: "short",
+        year: "numeric",
+      }),
+      value: 0,
+    };
+  });
+  const rowByKey = new Map(rows.map((row) => [row.key, row]));
+  for (const sale of sales) {
+    const date = dateValue(sale.soldAt) ?? dateValue(sale.createdAt);
+    if (!date) continue;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const row = rowByKey.get(key);
+    if (row) row.value += Number(sale.totalAmount ?? 0);
+  }
+  return rows.map(({ label, value }) => ({ label, value }));
 }
 
 function monthRows(payments: RecordData[], start: Date | null) {
@@ -271,12 +303,13 @@ export async function GET(request: Request) {
     const period: ReportPeriod = customStart && customEnd ? "custom" : reportPeriod(url.searchParams.get("period"));
     const start = customStart ?? startForPeriod(period);
     const end = customEnd;
-    const [allLeads, allClients, allDeals, allTasks, allActivities] = await Promise.all([
+    const [allLeads, allClients, allDeals, allTasks, allActivities, allSales] = await Promise.all([
       ownedRecords(organizationId, "leads", "assignedTo", decoded.uid),
       ownedRecords(organizationId, "clients", "assignedRelationshipManager", decoded.uid),
       ownedRecords(organizationId, "deals", "dealOwnerId", decoded.uid),
       ownedRecords(organizationId, "tasks", "assignedTo", decoded.uid),
       ownedRecords(organizationId, "activities", "createdBy", decoded.uid),
+      ownedRecords(organizationId, "posSales", "createdBy", decoded.uid),
     ]);
     const ownedLeadIds = new Set(allLeads.map((lead) => lead.id));
     const allLeadActivities = allActivities.filter((activity) => (
@@ -291,6 +324,11 @@ export async function GET(request: Request) {
       withinPeriod(record, start, end, "updatedAt"),
     );
     const leadActivities = allLeadActivities.filter((record) => withinPeriod(record, start, end));
+    const sales = allSales.filter(
+      (record) =>
+        record.saleStatus === "completed" &&
+        withinPeriod(record, start, end, "soldAt"),
+    );
     const allPayments = await attributablePayments(
       organizationId,
       decoded.uid,
@@ -312,6 +350,40 @@ export async function GET(request: Request) {
       totals[category] = (totals[category] ?? 0) + Number(payment.amount ?? 0);
       return totals;
     }, {});
+    const salesRevenue = sales.reduce(
+      (total, sale) => total + Number(sale.totalAmount ?? 0),
+      0,
+    );
+    const salesCost = sales.reduce(
+      (total, sale) =>
+        total +
+        (Array.isArray(sale.lines) ? sale.lines : []).reduce(
+          (lineTotal: number, line: RecordData) =>
+            lineTotal +
+            Number(line.quantity ?? 0) * Number(line.unitCost ?? 0),
+          0,
+        ),
+      0,
+    );
+    const salesByBrand: Record<string, number> = {};
+    const salesByProduct: Record<string, number> = {};
+    for (const sale of sales) {
+      const lines = (Array.isArray(sale.lines) ? sale.lines : []) as RecordData[];
+      const lineValue = lines.reduce(
+        (total, line) => total + saleLineAmount(line),
+        0,
+      );
+      for (const line of lines) {
+        const allocatedRevenue =
+          Number(sale.totalAmount ?? 0) *
+          (lineValue > 0 ? saleLineAmount(line) / lineValue : 0);
+        const brand = String(line.brandName ?? "Unbranded");
+        const product = String(line.offeringName ?? "Product");
+        salesByBrand[brand] = (salesByBrand[brand] ?? 0) + allocatedRevenue;
+        salesByProduct[product] =
+          (salesByProduct[product] ?? 0) + allocatedRevenue;
+      }
+    }
 
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
@@ -330,8 +402,29 @@ export async function GET(request: Request) {
         pendingRevenue: pendingPayments.reduce((total, payment) => total + Number(payment.amount ?? 0), 0),
         pipelineValue: deals.filter((record) => !closedDealStatuses.has(String(record.status))).reduce((total, deal) => total + amountForDeal(deal), 0),
         qualifiedLeads: qualifiedLeads.length,
+        salesAmountReceived: sales.reduce(
+          (total, sale) => total + Number(sale.amountPaid ?? 0),
+          0,
+        ),
+        salesCount: sales.length,
+        salesGrossProfit: salesRevenue - salesCost,
+        salesOutstanding: sales.reduce(
+          (total, sale) => total + Number(sale.balanceDue ?? 0),
+          0,
+        ),
+        salesRevenue,
         taskCompletionRate: tasks.length ? (completedTasks.length / tasks.length) * 100 : 0,
         taskCount: tasks.length,
+        unitsSold: sales.reduce(
+          (total, sale) =>
+            total +
+            (Array.isArray(sale.lines) ? sale.lines : []).reduce(
+              (lineTotal: number, line: RecordData) =>
+                lineTotal + Number(line.quantity ?? 0),
+              0,
+            ),
+          0,
+        ),
         wonDeals: wonDeals.length,
         wonValue: wonDeals.reduce((total, deal) => total + amountForDeal(deal), 0),
       },
@@ -346,12 +439,16 @@ export async function GET(request: Request) {
         }, {}),
         revenueByCategory,
         revenueByMonth: monthRows(verifiedPayments, start),
+        salesByBrand,
+        salesByMonth: salesMonthRows(sales, start),
+        salesByProduct,
+        salesPaymentStatus: countBy(sales, "paymentStatus"),
         taskStatus: countBy(tasks, "status"),
       },
       period,
       periodEnd: end?.toISOString() ?? null,
       periodStart: start?.toISOString() ?? null,
-      revenueAttributionNote: "Verified revenue explicitly attributed to you, including POS collections you recorded and compatible receipts linked to your owned leads or deals, is included. Older retired-module and other-income receipts without a revenue owner are excluded.",
+      revenueAttributionNote: "Sales figures cover completed POS sales recorded by you. Verified cash collection also includes compatible receipts explicitly attributed to you or linked to your owned leads and deals. Voided sales and older retired-module or unattributed other-income receipts are excluded.",
       timeline: leadTimeline(allLeads, allLeadActivities, allTasks, decoded.uid, start, end),
     });
   } catch (error) {

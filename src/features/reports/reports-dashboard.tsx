@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, CheckCircle2, ChevronDown, ChevronUp, Clock3, ContactRound, Download, FileDown, Loader2, MessageSquareText, Sparkles, Target, TrendingUp, UserRound, Users } from "lucide-react";
+import { Banknote, BarChart3, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileDown, Loader2, PackageCheck, Receipt, ShoppingCart, Sparkles, Target, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,10 @@ interface PersonalReport {
     leadStatus: Record<string, number>;
     revenueByCategory: Record<string, number>;
     revenueByMonth: Array<{ label: string; value: number }>;
+    salesByBrand: Record<string, number>;
+    salesByMonth: Array<{ label: string; value: number }>;
+    salesByProduct: Record<string, number>;
+    salesPaymentStatus: Record<string, number>;
     taskStatus: Record<string, number>;
   };
   generatedAt: string;
@@ -43,8 +47,14 @@ interface PersonalReport {
     pendingRevenue: number;
     pipelineValue: number;
     qualifiedLeads: number;
+    salesAmountReceived: number;
+    salesCount: number;
+    salesGrossProfit: number;
+    salesOutstanding: number;
+    salesRevenue: number;
     taskCompletionRate: number;
     taskCount: number;
+    unitsSold: number;
     wonDeals: number;
     wonValue: number;
   };
@@ -140,7 +150,7 @@ async function downloadA4Report(report: PersonalReport, summary: string) {
   pdf.setTextColor(20, 85, 15);
   heading("Vlingo Systems CRM", 16);
   pdf.setTextColor(20, 20, 20);
-  heading("Personal Performance Report", 14);
+  heading("Personal Sales Performance Report", 14);
   paragraph(`${report.member.displayName} | ${report.member.email}`, { bold: true });
   paragraph(`Reporting period: ${reportRangeLabel(report)}`);
   paragraph(`Generated: ${new Date(report.generatedAt).toLocaleString()}`);
@@ -148,7 +158,17 @@ async function downloadA4Report(report: PersonalReport, summary: string) {
   heading("AI performance summary");
   paragraph(summary || "AI summary was not available when this report was generated.");
 
-  heading("Key performance indicators");
+  heading("Sales performance");
+  [
+    ["Completed sales", report.metrics.salesCount],
+    ["Sales revenue", pdfCurrency(report.metrics.salesRevenue)],
+    ["Units sold", report.metrics.unitsSold],
+    ["Amount received", pdfCurrency(report.metrics.salesAmountReceived)],
+    ["Outstanding invoices", pdfCurrency(report.metrics.salesOutstanding)],
+    ["Gross profit", pdfCurrency(report.metrics.salesGrossProfit)],
+  ].forEach(([label, value]) => paragraph(`${label}: ${value}`, { indent: 2 }));
+
+  heading("Supporting CRM indicators");
   [
     ["Assigned leads", report.metrics.leadCount],
     ["Qualified leads", report.metrics.qualifiedLeads],
@@ -173,6 +193,8 @@ async function downloadA4Report(report: PersonalReport, summary: string) {
   breakdown("Lead interactions", toRows(report.breakdowns.leadInteractionType));
   breakdown("Deal status", toRows(report.breakdowns.dealStatus));
   breakdown("Verified revenue by category", toRows(report.breakdowns.revenueByCategory), true);
+  breakdown("POS sales by brand", toRows(report.breakdowns.salesByBrand), true);
+  breakdown("POS sales payment status", toRows(report.breakdowns.salesPaymentStatus));
   breakdown("Task status", toRows(report.breakdowns.taskStatus));
 
   heading("Lead interaction timeline");
@@ -225,7 +247,7 @@ function BreakdownCard({ rows, title, currency = false }: { rows: [string, numbe
 export function ReportsDashboard() {
   const { activeOrganizationId, member, user } = useAuth();
   const [defaultDates] = useState(() => initialReportDates());
-  const [mode, setMode] = useState<ReportMode>("personal");
+  const [mode, setMode] = useState<ReportMode>("organization");
   const [period, setPeriod] = useState<ReportPeriod>("90");
   const [dateFrom, setDateFrom] = useState(defaultDates.from);
   const [dateTo, setDateTo] = useState(defaultDates.to);
@@ -281,7 +303,7 @@ export function ReportsDashboard() {
             const summaryResponse = await fetch("/api/ai-guide", {
               body: JSON.stringify({
                 organizationId: activeOrganizationId,
-                question: `Summarize this user's CRM performance report. Base every conclusion only on the aggregate JSON below. Include: an executive overview, lead engagement and follow-up quality, conversion and deal performance, verified revenue and pipeline, task execution, strengths, risks, and 3 practical next actions. Do not invent customer details or compare the user with colleagues.\n\n${JSON.stringify({
+                question: `Summarize this user's sales performance report. Base every conclusion only on the aggregate JSON below. Lead with completed POS sales, revenue, units sold, collections, outstanding invoices, gross profit, products, brands, and payment status. Then use CRM pipeline and follow-up measures only as supporting context. Include strengths, risks, and 3 practical next actions. Do not invent customer details or compare the user with colleagues.\n\n${JSON.stringify({
                   breakdowns: payload.breakdowns,
                   metrics: payload.metrics,
                   reportingPeriod: { end: payload.periodEnd, start: payload.periodStart },
@@ -353,11 +375,17 @@ export function ReportsDashboard() {
   function exportSummary() {
     if (activeMode === "personal" && personal) {
       const rows: Array<Array<string | number>> = [
-        ["Personal performance report", personal.member.displayName],
+        ["Personal sales performance report", personal.member.displayName],
         ["Email", personal.member.email],
         ["Period", reportRangeLabel(personal)],
         ["AI summary", plainText(aiSummary)],
         ["Metric", "Value"],
+        ["Completed POS sales", personal.metrics.salesCount],
+        ["Sales revenue", personal.metrics.salesRevenue],
+        ["Units sold", personal.metrics.unitsSold],
+        ["Amount received", personal.metrics.salesAmountReceived],
+        ["Outstanding invoices", personal.metrics.salesOutstanding],
+        ["Gross profit", personal.metrics.salesGrossProfit],
         ["Assigned leads", personal.metrics.leadCount],
         ["Qualified leads", personal.metrics.qualifiedLeads],
         ["Converted leads", personal.metrics.convertedLeads],
@@ -372,6 +400,8 @@ export function ReportsDashboard() {
         ["Open pipeline", personal.metrics.pipelineValue],
         ["Task completion rate", `${personal.metrics.taskCompletionRate.toFixed(1)}%`],
         ...toRows(personal.breakdowns.revenueByCategory).map(([label, value]) => [`Revenue - ${titleCase(label)}`, value]),
+        ...toRows(personal.breakdowns.salesByBrand).map(([label, value]) => [`POS brand - ${titleCase(label)}`, value]),
+        ...toRows(personal.breakdowns.salesByProduct).map(([label, value]) => [`POS product - ${label}`, value]),
         ["Timeline date", "Lead", "Event", "Type", "Details"],
         ...personal.timeline.map((item) => [item.at, item.leadName, item.title, titleCase(item.kind), item.detail]),
       ];
@@ -381,18 +411,16 @@ export function ReportsDashboard() {
   }
 
   const personalCards = personal ? [
-    { icon: Users, label: "Assigned leads", value: personal.metrics.leadCount.toLocaleString() },
-    { icon: Target, label: "Qualified leads", value: personal.metrics.qualifiedLeads.toLocaleString() },
-    { icon: CheckCircle2, label: "Converted leads", value: personal.metrics.convertedLeads.toLocaleString() },
-    { icon: MessageSquareText, label: "Lead interactions", value: personal.metrics.leadInteractions.toLocaleString() },
-    { icon: ContactRound, label: "Leads contacted", value: personal.metrics.contactedLeads.toLocaleString() },
-    { icon: TrendingUp, label: "Conversion rate", value: `${personal.metrics.conversionRate.toFixed(1)}%` },
-    { icon: UserRound, label: "Managed clients", value: personal.metrics.clientCount.toLocaleString() },
+    { icon: ShoppingCart, label: "Completed sales", value: personal.metrics.salesCount.toLocaleString() },
+    { icon: TrendingUp, label: "Sales revenue", value: formatCurrency(personal.metrics.salesRevenue) },
+    { icon: PackageCheck, label: "Units sold", value: personal.metrics.unitsSold.toLocaleString() },
+    { icon: Banknote, label: "Amount received", value: formatCurrency(personal.metrics.salesAmountReceived) },
+    { icon: Receipt, label: "Outstanding invoices", value: formatCurrency(personal.metrics.salesOutstanding) },
+    { icon: TrendingUp, label: "Gross profit", value: formatCurrency(personal.metrics.salesGrossProfit) },
     { icon: CheckCircle2, label: "Won deals", value: personal.metrics.wonDeals.toLocaleString() },
-    { icon: TrendingUp, label: "Verified amount generated", value: formatCurrency(personal.metrics.amountGenerated) },
     { icon: Target, label: "Open pipeline", value: formatCurrency(personal.metrics.pipelineValue) },
   ] : [];
-  const maxMonthlyRevenue = Math.max(1, ...(personal?.breakdowns.revenueByMonth.map((row) => row.value) ?? []));
+  const maxMonthlySales = Math.max(1, ...(personal?.breakdowns.salesByMonth.map((row) => row.value) ?? []));
   const timelineKinds = Array.from(new Set(personal?.timeline.map((item) => item.kind) ?? [])).sort();
   const filteredTimeline = (personal?.timeline ?? []).filter((item) => timelineFilter === "all" || item.kind === timelineFilter);
   const visibleTimeline = timelineExpanded ? filteredTimeline : filteredTimeline.slice(0, 4);
@@ -402,7 +430,7 @@ export function ReportsDashboard() {
       <div className="rounded-md bg-white p-4 shadow-sm md:flex md:items-end md:justify-between md:bg-transparent md:p-0 md:shadow-none">
         <div>
           <h1 className="text-xl font-semibold md:text-2xl">Reports</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Measure assigned work, conversion, pipeline, and verified revenue from live CRM records.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Track completed sales, revenue, units, collections, margins, products, brands, and branch performance.</p>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 md:mt-0 md:flex">
           {activeMode === "personal" ? <Button disabled={!personal} onClick={exportSummary} type="button" variant="outline"><Download className="h-4 w-4" />CSV</Button> : null}
@@ -412,8 +440,8 @@ export function ReportsDashboard() {
 
       <div className="grid gap-4 border-y bg-white py-4 md:rounded-md md:border md:p-4">
         <div className="inline-flex w-full rounded-md border bg-muted/30 p-1 sm:w-fit">
-          <button className={`h-10 flex-1 rounded px-3 text-sm font-medium sm:flex-none ${activeMode === "personal" ? "bg-primary text-primary-foreground" : "hover:bg-white"}`} onClick={() => setMode("personal")} type="button">My performance</button>
-          {canViewOrganizationReports ? <button className={`h-10 flex-1 rounded px-3 text-sm font-medium sm:flex-none ${activeMode === "organization" ? "bg-primary text-primary-foreground" : "hover:bg-white"}`} onClick={() => setMode("organization")} type="button">Organization overview</button> : null}
+          {canViewOrganizationReports ? <button className={`h-10 flex-1 rounded px-3 text-sm font-medium sm:flex-none ${activeMode === "organization" ? "bg-primary text-primary-foreground" : "hover:bg-white"}`} onClick={() => setMode("organization")} type="button">Sales &amp; operations</button> : null}
+          <button className={`h-10 flex-1 rounded px-3 text-sm font-medium sm:flex-none ${activeMode === "personal" ? "bg-primary text-primary-foreground" : "hover:bg-white"}`} onClick={() => setMode("personal")} type="button">My sales</button>
         </div>
         {activeMode === "personal" ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[12rem_1fr_1fr_auto] lg:items-end">
@@ -439,7 +467,7 @@ export function ReportsDashboard() {
 
       {error ? <ErrorState message={error} /> : null}
       {loading ? <LoadingState label="Generating report from live CRM data" /> : null}
-      {!loading && activeMode === "personal" && !personal ? <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Choose a date range and generate your personal performance report.</div> : null}
+      {!loading && activeMode === "personal" && !personal ? <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Choose a date range and generate your personal sales report.</div> : null}
 
       {activeMode === "personal" && personal ? (
         <>
@@ -458,18 +486,26 @@ export function ReportsDashboard() {
             {personalCards.map(({ icon: Icon, label, value }) => <Card key={label}><CardContent className="grid gap-2 p-4"><Icon className="h-4 w-4 text-primary" /><p className="text-xs text-muted-foreground md:text-sm">{label}</p><p className="break-all text-xl font-semibold md:text-2xl">{value}</p></CardContent></Card>)}
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
+            <BreakdownCard currency rows={toRows(personal.breakdowns.salesByBrand)} title="POS sales by brand" />
+            <BreakdownCard currency rows={toRows(personal.breakdowns.salesByProduct)} title="Top-selling products" />
+            <BreakdownCard rows={toRows(personal.breakdowns.salesPaymentStatus)} title="POS payment status" />
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" />Sales revenue trend</CardTitle></CardHeader>
+              <CardContent className="grid gap-3">
+                {personal.breakdowns.salesByMonth.map((row) => <div className="grid grid-cols-[4rem_minmax(2rem,1fr)_minmax(4.5rem,6rem)] items-center gap-2 text-sm" key={row.label}><span className="text-xs text-muted-foreground sm:text-sm">{row.label}</span><div className="h-2 overflow-hidden rounded bg-muted"><div className="h-full bg-primary" style={{ width: `${Math.max(row.value ? 4 : 0, (row.value / maxMonthlySales) * 100)}%` }} /></div><span className="break-all text-right text-xs font-semibold sm:text-sm">{formatCurrency(row.value)}</span></div>)}
+              </CardContent>
+            </Card>
+          </div>
+          <div>
+            <h2 className="mb-3 text-base font-semibold">Supporting CRM pipeline</h2>
+            <div className="grid gap-4 lg:grid-cols-2">
             <BreakdownCard rows={toRows(personal.breakdowns.leadStatus)} title="Lead performance" />
             <BreakdownCard rows={toRows(personal.breakdowns.dealStatus)} title="Deal performance" />
             <BreakdownCard rows={toRows(personal.breakdowns.leadSource)} title="Lead sources" />
             <BreakdownCard rows={toRows(personal.breakdowns.leadInteractionType)} title="Lead interactions" />
             <BreakdownCard currency rows={toRows(personal.breakdowns.revenueByCategory)} title="Verified revenue by category" />
             <BreakdownCard rows={toRows(personal.breakdowns.taskStatus)} title="Task performance" />
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" />Verified revenue trend</CardTitle></CardHeader>
-              <CardContent className="grid gap-3">
-                {personal.breakdowns.revenueByMonth.map((row) => <div className="grid grid-cols-[4rem_minmax(2rem,1fr)_minmax(4.5rem,6rem)] items-center gap-2 text-sm" key={row.label}><span className="text-xs text-muted-foreground sm:text-sm">{row.label}</span><div className="h-2 overflow-hidden rounded bg-muted"><div className="h-full bg-primary" style={{ width: `${Math.max(row.value ? 4 : 0, (row.value / maxMonthlyRevenue) * 100)}%` }} /></div><span className="break-all text-right text-xs font-semibold sm:text-sm">{formatCurrency(row.value)}</span></div>)}
-              </CardContent>
-            </Card>
+            </div>
           </div>
           <Card>
             <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">

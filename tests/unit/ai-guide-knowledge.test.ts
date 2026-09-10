@@ -5,8 +5,9 @@ describe("AI Guide knowledge", () => {
   it("includes personal reporting guidance", () => {
     const answer = fallbackGuideAnswer("How do I see my amount generated and performance report?");
 
-    expect(answer).toContain("My performance");
-    expect(answer).toContain("verified amount generated");
+    expect(answer).toContain("My sales");
+    expect(answer).toContain("completed POS sales");
+    expect(answer).toContain("Verified cash collection");
     expect(answer).toContain("Export CSV");
   });
 
@@ -15,8 +16,8 @@ describe("AI Guide knowledge", () => {
       "How do I generate an organization inventory, sales, purchase and finance report?",
     );
 
-    expect(answer).toContain("Organization overview");
-    expect(answer).toContain("Executive, Sales, Inventory, Purchasing, Projects, Finance, and CRM");
+    expect(answer).toContain("Sales & operations");
+    expect(answer).toContain("Sales is the default view");
     expect(answer).toContain("current point-in-time figures");
     expect(answer).toContain("A4 PDF");
   });

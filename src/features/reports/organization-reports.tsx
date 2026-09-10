@@ -207,13 +207,13 @@ function Breakdown({
 }
 
 const sections: Array<{ id: ReportSection; label: string }> = [
-  { id: "executive", label: "Executive" },
   { id: "sales", label: "Sales" },
+  { id: "executive", label: "Overview" },
   { id: "inventory", label: "Inventory" },
   { id: "purchasing", label: "Purchasing" },
   { id: "projects", label: "Projects" },
   { id: "finance", label: "Finance" },
-  { id: "crm", label: "CRM" },
+  { id: "crm", label: "CRM pipeline" },
 ];
 
 export function OrganizationReports() {
@@ -223,7 +223,7 @@ export function OrganizationReports() {
   const [dateTo, setDateTo] = useState(dates.to);
   const [branchId, setBranchId] = useState(activeBranchId);
   const [brandId, setBrandId] = useState("all");
-  const [section, setSection] = useState<ReportSection>("executive");
+  const [section, setSection] = useState<ReportSection>("sales");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [brands, setBrands] = useState<InventoryBrand[]>([]);
   const [report, setReport] = useState<OrganizationReport | null>(null);
@@ -456,12 +456,12 @@ export function OrganizationReports() {
               <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                 <MetricCard icon={ShoppingCart} label="Sales revenue" value={formatCurrency(report.summary.salesRevenue)} />
                 <MetricCard icon={Banknote} label="Cash collected" value={formatCurrency(report.summary.cashCollected)} />
-                <MetricCard icon={Boxes} label="Inventory value" value={formatCurrency(report.summary.inventoryValue)} />
+                <MetricCard icon={ShoppingCart} label="Sales transactions" value={report.summary.salesCount} />
+                <MetricCard icon={PackageCheck} label="Units sold" value={report.summary.unitsSold.toLocaleString()} />
+                <MetricCard icon={Receipt} label="Outstanding invoices" value={formatCurrency(report.summary.outstandingSales)} />
+                <MetricCard icon={TrendingUp} label="POS gross profit" value={formatCurrency(report.summary.grossProfit)} />
+                <MetricCard icon={Boxes} label="Available stock" value={report.summary.inventoryAvailable.toLocaleString()} />
                 <MetricCard icon={Receipt} label="Supplier balance" value={formatCurrency(report.summary.purchaseOutstanding)} />
-                <MetricCard icon={BriefcaseBusiness} label="Project contract value" value={formatCurrency(report.summary.projectContractValue)} />
-                <MetricCard icon={TrendingUp} label="Project estimated margin" value={formatCurrency(report.summary.projectEstimatedMargin)} />
-                <MetricCard icon={Banknote} label="Net cash flow" value={formatCurrency(report.summary.netCashFlow)} />
-                <MetricCard icon={Users} label="Open CRM pipeline" value={formatCurrency(report.summary.openPipelineValue)} />
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <Breakdown currency rows={report.breakdowns.salesByBrand} title="Sales by brand" />
@@ -487,6 +487,11 @@ export function OrganizationReports() {
                 headers={["Product", "Quantity", "Revenue"]}
                 rows={report.rows.topProducts.map((row) => [row.label, row.quantity.toLocaleString(), formatCurrency(row.revenue)])}
                 title="Top-selling products"
+              />
+              <DataTable
+                headers={["Branch", "Sales", "Cash", "Units in stock", "Purchases"]}
+                rows={report.rows.branches.map((row) => [row.label, formatCurrency(row.salesRevenue), formatCurrency(row.cashCollected), row.inventoryOnHand.toLocaleString(), formatCurrency(row.purchaseValue)])}
+                title="Sales performance by branch"
               />
             </>
           ) : null}
@@ -560,11 +565,6 @@ export function OrganizationReports() {
                 <MetricCard icon={PackageCheck} label="Completed tasks" value={report.summary.completedTasks} />
               </div>
               <Breakdown rows={report.breakdowns.crmStatus} title="Lead status" />
-              <DataTable
-                headers={["Branch", "Sales", "Cash", "Inventory units", "Purchases"]}
-                rows={report.rows.branches.map((row) => [row.label, formatCurrency(row.salesRevenue), formatCurrency(row.cashCollected), row.inventoryOnHand.toLocaleString(), formatCurrency(row.purchaseValue)])}
-                title="Branch comparison"
-              />
             </>
           ) : null}
         </>

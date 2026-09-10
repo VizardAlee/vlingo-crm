@@ -440,17 +440,18 @@ export const guideTopics: GuideTopic[] = [
       "finance report",
       "csv",
     ],
-    title: "Review personal performance",
+    title: "Review sales performance",
     steps: [
-      "Go to Reports and open My performance.",
+      "Go to Reports. Authorized managers land on Sales & operations; other users can open My sales.",
       "Choose a quick period or enter a custom start and end date, then select Generate report.",
-      "Review assigned leads, qualified and converted leads, conversion rate, managed clients, won deals, open pipeline, tasks, and verified amount generated.",
+      "Start with completed POS sales, sales revenue, units sold, amount received, outstanding invoices, gross profit, sales by product and brand, payment status, and the sales trend.",
+      "Use the supporting CRM pipeline section only when you need lead, deal, interaction, task, and pipeline context behind the sales result.",
       "Use Lead interactions and the timeline to review calls, WhatsApp messages, emails, meetings, stage changes, and follow-up work recorded during the period.",
       "Review the AI performance summary, then use A4 PDF to download a phone- and tablet-friendly report or CSV for spreadsheet analysis.",
-      "Verified amount generated counts attributed payments only after finance verification; pending payments are shown separately.",
+      "Verified cash collection counts attributed payments only after finance verification; pending payments are shown separately.",
       "Use Export CSV to download the personal summary and breakdowns.",
       "Organization overview is available only to admins and authorized executive, finance, audit, operations, or sales-management roles.",
-      "In Organization overview, choose the date range, branch, and product brand, then use the Executive, Sales, Inventory, Purchasing, Projects, Finance, and CRM tabs.",
+      "In Sales & operations, choose the date range, branch, and product brand. Sales is the default view, followed by Overview, Inventory, Purchasing, Projects, Finance, and the supporting CRM pipeline tab.",
       "The organization report combines completed POS sales, current stock balances, inventory movements, purchase orders and supplier exposure, installation-project profitability, verified cash collections, approved expenses, and current CRM activity.",
       "Use CSV for spreadsheet analysis or A4 PDF for a printable consolidated report; both exports work without requesting an AI summary.",
       "Inventory balances and value are current point-in-time figures. The chosen dates limit movements and other activity. When a brand filter is selected, finance and CRM totals remain branch-and-date scoped because those records do not consistently carry a product brand.",
@@ -623,7 +624,7 @@ Main routes and modules:
 - Documents: attach and manage business documents.
 - Tasks and Activities: complete dated follow-up information, creator/updater identity, audit-friendly notes, and Google Calendar sync for assigned tasks.
 - Notifications: persistent read/unread records plus optional browser push alerts, scoped to the user unless they have oversight access.
-- Reports: every active user can review their own lead/client/deal/task performance and attributed verified revenue for selectable periods and export CSV or A4 PDF. Authorized organization reporting adds date, branch, and brand filters plus Executive, Sales, Inventory, Purchasing, Projects, Finance, and CRM views using completed POS sales, current stock, movements, purchase orders, supplier exposure, installation-project profitability, verified cash, approved expenses, and CRM activity. Organization CSV and A4 PDF exports do not depend on AI.
+- Reports: sales is the primary focus. Users can review their completed POS sales, revenue, units, collections, outstanding invoices, gross profit, product and brand performance, payment status, and sales trend, with CRM pipeline information shown only as supporting context. Authorized organization reporting lands on Sales & operations with Sales as the default view, date/branch/brand filters, branch comparisons, and secondary Overview, Inventory, Purchasing, Projects, Finance, and CRM pipeline tabs. CSV and A4 PDF exports do not depend on AI.
 - AI Guide: persistent daily conversation, follow-up questions, Markdown answers, daily quota, and a response character limit.
 - PWA and offline: installable app shell, browser notifications, cached pages, and queued supported writes; live backend actions still require connectivity.
 - Settings: organization name/logo/theme, branches, users and renewable invite links, multiple roles, Google Calendar, email SMTP, and audit logs.
