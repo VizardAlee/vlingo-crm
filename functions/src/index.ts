@@ -19,7 +19,7 @@ import {
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import nodemailer from "nodemailer";
 import { syncTaskToGoogleCalendar } from "./google-calendar.js";
-import { isValidPosPaymentMethod } from "./pos-payment.js";
+import { calculatePosRepayment, isValidPosPaymentMethod } from "./pos-payment.js";
 import { resolvePosPrice } from "./pos-pricing.js";
 
 initializeApp();
@@ -3905,13 +3905,17 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
       paymentRef.id,
       sale.documentBrand === "kadaBuildersMart" ? "kadaBuildersMart" : "vlingoSystems",
     );
-    const currentBalance = money(Number(sale.balanceDue ?? 0));
-    if (amount > currentBalance) {
-      throw new HttpsError("invalid-argument", `Only ${currentBalance.toFixed(2)} remains due on this invoice.`);
+    const repayment = calculatePosRepayment(
+      Number(sale.totalAmount ?? 0),
+      Number(sale.amountPaid ?? 0),
+      amount,
+    );
+    if (!repayment.ok) {
+      throw new HttpsError("invalid-argument", repayment.error);
     }
-    const amountPaid = money(Number(sale.amountPaid ?? 0) + amount);
-    balanceDue = money(Number(sale.totalAmount ?? 0) - amountPaid);
-    paymentStatus = balanceDue > 0 ? "partPaid" : "paid";
+    const amountPaid = repayment.amountPaid;
+    balanceDue = repayment.balanceDue;
+    paymentStatus = repayment.paymentStatus;
     transaction.update(saleRef, {
       amountPaid,
       balanceDue,
@@ -3922,7 +3926,7 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
       paymentHistory: FieldValue.arrayUnion({
         paymentId: paymentRef.id,
         receiptNumber,
-        amount,
+        amount: repayment.amount,
         at: new Date().toISOString(),
         method: paymentMethod,
         paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
@@ -3945,7 +3949,7 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
       revenueCategory: "other",
       revenueOwnerId: actor.id,
       revenueOwnerName: actor.displayName,
-      amount,
+      amount: repayment.amount,
       at: new Date().toISOString().slice(0, 10),
       method: paymentMethod,
       paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",

@@ -48,6 +48,10 @@ function paymentTone(status: string) {
   return "danger" as const;
 }
 
+function money(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export function PosDashboard() {
   const { activeBranchId, activeOrganizationId, member } = useAuth();
   const toast = useToast();
@@ -199,12 +203,23 @@ export function PosDashboard() {
 
   async function submitPayment(event: React.FormEvent) {
     event.preventDefault();
+    const sale = sales.find((entry) => entry.id === paymentForm.saleId);
+    const amount = money(Number(paymentForm.amount));
+    const balanceDue = money(Number(sale?.balanceDue ?? 0));
+    if (!sale || !Number.isFinite(amount) || amount <= 0) {
+      toast({ title: "Unable to record payment", description: "Enter a positive payment amount.", variant: "error" });
+      return;
+    }
+    if (amount > balanceDue) {
+      toast({ title: "Unable to record payment", description: `Only ${formatCurrency(balanceDue)} remains due on this invoice.`, variant: "error" });
+      return;
+    }
     setSaving(`payment:${paymentForm.saleId}`);
     try {
       const result = await recordPosSalePayment({
         organizationId: activeOrganizationId,
         saleId: paymentForm.saleId,
-        amount: Number(paymentForm.amount),
+        amount,
         paymentMethod: paymentForm.method,
         paymentReference: paymentForm.reference,
       });
@@ -300,7 +315,7 @@ export function PosDashboard() {
               <div className="grid gap-2 border-y py-4 text-sm"><div className="flex justify-between"><span>Subtotal</span><strong>{formatCurrency(subtotal)}</strong></div><div className="flex justify-between"><span>Discount</span><strong>-{formatCurrency(discount)}</strong></div><div className="flex items-center justify-between gap-4"><span>Tax rate</span><Input className="w-24" max="100" min="0" onChange={(event) => setPayment((value) => ({ ...value, taxRate: Number(event.target.value) }))} type="number" value={payment.taxRate} /></div><div className="flex justify-between text-lg"><strong>Total</strong><strong>{formatCurrency(total)}</strong></div></div>
               <Field label="Invoice and receipt brand"><Select data-tour="pos-document-brand" onChange={(event) => setDocumentBrand(event.target.value as PosDocumentBrand)} value={documentBrand}>{documentBrandOptions.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}</Select></Field>
               <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground"><strong className="block text-sm text-foreground">{documentBrandLabel(documentBrand)} documents</strong><span>The invoice and every receipt for this sale will use this brand’s logo, colours, numbering, and business wording.</span></div>
-              <Field label="Amount received"><Input data-tour="pos-payment" max={total} min="0" onChange={(event) => setPayment((value) => ({ ...value, amountPaid: Number(event.target.value) }))} type="number" value={payment.amountPaid} /></Field>
+              <Field label="Amount received"><Input data-tour="pos-payment" max={money(total)} min="0" onChange={(event) => setPayment((value) => ({ ...value, amountPaid: Number(event.target.value) }))} step="0.01" type="number" value={payment.amountPaid} /></Field>
               {payment.amountPaid > 0 ? <><Field label="Payment method"><Select onChange={(event) => setPayment((value) => ({ ...value, method: event.target.value as RentalPaymentMethod }))} value={payment.method}>{paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</Select></Field><Field label="Payment reference"><Input onChange={(event) => setPayment((value) => ({ ...value, reference: event.target.value }))} placeholder="Optional" value={payment.reference} /></Field></> : null}
               <div className="rounded-md bg-muted p-3 text-sm"><div className="flex justify-between"><span>Balance due</span><strong>{formatCurrency(Math.max(0, total - payment.amountPaid))}</strong></div><p className="mt-1 text-xs text-muted-foreground">Every sale generates an invoice. A receipt is generated for any payment received.</p></div>
               <Button className="h-12" disabled={!cart.length || saving === "sale"} type="submit"><Banknote className="h-5 w-5" />{saving === "sale" ? "Completing sale…" : "Complete sale"}</Button>
@@ -317,8 +332,8 @@ export function PosDashboard() {
                   <div><div className="flex flex-wrap items-center gap-2"><strong>{sale.invoiceNumber}</strong><Badge tone={paymentTone(sale.paymentStatus)}>{titleCase(sale.paymentStatus)}</Badge><Badge tone="muted">{documentBrandLabel(sale.documentBrand)}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{sale.customerName} · {formatDate(sale.soldAt)} · {sale.lines.length} product line(s)</p></div>
                   <div className="md:text-right"><strong className="text-lg">{formatCurrency(sale.totalAmount)}</strong><p className="text-xs text-muted-foreground">{formatCurrency(sale.balanceDue)} due</p></div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2"><Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/invoice`}><FileText className="h-4 w-4" />Invoice</Link>{(sale.paymentHistory ?? []).map((entry, index) => <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt/${encodeURIComponent(entry.receiptNumber)}`} key={entry.receiptNumber}><Printer className="h-4 w-4" />Receipt {index + 1}</Link>)}{sale.amountPaid > 0 && !sale.paymentHistory?.length ? <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt`}><Printer className="h-4 w-4" />Receipt</Link> : null}{canSell && sale.balanceDue > 0 ? <Button onClick={() => setPaymentForm({ saleId: sale.id, amount: sale.balanceDue, method: "cash", reference: "" })} size="sm" type="button" variant="secondary">Record payment</Button> : null}</div>
-                {paymentForm.saleId === sale.id ? <form className="mt-4 grid gap-3 rounded-md bg-muted p-4 sm:grid-cols-4" onSubmit={submitPayment}><Field label="Amount"><Input max={sale.balanceDue} min="0.01" onChange={(event) => setPaymentForm((value) => ({ ...value, amount: Number(event.target.value) }))} required type="number" value={paymentForm.amount} /></Field><Field label="Method"><Select onChange={(event) => setPaymentForm((value) => ({ ...value, method: event.target.value as RentalPaymentMethod }))} value={paymentForm.method}>{paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</Select></Field><Field label="Reference"><Input onChange={(event) => setPaymentForm((value) => ({ ...value, reference: event.target.value }))} value={paymentForm.reference} /></Field><div className="flex items-end gap-2"><Button disabled={saving === `payment:${sale.id}`} type="submit">Save payment</Button><Button onClick={() => setPaymentForm((value) => ({ ...value, saleId: "" }))} type="button" variant="ghost">Cancel</Button></div></form> : null}
+                <div className="mt-3 flex flex-wrap gap-2"><Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/invoice`}><FileText className="h-4 w-4" />Invoice</Link>{(sale.paymentHistory ?? []).map((entry, index) => <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt/${encodeURIComponent(entry.receiptNumber)}`} key={entry.receiptNumber}><Printer className="h-4 w-4" />Receipt {index + 1}</Link>)}{sale.amountPaid > 0 && !sale.paymentHistory?.length ? <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt`}><Printer className="h-4 w-4" />Receipt</Link> : null}{canSell && sale.balanceDue > 0 ? <Button onClick={() => setPaymentForm({ saleId: sale.id, amount: money(sale.balanceDue), method: "cash", reference: "" })} size="sm" type="button" variant="secondary">Record payment</Button> : null}</div>
+                {paymentForm.saleId === sale.id ? <form className="mt-4 grid gap-3 rounded-md bg-muted p-4 sm:grid-cols-4" onSubmit={submitPayment}><Field label="Amount (part or full)"><Input max={money(sale.balanceDue)} min="0.01" onChange={(event) => setPaymentForm((value) => ({ ...value, amount: Number(event.target.value) }))} required step="0.01" type="number" value={paymentForm.amount} /><button className="mt-1 text-left text-xs font-medium text-primary hover:underline" onClick={() => setPaymentForm((value) => ({ ...value, amount: money(sale.balanceDue) }))} type="button">Use full balance: {formatCurrency(money(sale.balanceDue))}</button></Field><Field label="Method"><Select onChange={(event) => setPaymentForm((value) => ({ ...value, method: event.target.value as RentalPaymentMethod }))} value={paymentForm.method}>{paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</Select></Field><Field label="Reference"><Input onChange={(event) => setPaymentForm((value) => ({ ...value, reference: event.target.value }))} value={paymentForm.reference} /></Field><div className="flex items-end gap-2"><Button disabled={saving === `payment:${sale.id}`} type="submit">{saving === `payment:${sale.id}` ? "Saving…" : "Save payment"}</Button><Button disabled={saving === `payment:${sale.id}`} onClick={() => setPaymentForm((value) => ({ ...value, saleId: "" }))} type="button" variant="ghost">Cancel</Button></div></form> : null}
               </div>
             ))}
             {!sales.length ? <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">No POS sales have been recorded in this branch.</div> : null}
