@@ -22,6 +22,10 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toast";
 import { BarcodeScanner } from "@/features/inventory/barcode-scanner";
+import {
+  filterPurchaseProducts,
+  purchaseProductOptions,
+} from "@/features/inventory/purchase-product-search";
 import { useAuth } from "@/features/auth/auth-provider";
 import { hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
@@ -177,6 +181,7 @@ export function InventoryEnterprisePanel({
     >
   >({});
   const [traceSearch, setTraceSearch] = useState("");
+  const [purchaseProductSearch, setPurchaseProductSearch] = useState("");
   const [purchaseSearch, setPurchaseSearch] = useState("");
   const [purchaseStatus, setPurchaseStatus] = useState("all");
   const [purchasePage, setPurchasePage] = useState(1);
@@ -191,6 +196,10 @@ export function InventoryEnterprisePanel({
   const countableItems = useMemo(
     () => items.filter((item) => item.trackingMode !== "batch"),
     [items],
+  );
+  const filteredPurchaseProducts = useMemo(
+    () => filterPurchaseProducts(items, purchaseProductSearch),
+    [items, purchaseProductSearch],
   );
   const purchaseOrderTotal =
     poForm.lines.reduce((sum, line) => sum + line.quantity * line.unitCost, 0) +
@@ -847,6 +856,23 @@ export function InventoryEnterprisePanel({
                     Refresh products
                   </Button>
                 ) : null}
+                <Field label="Find product">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      onChange={(event) => setPurchaseProductSearch(event.target.value)}
+                      placeholder="Search name, brand, SKU, barcode, category, or item code"
+                      type="search"
+                      value={purchaseProductSearch}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {purchaseProductSearch
+                      ? `${filteredPurchaseProducts.length} matching product${filteredPurchaseProducts.length === 1 ? "" : "s"}`
+                      : `${items.length} products available`}
+                  </p>
+                </Field>
                 <Field label="Supplier">
                   <Select
                     required
@@ -870,8 +896,8 @@ export function InventoryEnterprisePanel({
                   >
                     <Field label="Item">
                       <Select required value={line.offeringId} onChange={(e) => setPoForm((v) => ({ ...v, lines: v.lines.map((item, i) => i === index ? { ...item, offeringId: e.target.value, unitCost: Number(items.find((entry) => entry.id === e.target.value)?.costPrice ?? item.unitCost) } : item) }))}>
-                        <option value="">Select item</option>
-                        {items.map((item) => <option key={item.id} value={item.id}>{item.brandName} · {item.name}</option>)}
+                        <option value="">{filteredPurchaseProducts.length ? "Select item" : "No matching products"}</option>
+                        {purchaseProductOptions(items, filteredPurchaseProducts, line.offeringId).map((item) => <option key={item.id} value={item.id}>{item.brandName ? `${item.brandName} · ` : ""}{item.name}{item.sku ? ` · ${item.sku}` : ""}</option>)}
                       </Select>
                     </Field>
                     <Field label="Quantity">

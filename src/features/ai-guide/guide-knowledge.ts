@@ -243,6 +243,7 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       "Go to Inventory, then Purchasing; creating suppliers and purchase orders requires inventory.procure permission.",
       "Use Find purchase orders at the top of Purchasing to search by PO number, supplier, product, brand, SKU, project, or payment reference, and narrow results by payment or receiving status.",
+      "In New purchase order, use Find product to filter the catalogue by product name, brand, SKU, barcode, category, or item code before choosing an item. Products already added to the purchase remain selected while you search for another one.",
       "If an item is missing, authorized users can choose Create product from New purchase order. The full product form opens in a new tab so the purchase draft is preserved; after saving, return to Purchasing and choose Refresh products.",
       "Create or select an active supplier, add the catalogue items, then choose Paid in full, Credit agreement, or Part payment. Credit and part-paid orders require a balance due date.",
       "Save the purchase order. It becomes active immediately; there is no purchase approval step. The separate Stock count approvals tab applies only to physical stock-count variances. The system records the purchase creator, branch, supplier, items, costs, payment arrangement, dates, payments, cancellations, receipts, and later activity for audit.",
