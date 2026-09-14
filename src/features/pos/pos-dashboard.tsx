@@ -56,6 +56,7 @@ export function PosDashboard() {
   const { activeBranchId, activeOrganizationId, member } = useAuth();
   const toast = useToast();
   const [tab, setTab] = useState<"checkout" | "sales">("checkout");
+  const [mobileStep, setMobileStep] = useState<"products" | "customer" | "checkout">("products");
   const [items, setItems] = useState<Offering[]>([]);
   const [balances, setBalances] = useState<InventoryBalance[]>([]);
   const [sales, setSales] = useState<PosSale[]>([]);
@@ -247,58 +248,83 @@ export function PosDashboard() {
           <h1 className="mt-1 text-2xl font-semibold">Point of Sale</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sell from the active branch, update stock instantly, and issue numbered documents.</p>
         </div>
-        <div className="mt-4 flex flex-wrap items-end justify-end gap-2 md:mt-0">
+        <div className="mt-4 flex w-full flex-col gap-2 md:mt-0 md:w-auto md:items-end">
           <GuidedTour storageKey="vlingo-tour:pos-v1" steps={posTourSteps} />
-          <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-md border bg-white px-3 py-2"><p className="text-xs text-muted-foreground">Today</p><strong>{todaySales.length}</strong></div>
-          <div className="rounded-md border bg-white px-3 py-2"><p className="text-xs text-muted-foreground">Revenue</p><strong>{formatCurrency(todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0))}</strong></div>
-          <div className="rounded-md border bg-white px-3 py-2"><p className="text-xs text-muted-foreground">Due</p><strong>{formatCurrency(sales.reduce((sum, sale) => sum + sale.balanceDue, 0))}</strong></div></div>
+          <div className="grid w-full grid-cols-3 gap-2 text-center md:w-auto">
+          <div className="min-w-0 rounded-md border bg-white px-2 py-2 sm:px-3"><p className="text-xs text-muted-foreground">Today</p><strong>{todaySales.length}</strong></div>
+          <div className="min-w-0 rounded-md border bg-white px-2 py-2 sm:px-3"><p className="text-xs text-muted-foreground">Revenue</p><strong className="block truncate text-xs sm:text-sm">{formatCurrency(todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0))}</strong></div>
+          <div className="min-w-0 rounded-md border bg-white px-2 py-2 sm:px-3"><p className="text-xs text-muted-foreground">Due</p><strong className="block truncate text-xs sm:text-sm">{formatCurrency(sales.reduce((sum, sale) => sum + sale.balanceDue, 0))}</strong></div></div>
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <Button onClick={() => setTab("checkout")} variant={tab === "checkout" ? "primary" : "outline"}><ShoppingCart className="h-4 w-4" />New sale</Button>
-        <Button data-tour="pos-history" onClick={() => setTab("sales")} variant={tab === "sales" ? "primary" : "outline"}><FileText className="h-4 w-4" />Sales history</Button>
+      <div className="grid grid-cols-2 gap-2 sm:flex">
+        <Button className="w-full sm:w-auto" onClick={() => setTab("checkout")} variant={tab === "checkout" ? "primary" : "outline"}><ShoppingCart className="h-4 w-4" />New sale</Button>
+        <Button className="w-full sm:w-auto" data-tour="pos-history" onClick={() => setTab("sales")} variant={tab === "sales" ? "primary" : "outline"}><FileText className="h-4 w-4" />Sales history</Button>
       </div>
 
       {tab === "checkout" ? (
         canSell ? <form className="grid items-start gap-4 xl:grid-cols-[1fr_420px]" onSubmit={submitSale}>
-          <div className="grid gap-4">
+          <nav aria-label="Sale steps" className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1 xl:hidden">
+            {([
+              ["products", "1. Products"],
+              ["customer", "2. Customer"],
+              ["checkout", `3. Pay (${cart.length})`],
+            ] as const).map(([value, label]) => (
+              <button
+                aria-current={mobileStep === value ? "step" : undefined}
+                className={`min-h-11 rounded-md px-2 py-2 text-xs font-semibold transition sm:text-sm ${mobileStep === value ? "bg-white text-primary shadow-sm" : "text-muted-foreground"}`}
+                key={value}
+                onClick={() => setMobileStep(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="contents xl:grid xl:gap-4">
+            <div className={mobileStep === "products" ? "block" : "hidden xl:block"}>
             <Card data-tour="pos-products">
               <CardHeader><CardTitle>Find products</CardTitle></CardHeader>
               <CardContent>
                 <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input autoFocus className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="Search by product, SKU, barcode, or brand" value={search} /></div>
-                <div className="mt-4 grid max-h-[420px] gap-2 overflow-y-auto sm:grid-cols-2">
+                <div className="mt-4 grid max-h-[52vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:max-h-[420px]">
                   {searchableItems.map((item) => (
-                    <button className="flex items-center justify-between gap-3 rounded-md border p-3 text-left transition hover:border-primary hover:bg-primary/5" key={item.id} onClick={() => addToCart(item.id)} type="button">
-                      <span className="min-w-0"><strong className="block truncate text-sm">{item.name}</strong><span className="block truncate text-xs text-muted-foreground">{item.brandName} · {item.sku || "No SKU"} · {stock.get(item.id)} available</span></span>
-                      <span className="shrink-0 text-right text-sm font-semibold"><span className="block">{formatCurrency(item.sellingPrice)}</span>{item.wholesalePrice !== undefined ? <span className="block text-xs font-normal text-muted-foreground">Wholesale {formatCurrency(item.wholesalePrice)}</span> : null}</span>
+                    <button className="flex min-h-16 items-center justify-between gap-3 rounded-md border p-3 text-left transition active:scale-[0.99] hover:border-primary hover:bg-primary/5" key={item.id} onClick={() => addToCart(item.id)} type="button">
+                      <span className="min-w-0"><strong className="block text-sm">{item.name}</strong><span className="mt-1 block text-xs text-muted-foreground">{item.brandName} · {item.sku || "No SKU"} · {stock.get(item.id)} available</span>{cart.find((line) => line.offeringId === item.id) ? <Badge className="mt-2" tone="success">{cart.find((line) => line.offeringId === item.id)?.quantity} in cart</Badge> : null}</span>
+                      <span className="shrink-0 text-right text-sm font-semibold"><span className="block">{formatCurrency(item.sellingPrice)}</span>{item.wholesalePrice !== undefined ? <span className="block text-xs font-normal text-muted-foreground">Wholesale {formatCurrency(item.wholesalePrice)}</span> : null}<span className="mt-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground"><Plus className="h-4 w-4" /></span></span>
                     </button>
                   ))}
                   {!searchableItems.length ? <div className="col-span-full rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No saleable stock matches this search in the active branch.</div> : null}
                 </div>
+                <Button className="mt-4 w-full xl:hidden" disabled={!cart.length} onClick={() => setMobileStep("customer")} type="button">
+                  Continue with {cart.length} product{cart.length === 1 ? "" : "s"}
+                </Button>
               </CardContent>
             </Card>
+            </div>
+            <div className={mobileStep === "customer" ? "block" : "hidden xl:block"}>
             <Card>
               <CardHeader><CardTitle>Customer details</CardTitle></CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <Field label="Customer name"><Input onChange={(event) => setCustomer((value) => ({ ...value, name: event.target.value }))} placeholder="Walk-in customer if blank" value={customer.name} /></Field>
-                <Field label="Phone"><Input onChange={(event) => setCustomer((value) => ({ ...value, phone: event.target.value }))} value={customer.phone} /></Field>
-                <Field label="Email"><Input onChange={(event) => setCustomer((value) => ({ ...value, email: event.target.value }))} type="email" value={customer.email} /></Field>
+                <Field label="Customer name"><Input autoComplete="name" onChange={(event) => setCustomer((value) => ({ ...value, name: event.target.value }))} placeholder="Walk-in customer if blank" value={customer.name} /></Field>
+                <Field label="Phone"><Input autoComplete="tel" inputMode="tel" onChange={(event) => setCustomer((value) => ({ ...value, phone: event.target.value }))} value={customer.phone} /></Field>
+                <Field label="Email"><Input autoComplete="email" inputMode="email" onChange={(event) => setCustomer((value) => ({ ...value, email: event.target.value }))} type="email" value={customer.email} /></Field>
                 <Field label="Address"><Input onChange={(event) => setCustomer((value) => ({ ...value, address: event.target.value }))} value={customer.address} /></Field>
                 <Field className="sm:col-span-2" label="Sale notes"><Textarea onChange={(event) => setCustomer((value) => ({ ...value, notes: event.target.value }))} value={customer.notes} /></Field>
+                <div className="grid grid-cols-2 gap-2 sm:col-span-2 xl:hidden"><Button onClick={() => setMobileStep("products")} type="button" variant="outline">Back</Button><Button onClick={() => setMobileStep("checkout")} type="button">Review sale</Button></div>
               </CardContent>
             </Card>
+            </div>
           </div>
 
-          <Card className="xl:sticky xl:top-4" data-tour="pos-cart">
-            <CardHeader><CardTitle>Current sale ({cart.length})</CardTitle></CardHeader>
+          <Card className={`${mobileStep === "checkout" ? "block" : "hidden xl:block"} xl:sticky xl:top-4`} data-tour="pos-cart">
+            <CardHeader><div className="flex items-center justify-between gap-3"><CardTitle>Current sale ({cart.length})</CardTitle><Button className="xl:hidden" onClick={() => setMobileStep("products")} size="sm" type="button" variant="ghost">Add items</Button></div></CardHeader>
             <CardContent className="grid gap-4">
               <div className="grid max-h-[400px] gap-3 overflow-y-auto">
                 {cartDetails.map((line) => (
                   <div className="rounded-md border p-3" key={line.offeringId}>
                     <div className="flex justify-between gap-3"><div><strong className="text-sm">{line.item.name}</strong><p className="text-xs text-muted-foreground">Retail {formatCurrency(line.item.sellingPrice)}{line.item.wholesalePrice !== undefined ? ` · Wholesale ${formatCurrency(line.item.wholesalePrice)}` : ""} · {line.available} available</p></div><Button aria-label="Remove product" onClick={() => setCart((value) => value.filter((entry) => entry.offeringId !== line.offeringId))} size="icon" type="button" variant="ghost"><Trash2 className="h-4 w-4" /></Button></div>
-                    <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2"><Button disabled={line.quantity <= 1} onClick={() => stepQuantity(line.offeringId, line.quantity - 1)} size="icon" type="button" variant="outline"><Minus className="h-4 w-4" /></Button><Input aria-label="Quantity" inputMode="numeric" max={line.available} min="1" onBlur={() => finishQuantity(line.offeringId, line.available)} onChange={(event) => typeQuantity(line.offeringId, event.target.value)} onFocus={(event) => event.currentTarget.select()} step="1" type="number" value={quantityDrafts[line.offeringId] ?? String(line.quantity)} /><Button disabled={line.quantity >= line.available} onClick={() => stepQuantity(line.offeringId, line.quantity + 1)} size="icon" type="button" variant="outline"><Plus className="h-4 w-4" /></Button></div>
+                    <div className="mt-3 grid grid-cols-[48px_1fr_48px] items-center gap-2"><Button className="h-12 w-12" disabled={line.quantity <= 1} onClick={() => stepQuantity(line.offeringId, line.quantity - 1)} size="icon" type="button" variant="outline"><Minus className="h-4 w-4" /></Button><Input aria-label="Quantity" className="h-12 text-center text-base font-semibold" inputMode="numeric" max={line.available} min="1" onBlur={() => finishQuantity(line.offeringId, line.available)} onChange={(event) => typeQuantity(line.offeringId, event.target.value)} onFocus={(event) => event.currentTarget.select()} step="1" type="number" value={quantityDrafts[line.offeringId] ?? String(line.quantity)} /><Button className="h-12 w-12" disabled={line.quantity >= line.available} onClick={() => stepQuantity(line.offeringId, line.quantity + 1)} size="icon" type="button" variant="outline"><Plus className="h-4 w-4" /></Button></div>
                     <Field className="mt-3" label="Unit selling price">
                       <Input aria-label="Unit selling price" inputMode="decimal" min="0" onChange={(event) => updateCart(line.offeringId, { unitPrice: Math.max(0, Number(event.target.value)) })} onFocus={(event) => event.currentTarget.select()} step="0.01" type="number" value={line.unitPrice} />
                       <span className="flex flex-wrap gap-2 pt-1">
@@ -318,7 +344,7 @@ export function PosDashboard() {
               <Field label="Amount received"><Input data-tour="pos-payment" max={money(total)} min="0" onChange={(event) => setPayment((value) => ({ ...value, amountPaid: Number(event.target.value) }))} step="0.01" type="number" value={payment.amountPaid} /></Field>
               {payment.amountPaid > 0 ? <><Field label="Payment method"><Select onChange={(event) => setPayment((value) => ({ ...value, method: event.target.value as RentalPaymentMethod }))} value={payment.method}>{paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</Select></Field><Field label="Payment reference"><Input onChange={(event) => setPayment((value) => ({ ...value, reference: event.target.value }))} placeholder="Optional" value={payment.reference} /></Field></> : null}
               <div className="rounded-md bg-muted p-3 text-sm"><div className="flex justify-between"><span>Balance due</span><strong>{formatCurrency(Math.max(0, total - payment.amountPaid))}</strong></div><p className="mt-1 text-xs text-muted-foreground">Every sale generates an invoice. A receipt is generated for any payment received.</p></div>
-              <Button className="h-12" disabled={!cart.length || saving === "sale"} type="submit"><Banknote className="h-5 w-5" />{saving === "sale" ? "Completing sale…" : "Complete sale"}</Button>
+              <Button className="sticky bottom-2 z-10 h-12 w-full shadow-lg xl:static xl:shadow-none" disabled={!cart.length || saving === "sale"} type="submit"><Banknote className="h-5 w-5" />{saving === "sale" ? "Completing sale…" : `Complete sale · ${formatCurrency(total)}`}</Button>
             </CardContent>
           </Card>
         </form> : <Card><CardContent className="p-6 text-sm text-muted-foreground">Your role can review sales but cannot process a checkout.</CardContent></Card>

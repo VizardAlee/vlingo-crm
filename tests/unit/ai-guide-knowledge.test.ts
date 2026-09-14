@@ -63,6 +63,7 @@ describe("AI Guide knowledge", () => {
     expect(pos).toContain("VSL or KBM invoice number");
     expect(pos).toContain("Vlingo letterhead");
     expect(pos).toContain("official stamp");
+    expect(pos).toContain("Products, Customer, and Pay");
     expect(dashboard).toContain("Sales record section");
     expect(dashboard).toContain("eight latest completed invoices");
   });
