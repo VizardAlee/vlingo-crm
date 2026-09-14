@@ -280,6 +280,7 @@ export const guideTopics: GuideTopic[] = [
       "Go to Inventory, then Add / move stock. The form shows only actions allowed by your role.",
       "The product selector uses one shared organization catalogue, so a product created from any branch can be stocked in another authorized branch without creating a duplicate. Stock quantities and movements remain separate by branch and location.",
       "On phones and tablets, inventory stock, product-sale, location-balance, and movement records appear as readable card decks; desktop screens retain the compact tables.",
+      "Before selecting an item, use the product filters to search by name, SKU, barcode, or category and narrow the shared catalogue by brand, product type, category, or stock location. Location filtering uses recorded location balances; clear the filter to include products not yet stocked there.",
       "For stock already owned when the system is introduced, choose Enter existing / opening stock. For a delivery without a purchase order, choose Receive stock without a purchase order.",
       "Scan the item's barcode or select the product. For a sale, choose Record stock leaving and set its purpose to Sale.",
       "Enter the quantity and required source or destination location. Add the supplier, purchase order, job, or sale reference when applicable.",

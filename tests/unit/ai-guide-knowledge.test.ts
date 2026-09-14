@@ -51,6 +51,7 @@ describe("AI Guide knowledge", () => {
     expect(answer).toContain("without creating a duplicate");
     expect(answer).toContain("separate by branch and location");
     expect(answer).toContain("readable card decks");
+    expect(answer).toContain("narrow the shared catalogue by brand, product type, category, or stock location");
   });
 
   it("covers current POS documents, quantity entry, and dashboard sales", () => {

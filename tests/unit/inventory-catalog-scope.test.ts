@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   branchInventoryCatalog,
+  filterInventoryMovementItems,
   organizationInventoryCatalog,
 } from "../../src/features/inventory/inventory-catalog-scope";
 import type { InventoryBalance, Offering } from "../../src/types/crm";
@@ -17,6 +18,52 @@ describe("inventory catalogue scope", () => {
       "head-office-product",
       "kano-product",
     ]);
+  });
+
+  it("combines brand, type, category, location, and text filters", () => {
+    const filterProducts = [
+      {
+        id: "panel",
+        name: "620W Solar Panel",
+        brandId: "red",
+        brandName: "Red Solar",
+        type: "solarEquipment",
+        category: "Panels",
+        sku: "RED-620",
+      },
+      {
+        id: "inverter",
+        name: "5kVA Inverter",
+        brandId: "sorotec",
+        brandName: "Sorotec",
+        type: "solarEquipment",
+        category: "Inverters",
+        sku: "REVO-5K",
+      },
+    ] as Offering[];
+    const balances = [
+      { offeringId: "panel", locationId: "kano" },
+      { offeringId: "inverter", locationId: "kaduna" },
+    ] as InventoryBalance[];
+
+    expect(
+      filterInventoryMovementItems(filterProducts, balances, {
+        search: "620",
+        brandId: "red",
+        productType: "solarEquipment",
+        category: "Panels",
+        locationId: "kano",
+      }).map((item) => item.id),
+    ).toEqual(["panel"]);
+    expect(
+      filterInventoryMovementItems(filterProducts, balances, {
+        search: "",
+        brandId: "",
+        productType: "",
+        category: "",
+        locationId: "",
+      }),
+    ).toHaveLength(2);
   });
 
   it("keeps branch inventory presentation separate from the shared catalogue", () => {

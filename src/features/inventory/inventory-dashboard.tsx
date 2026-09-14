@@ -29,6 +29,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { BarcodeScanner } from "@/features/inventory/barcode-scanner";
 import {
   branchInventoryCatalog,
+  filterInventoryMovementItems,
   organizationInventoryCatalog,
 } from "@/features/inventory/inventory-catalog-scope";
 import {
@@ -196,6 +197,13 @@ export function InventoryDashboard() {
     brandId: "all",
     dateFrom: "",
     dateTo: "",
+  });
+  const [movementItemFilters, setMovementItemFilters] = useState({
+    search: "",
+    brandId: "",
+    productType: "",
+    category: "",
+    locationId: "",
   });
   const [overviewPage, setOverviewPage] = useState(1);
   const [overviewPageSize, setOverviewPageSize] = useState(25);
@@ -533,7 +541,27 @@ export function InventoryDashboard() {
     effectiveMovementType,
   );
   const movementItems = isPartner ? items : reportItems;
-  const selectedMovementItem = movementItems.find(
+  const filteredMovementItems = useMemo(
+    () =>
+      filterInventoryMovementItems(
+        movementItems,
+        reportBalances,
+        movementItemFilters,
+      ),
+    [movementItemFilters, movementItems, reportBalances],
+  );
+  const movementProductTypes = useMemo(
+    () =>
+      Array.from(new Set(movementItems.map((item) => item.type).filter(Boolean))).sort(),
+    [movementItems],
+  );
+  const movementCategories = useMemo(
+    () =>
+      Array.from(new Set(movementItems.map((item) => item.category).filter(Boolean))).sort(),
+    [movementItems],
+  );
+  const hasMovementItemFilters = Object.values(movementItemFilters).some(Boolean);
+  const selectedMovementItem = filteredMovementItems.find(
     (item) => item.id === movement.offeringId,
   );
   const selectedMovementOption = movementOptions.find(
@@ -594,6 +622,14 @@ export function InventoryDashboard() {
 
   async function submitMovement(event: React.FormEvent) {
     event.preventDefault();
+    if (!selectedMovementItem) {
+      toast({
+        title: "Choose an inventory item",
+        description: "Select one of the products matching the current filters.",
+        variant: "error",
+      });
+      return;
+    }
     setSaving("movement");
     try {
       const result = await recordInventoryMovement({
@@ -1441,12 +1477,19 @@ export function InventoryDashboard() {
                               code.toLowerCase(),
                           ),
                         );
-                        if (item)
+                        if (item) {
+                          setMovementItemFilters({
+                            search: "",
+                            brandId: "",
+                            productType: "",
+                            category: "",
+                            locationId: "",
+                          });
                           setMovement((value) => ({
                             ...value,
                             offeringId: item.id,
                           }));
-                        else
+                        } else
                           toast({
                             title: "Barcode not found",
                             description: code,
@@ -1477,10 +1520,100 @@ export function InventoryDashboard() {
                       </Select>
                     </Field>
                   ) : null}
+                  <div className="grid gap-3 rounded-md border bg-muted/30 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">Filter products</p>
+                        <p className="text-xs text-muted-foreground">
+                          Narrow the organization catalogue before choosing an item.
+                        </p>
+                      </div>
+                      {hasMovementItemFilters ? (
+                        <Button
+                          onClick={() =>
+                            setMovementItemFilters({
+                              search: "",
+                              brandId: "",
+                              productType: "",
+                              category: "",
+                              locationId: "",
+                            })
+                          }
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                    <Field label="Search products">
+                      <Input
+                        onChange={(event) =>
+                          setMovementItemFilters((value) => ({
+                            ...value,
+                            search: event.target.value,
+                          }))
+                        }
+                        placeholder="Name, SKU, barcode, category..."
+                        type="search"
+                        value={movementItemFilters.search}
+                      />
+                    </Field>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Brand">
+                        <Select
+                          onChange={(event) =>
+                            setMovementItemFilters((value) => ({ ...value, brandId: event.target.value }))
+                          }
+                          value={movementItemFilters.brandId}
+                        >
+                          <option value="">All brands</option>
+                          {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label="Product type">
+                        <Select
+                          onChange={(event) =>
+                            setMovementItemFilters((value) => ({ ...value, productType: event.target.value }))
+                          }
+                          value={movementItemFilters.productType}
+                        >
+                          <option value="">All product types</option>
+                          {movementProductTypes.map((type) => <option key={type} value={type}>{titleCase(type)}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label="Category">
+                        <Select
+                          onChange={(event) =>
+                            setMovementItemFilters((value) => ({ ...value, category: event.target.value }))
+                          }
+                          value={movementItemFilters.category}
+                        >
+                          <option value="">All categories</option>
+                          {movementCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label="Stock location">
+                        <Select
+                          onChange={(event) =>
+                            setMovementItemFilters((value) => ({ ...value, locationId: event.target.value }))
+                          }
+                          value={movementItemFilters.locationId}
+                        >
+                          <option value="">All locations</option>
+                          {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+                        </Select>
+                      </Field>
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {filteredMovementItems.length} of {movementItems.length} products shown
+                    </p>
+                  </div>
                   <Field label="Item">
                     <Select
                       required
-                      value={movement.offeringId}
+                      value={selectedMovementItem?.id ?? ""}
                       onChange={(event) =>
                         setMovement((value) => ({
                           ...value,
@@ -1490,8 +1623,8 @@ export function InventoryDashboard() {
                         }))
                       }
                     >
-                      <option value="">Select item</option>
-                      {movementItems.map((item) => (
+                      <option value="">{filteredMovementItems.length ? "Select item" : "No products match these filters"}</option>
+                      {filteredMovementItems.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.brandName} · {item.name}
                           {item.sku ? ` · ${item.sku}` : ""}
