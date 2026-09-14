@@ -1049,7 +1049,7 @@ export function LeadCreatePage() {
               </div>
               )}
 
-              <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] -mx-5 -mb-5 border-t bg-white p-4 md:static md:m-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0">
+              <div className="-mx-5 -mb-5 mt-2 border-t bg-white p-4 md:m-0 md:flex md:justify-end md:border-0 md:bg-transparent md:p-0">
                 <Button className="h-12 w-full md:h-10 md:w-auto" data-tour={leadTourTarget("save")} disabled={saving} type="submit">
                   <Save className="h-4 w-4" />
                   {saving ? "Saving" : captureMode === "quick" ? "Save lead" : "Create lead"}
