@@ -44,6 +44,15 @@ describe("AI Guide knowledge", () => {
     expect(partner).toContain("cannot access suppliers");
   });
 
+  it("explains the shared product catalogue and branch-scoped stock", () => {
+    const answer = fallbackGuideAnswer("Can branches use the same product list when adding stock?");
+
+    expect(answer).toContain("one shared organization catalogue");
+    expect(answer).toContain("without creating a duplicate");
+    expect(answer).toContain("separate by branch and location");
+    expect(answer).toContain("readable card decks");
+  });
+
   it("covers current POS documents, quantity entry, and dashboard sales", () => {
     const pos = fallbackGuideAnswer("How do I type sales quantity and print an official invoice?");
     const dashboard = fallbackGuideAnswer("What sales records are shown on the dashboard?");

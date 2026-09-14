@@ -28,6 +28,10 @@ import { PrintAction } from "@/components/print-action";
 import { useAuth } from "@/features/auth/auth-provider";
 import { BarcodeScanner } from "@/features/inventory/barcode-scanner";
 import {
+  branchInventoryCatalog,
+  organizationInventoryCatalog,
+} from "@/features/inventory/inventory-catalog-scope";
+import {
   InventoryEnterprisePanel,
   type InventoryEnterpriseMode,
 } from "@/features/inventory/inventory-enterprise-panel";
@@ -334,15 +338,13 @@ export function InventoryDashboard() {
       const branchBalances = isPartner
         ? activeBalances
         : activeBalances.filter((balance) => balance.branchId === activeBranchId);
-      const branchOfferingIds = new Set(
-        branchBalances.map((balance) => balance.offeringId),
-      );
+      const organizationItems = organizationInventoryCatalog(nextItems);
       const branchItems = isPartner
-        ? nextItems
-        : nextItems.filter(
-            (item) =>
-              item.branchId === activeBranchId || branchOfferingIds.has(item.id),
-          );
+        ? organizationItems
+        : branchInventoryCatalog(nextItems, activeBalances, activeBranchId);
+      const selectableMovementItems = isPartner
+        ? branchItems
+        : organizationItems;
       const branchMovements = isPartner
         ? nextMovements
         : nextMovements.filter((movement) =>
@@ -356,10 +358,10 @@ export function InventoryDashboard() {
         ? nextComments
         : nextComments.filter((comment) => comment.branchId === activeBranchId);
       setBrands(nextBrands);
-      setReportItems(nextItems.filter((item) => Boolean(item.brandId)));
+      setReportItems(organizationItems);
       setReportBalances(activeBalances);
       setReportMovements(nextMovements);
-      setItems(branchItems.filter((item) => Boolean(item.brandId)));
+      setItems(branchItems);
       setBalances(branchBalances);
       setMovements(branchMovements);
       setComments(branchComments);
@@ -371,9 +373,9 @@ export function InventoryDashboard() {
       setMovement((value) => ({
         ...value,
         offeringId:
-          branchItems.some((item) => item.id === value.offeringId)
+          selectableMovementItems.some((item) => item.id === value.offeringId)
             ? value.offeringId
-            : branchItems.find((item) => item.brandId)?.id || "",
+            : selectableMovementItems[0]?.id || "",
       }));
     } catch (nextError) {
       setError(
@@ -530,7 +532,8 @@ export function InventoryDashboard() {
   const needsTo = ["receipt", "adjustmentIn", "transfer", "returnIn"].includes(
     effectiveMovementType,
   );
-  const selectedMovementItem = items.find(
+  const movementItems = isPartner ? items : reportItems;
+  const selectedMovementItem = movementItems.find(
     (item) => item.id === movement.offeringId,
   );
   const selectedMovementOption = movementOptions.find(
@@ -1046,7 +1049,49 @@ export function InventoryDashboard() {
                 </Select>
               </Field>
             </CardHeader>
-            <CardContent className="overflow-x-auto p-0">
+            <CardContent className="p-0">
+              <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
+                {paginatedItemTotals.map((item) => {
+                  const available = item.quantity - item.reserved;
+                  const low =
+                    item.reorderLevel !== undefined &&
+                    available <= Number(item.reorderLevel);
+                  return (
+                    <article className="rounded-lg border bg-background p-4 shadow-sm" key={item.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold">{item.name}</h3>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {item.brandName} · {titleCase(item.trackingMode ?? "none")}
+                          </p>
+                        </div>
+                        <Badge tone={low ? "warning" : "success"}>
+                          {low ? "Low stock" : "Healthy"}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 rounded-md bg-muted/60 p-3 text-xs">
+                        <p><span className="text-muted-foreground">SKU:</span> {item.sku || "—"}</p>
+                        {item.barcode ? <p className="mt-1"><span className="text-muted-foreground">Barcode:</span> {item.barcode}</p> : null}
+                      </div>
+                      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                        <div><dt className="text-xs text-muted-foreground">On hand</dt><dd className="mt-1 text-lg font-bold">{item.quantity}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">Available</dt><dd className="mt-1 text-lg font-bold">{available}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">Reserved</dt><dd className="mt-1 font-semibold">{item.reserved}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">Reorder level</dt><dd className="mt-1 font-semibold">{item.reorderLevel ?? "—"}</dd></div>
+                        {!isPartner ? <div className="col-span-2"><dt className="text-xs text-muted-foreground">Stock value</dt><dd className="mt-1 font-semibold">{formatCurrency(item.quantity * Number(item.costPrice ?? 0))}</dd></div> : null}
+                      </dl>
+                      {canEditItems || canSetup ? (
+                        <div className="mt-4 flex flex-wrap gap-2 border-t pt-3">
+                          {canEditItems ? <ButtonLink href={`/offerings/${item.id}/edit`} size="sm" variant="outline"><Pencil className="h-4 w-4" />Edit</ButtonLink> : null}
+                          {canSetup ? <Button className="text-danger" disabled={archivingItemId === item.id} onClick={() => void archiveItem(item)} size="sm" type="button" variant="outline"><Archive className="h-4 w-4" />{archivingItemId === item.id ? "Deleting" : "Delete"}</Button> : null}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+                {!itemTotals.length ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground sm:col-span-2">No branded inventory items are available yet.</div> : null}
+              </div>
+              <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[840px] text-left text-sm">
                 <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
                   <tr>
@@ -1140,6 +1185,7 @@ export function InventoryDashboard() {
                   ) : null}
                 </tbody>
               </table>
+              </div>
             </CardContent>
             {itemTotals.length > overviewPageSize ? (
               <div className="flex flex-col gap-3 border-t p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
@@ -1266,7 +1312,25 @@ export function InventoryDashboard() {
                   Recorded product sales across all branches
                 </CardTitle>
               </CardHeader>
-              <CardContent className="overflow-x-auto p-0">
+              <CardContent className="p-0">
+                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
+                  {salesMovements.map((entry) => (
+                    <article className="rounded-lg border bg-background p-4 shadow-sm" key={entry.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div><h3 className="font-semibold">{entry.offeringName}</h3><p className="mt-1 text-xs text-muted-foreground">{entry.brandName}</p></div>
+                        <p className="text-xl font-bold">{entry.quantity}</p>
+                      </div>
+                      <dl className="mt-3 grid gap-2 border-t pt-3 text-sm">
+                        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Date</dt><dd className="text-right font-medium">{formatDate(entry.occurredAt)}</dd></div>
+                        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Branch</dt><dd className="text-right font-medium">{entry.branchId}</dd></div>
+                        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Location</dt><dd className="text-right font-medium">{entry.fromLocationName || "—"}</dd></div>
+                        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Sale reference</dt><dd className="break-all text-right font-medium">{entry.externalReference || entry.referenceNumber}</dd></div>
+                      </dl>
+                    </article>
+                  ))}
+                  {!salesMovements.length ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground sm:col-span-2">No product sales have been recorded for the selected brands yet.</div> : null}
+                </div>
+                <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
                     <tr>
@@ -1317,6 +1381,7 @@ export function InventoryDashboard() {
                     ) : null}
                   </tbody>
                 </table>
+                </div>
               </CardContent>
             </Card>
           ) : null}
@@ -1329,6 +1394,10 @@ export function InventoryDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Add or move stock</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Products are shared across the organization. Quantities and
+                  stock movements remain controlled by branch and location.
+                </p>
               </CardHeader>
               <CardContent>
                 <form className="grid gap-3" onSubmit={submitMovement}>
@@ -1365,7 +1434,7 @@ export function InventoryDashboard() {
                   <Field label="Scan item">
                     <BarcodeScanner
                       onScan={(code) => {
-                        const item = items.find((entry) =>
+                        const item = movementItems.find((entry) =>
                           [entry.barcode, entry.sku].some(
                             (value) =>
                               String(value ?? "").toLowerCase() ===
@@ -1422,9 +1491,10 @@ export function InventoryDashboard() {
                       }
                     >
                       <option value="">Select item</option>
-                      {items.map((item) => (
+                      {movementItems.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.brandName} · {item.name}
+                          {item.sku ? ` · ${item.sku}` : ""}
                         </option>
                       ))}
                     </Select>
@@ -1592,7 +1662,25 @@ export function InventoryDashboard() {
             <CardHeader>
               <CardTitle>Movement ledger</CardTitle>
             </CardHeader>
-            <CardContent className="overflow-x-auto p-0">
+            <CardContent className="p-0">
+              <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
+                {movements.map((entry) => (
+                  <article className="rounded-lg border bg-background p-4 shadow-sm" key={entry.id}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0"><h3 className="font-semibold">{entry.offeringName}</h3><p className="mt-1 text-xs text-muted-foreground">{entry.brandName}</p></div>
+                      <Badge tone="info">{titleCase(entry.movementType)}</Badge>
+                    </div>
+                    <dl className="mt-3 grid gap-2 border-t pt-3 text-sm">
+                      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Quantity</dt><dd className="text-lg font-bold">{entry.quantity}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Date</dt><dd className="text-right font-medium">{formatDate(entry.occurredAt)}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Route</dt><dd className="text-right font-medium">{[entry.fromLocationName, entry.toLocationName].filter(Boolean).join(" → ") || "—"}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Reference</dt><dd className="break-all text-right font-medium">{entry.externalReference || entry.referenceNumber}</dd></div>
+                    </dl>
+                  </article>
+                ))}
+                {!movements.length ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground sm:col-span-2">No stock movements are available for this branch.</div> : null}
+              </div>
+              <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[850px] text-left text-sm">
                 <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
                   <tr>
@@ -1641,6 +1729,7 @@ export function InventoryDashboard() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </CardContent>
           </Card>
         </div>

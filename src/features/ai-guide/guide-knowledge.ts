@@ -271,10 +271,15 @@ export const guideTopics: GuideTopic[] = [
       "opening stock",
       "existing stock",
       "initial quantity",
+      "same product list",
+      "shared product catalogue",
+      "product list across branches",
     ],
     title: "Record a stock movement",
     steps: [
       "Go to Inventory, then Add / move stock. The form shows only actions allowed by your role.",
+      "The product selector uses one shared organization catalogue, so a product created from any branch can be stocked in another authorized branch without creating a duplicate. Stock quantities and movements remain separate by branch and location.",
+      "On phones and tablets, inventory stock, product-sale, location-balance, and movement records appear as readable card decks; desktop screens retain the compact tables.",
       "For stock already owned when the system is introduced, choose Enter existing / opening stock. For a delivery without a purchase order, choose Receive stock without a purchase order.",
       "Scan the item's barcode or select the product. For a sale, choose Record stock leaving and set its purpose to Sale.",
       "Enter the quantity and required source or destination location. Add the supplier, purchase order, job, or sale reference when applicable.",
@@ -619,7 +624,7 @@ Main routes and modules:
 - Clients: manage client records, communication, pagination, list/card views, creator attribution, and clickable WhatsApp phone links.
 - Deals: dynamic finance-facing pipeline for solar, materials, services, consultancy, installation, and custom work. Creation is deliberately focused on customer, ownership, timing, and quote essentials; lifecycle controls become available after saving. Solar deals use a multi-line installation quotation for catalog stock, direct-to-site materials, services, labour, transport, discounts, tax, selling totals, estimated costs, and planned fulfillment, with optional line details behind More options; other deal forms reveal fields based on category and type and inherit useful lead/client data.
 - Products/Services: catalog for solar equipment, materials, services, consultancy, maintenance, installation projects, and other sellable items.
-- Inventory: branch-aware stock balances, paginated stock and location-balance views with selectable page sizes, guided opening-stock entry, movement ledger, supplier master, searchable and status-filtered paid/part-paid/credit purchase orders, product creation from the purchase form, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, filtered CSV/A4 reports, and brand-partner collaboration. Purchases become active without approval; the approval queue is only for stock-count variances.
+- Inventory: branch-aware stock balances, paginated stock and location-balance views with selectable page sizes, responsive card decks for stock and movement records on phones and tablets, guided opening-stock entry, movement ledger, supplier master, searchable and status-filtered paid/part-paid/credit purchase orders, product creation from the purchase form, supplier balances, partial receiving, approval-controlled stock counts, reservations, barcode lookup, batch/serial traceability, filtered CSV/A4 reports, and brand-partner collaboration. Purchases become active without approval; the approval queue is only for stock-count variances.
 - Point of Sale: branch-aware checkout, directly typed whole-number quantities with plus/minus shortcuts, editable unit prices with retail/wholesale presets, customer details, discounts, tax, full/partial/unpaid sales, stock deduction, sales history, later payments, and selectable Vlingo Systems or Kada Builders Mart printable invoices and receipts.
 - Installation Projects: CRM-linked delivery workspaces for bill of materials, branch stock availability, reservations and issues, shortage procurement, direct-to-site materials, labour, transport, tasks, documents, receipts, costs, and forecast margin.
 - Marketing: campaign records connected to lead sources and sales follow-up.
