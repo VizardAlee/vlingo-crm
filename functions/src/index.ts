@@ -22,6 +22,7 @@ import { syncTaskToGoogleCalendar } from "./google-calendar.js";
 import { calculatePosRepayment, isValidPosPaymentMethod } from "./pos-payment.js";
 import { resolvePosPrice } from "./pos-pricing.js";
 import { calculateAdjustedSale } from "./pos-sale-management.js";
+import { matchesCustomerSearch, normalizedCustomerPhone } from "./pos-customers.js";
 
 initializeApp();
 
@@ -3573,6 +3574,41 @@ function officialSalesDocumentNumber(
   return `${companyCode}/${safeBranchCode}/${documentType}/${part("year")}/${part("month")}${part("day")}/${uniqueId.slice(0, 6).toUpperCase()}`;
 }
 
+export const searchPosCustomers = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const branchId = requireString(request.data?.branchId, "branchId");
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasAnyActorPermission(actor, ["pos.read", "pos.sell"])) {
+    throw new HttpsError("permission-denied", "You do not have permission to search POS customers.");
+  }
+  if (!canActorAccessBranch(actor, branchId)) {
+    throw new HttpsError("permission-denied", "You do not have access to this branch.");
+  }
+  const search = typeof request.data?.search === "string" ? request.data.search.trim().toLowerCase().slice(0, 120) : "";
+  const snapshot = await db.collection(`organizations/${organizationId}/clients`)
+    .limit(1000)
+    .get();
+  const customers = snapshot.docs
+    .filter((item) => item.data().isDeleted !== true && item.data().status !== "inactive")
+    .map((item) => {
+      const data = item.data();
+      return {
+        id: item.id,
+        fullName: String(data.fullName ?? data.companyName ?? "Unnamed customer"),
+        companyName: String(data.companyName ?? ""),
+        phoneNumber: String(data.phoneNumber ?? ""),
+        email: String(data.email ?? ""),
+        address: String(data.address ?? ""),
+        referenceNumber: String(data.referenceNumber ?? ""),
+      };
+    })
+    .filter((customer) => matchesCustomerSearch(customer, search))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+    .slice(0, 30);
+  return { customers };
+});
+
 export const createPosSale = onCall(callableOptions, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication is required.");
@@ -3625,9 +3661,39 @@ export const createPosSale = onCall(callableOptions, async (request) => {
   if (amountPaid > 0 && !isValidPosPaymentMethod(paymentMethod)) {
     throw new HttpsError("invalid-argument", "Select a payment method for the amount received.");
   }
-  const customerName = typeof request.data?.customerName === "string" && request.data.customerName.trim()
+  let customerName = typeof request.data?.customerName === "string" && request.data.customerName.trim()
     ? request.data.customerName.trim().slice(0, 160)
     : "Walk-in customer";
+  let customerPhone = typeof request.data?.customerPhone === "string" ? request.data.customerPhone.trim().slice(0, 60) : "";
+  let customerEmail = typeof request.data?.customerEmail === "string" ? request.data.customerEmail.trim().slice(0, 160) : "";
+  let customerAddress = typeof request.data?.customerAddress === "string" ? request.data.customerAddress.trim().slice(0, 500) : "";
+  const customerSource = ["walkIn", "existing", "new"].includes(request.data?.customerSource)
+    ? request.data.customerSource as "walkIn" | "existing" | "new"
+    : "walkIn";
+  const requestedCustomerId = typeof request.data?.customerId === "string" ? request.data.customerId.trim() : "";
+  const saveNewCustomer = customerSource === "new" && request.data?.saveNewCustomer === true;
+  if (customerSource === "existing" && !requestedCustomerId) {
+    throw new HttpsError("invalid-argument", "Select an existing customer.");
+  }
+  if (customerSource === "new" && (customerName === "Walk-in customer" || customerPhone.replace(/\D/g, "").length < 7)) {
+    throw new HttpsError("invalid-argument", "Enter the new customer's name and a valid phone number.");
+  }
+  const newCustomerId = saveNewCustomer
+    ? `pos-${createHash("sha256").update(normalizedCustomerPhone(customerPhone)).digest("hex").slice(0, 24)}`
+    : "";
+  let customerId = customerSource === "existing" ? requestedCustomerId : newCustomerId;
+  const customerRef = customerId ? db.doc(`organizations/${organizationId}/clients/${customerId}`) : null;
+  if (saveNewCustomer) {
+    const normalizedPhone = normalizedCustomerPhone(customerPhone);
+    const possibleDuplicates = await db.collection(`organizations/${organizationId}/clients`).limit(1000).get();
+    const duplicate = possibleDuplicates.docs.find((item) => {
+      const data = item.data();
+      return data.isDeleted !== true && normalizedCustomerPhone(data.phoneNormalized ?? data.phoneNumber) === normalizedPhone;
+    });
+    if (duplicate) {
+      throw new HttpsError("already-exists", "A customer with this phone number already exists. Search and select the existing customer.");
+    }
+  }
   const documentBrand = request.data?.documentBrand === undefined
     ? "vlingoSystems"
     : request.data.documentBrand;
@@ -3653,10 +3719,11 @@ export const createPosSale = onCall(callableOptions, async (request) => {
 
   let resultTotal = 0;
   await db.runTransaction(async (transaction) => {
-    const [branchSnapshot, ...snapshots] = await Promise.all([
+    const [branchSnapshot, customerSnapshot, offeringSnapshots, balanceSnapshots] = await Promise.all([
       transaction.get(branchRef),
-      ...offeringRefs.map((ref) => transaction.get(ref)),
-      ...balanceRefs.map((ref) => transaction.get(ref)),
+      customerRef ? transaction.get(customerRef) : null,
+      Promise.all(offeringRefs.map((ref) => transaction.get(ref))),
+      Promise.all(balanceRefs.map((ref) => transaction.get(ref))),
     ]);
     if (!branchSnapshot.exists || branchSnapshot.data()?.status === "closed") {
       throw new HttpsError("failed-precondition", "The selected branch is not active.");
@@ -3667,8 +3734,63 @@ export const createPosSale = onCall(callableOptions, async (request) => {
     receiptNumber = amountPaid > 0
       ? officialSalesDocumentNumber(branchCode, "RCT", soldAt, paymentRef?.id ?? saleRef.id, documentBrand)
       : "";
-    const offeringSnapshots = snapshots.slice(0, normalizedLines.length);
-    const balanceSnapshots = snapshots.slice(normalizedLines.length);
+    if (customerSource === "existing") {
+      const existingCustomer = customerSnapshot?.data() ?? {};
+      if (!customerSnapshot?.exists || existingCustomer.isDeleted === true || existingCustomer.status === "inactive") {
+        throw new HttpsError("failed-precondition", "The selected customer is no longer active.");
+      }
+      customerName = String(existingCustomer.fullName ?? existingCustomer.companyName ?? "Walk-in customer").slice(0, 160);
+      customerPhone = String(existingCustomer.phoneNumber ?? "").slice(0, 60);
+      customerEmail = String(existingCustomer.email ?? "").slice(0, 160);
+      customerAddress = String(existingCustomer.address ?? "").slice(0, 500);
+    } else if (saveNewCustomer && customerRef) {
+      if (customerSnapshot?.exists) {
+        throw new HttpsError("already-exists", "A customer with this phone number already exists. Search and select the existing customer.");
+      }
+      transaction.set(customerRef, {
+        organizationId,
+        branchId,
+        referenceNumber: `CLIENT-${soldAt.getTime()}-${customerRef.id.slice(-5).toUpperCase()}`,
+        clientType: "individual",
+        category: "POS customer",
+        fullName: customerName,
+        phoneNumber: customerPhone,
+        phoneNormalized: normalizedCustomerPhone(customerPhone),
+        email: customerEmail,
+        address: customerAddress,
+        assignedRelationshipManager: actor.id,
+        tags: ["pos"],
+        notes: "Created from Point of Sale.",
+        status: "active",
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+        updatedByEmail: actor.email,
+        updatedByName: actor.displayName,
+        isDeleted: false,
+      });
+      transaction.set(db.collection(`organizations/${organizationId}/auditLogs`).doc(), {
+        action: "pos.customer.create",
+        actorId: actor.id,
+        actorName: actor.displayName,
+        branchId,
+        createdAt: FieldValue.serverTimestamp(),
+        entityId: customerRef.id,
+        entityType: "client",
+        organizationId,
+        previousValue: null,
+        newValue: { fullName: customerName, phoneNumber: customerPhone, email: customerEmail, source: "pos" },
+      });
+    } else if (customerSource === "walkIn") {
+      customerId = "";
+      customerName = "Walk-in customer";
+      customerPhone = "";
+      customerEmail = "";
+      customerAddress = "";
+    }
     const saleLines = normalizedLines.map((line, index) => {
       const offeringSnapshot = offeringSnapshots[index];
       const balanceSnapshot = balanceSnapshots[index];
@@ -3793,10 +3915,12 @@ export const createPosSale = onCall(callableOptions, async (request) => {
       invoiceNumber,
       receiptNumber,
       documentBrand,
+      customerId,
+      customerSource,
       customerName,
-      customerPhone: typeof request.data?.customerPhone === "string" ? request.data.customerPhone.trim().slice(0, 60) : "",
-      customerEmail: typeof request.data?.customerEmail === "string" ? request.data.customerEmail.trim().slice(0, 160) : "",
-      customerAddress: typeof request.data?.customerAddress === "string" ? request.data.customerAddress.trim().slice(0, 500) : "",
+      customerPhone,
+      customerEmail,
+      customerAddress,
       lines: saleLines,
       subtotal,
       discountAmount,
@@ -3818,9 +3942,9 @@ export const createPosSale = onCall(callableOptions, async (request) => {
         recordedBy: actor.id,
         saleSnapshot: {
           customerName,
-          customerPhone: typeof request.data?.customerPhone === "string" ? request.data.customerPhone.trim().slice(0, 60) : "",
-          customerEmail: typeof request.data?.customerEmail === "string" ? request.data.customerEmail.trim().slice(0, 160) : "",
-          customerAddress: typeof request.data?.customerAddress === "string" ? request.data.customerAddress.trim().slice(0, 500) : "",
+          customerPhone,
+          customerEmail,
+          customerAddress,
           lines: saleLines,
           subtotal,
           discountAmount,

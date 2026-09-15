@@ -15,7 +15,7 @@ import { branchInventoryCatalog } from "@/features/inventory/inventory-catalog-s
 import { hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { listInventoryBalances, listInventoryItems } from "@/services/inventory";
-import { adjustPosSale, createPosSale, listPosSales, recordPosSalePayment, voidPosSale } from "@/services/pos";
+import { adjustPosSale, createPosSale, listPosSales, recordPosSalePayment, searchPosCustomers, voidPosSale, type PosCustomerSearchResult } from "@/services/pos";
 import type { InventoryBalance, Offering, PosDocumentBrand, PosSale, RentalPaymentMethod } from "@/types/crm";
 
 type CartLine = { offeringId: string; quantity: number; unitPrice: number; discountAmount: number };
@@ -79,6 +79,12 @@ export function PosDashboard() {
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", address: "", notes: "" });
+  const [customerMode, setCustomerMode] = useState<"walkIn" | "existing" | "new">("walkIn");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerResults, setCustomerResults] = useState<PosCustomerSearchResult[]>([]);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [saveNewCustomer, setSaveNewCustomer] = useState(true);
   const [payment, setPayment] = useState({ amountPaid: 0, method: "cash" as RentalPaymentMethod, reference: "", taxRate: 0 });
   const [documentBrand, setDocumentBrand] = useState<PosDocumentBrand>("vlingoSystems");
   const [paymentForm, setPaymentForm] = useState({ saleId: "", amount: 0, method: "cash" as RentalPaymentMethod, reference: "" });
@@ -86,6 +92,7 @@ export function PosDashboard() {
   const [voidForm, setVoidForm] = useState({ saleId: "", reason: "" });
   const canSell = hasPermission(member, "pos.sell");
   const canManageSales = hasPermission(member, "pos.manageSales");
+  const canReadCustomers = hasPermission(member, "clients.read");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,6 +118,21 @@ export function PosDashboard() {
     const timeout = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timeout);
   }, [load]);
+
+  useEffect(() => {
+    if (customerMode !== "existing") return;
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      setCustomerSearchLoading(true);
+      void searchPosCustomers({ organizationId: activeOrganizationId, branchId: activeBranchId, search: customerSearch })
+        .then((result) => { if (active) setCustomerResults(result.customers); })
+        .catch((nextError) => {
+          if (active) toast({ title: "Unable to search customers", description: nextError instanceof Error ? nextError.message : "Try again.", variant: "error" });
+        })
+        .finally(() => { if (active) setCustomerSearchLoading(false); });
+    }, 250);
+    return () => { active = false; window.clearTimeout(timeout); };
+  }, [activeBranchId, activeOrganizationId, customerMode, customerSearch, toast]);
 
   const stock = useMemo(() => new Map(items.map((item) => {
     const itemBalances = balances.filter((balance) => balance.offeringId === item.id);
@@ -180,6 +202,28 @@ export function PosDashboard() {
     stepQuantity(offeringId, quantity);
   }
 
+  function changeCustomerMode(mode: "walkIn" | "existing" | "new") {
+    setCustomerMode(mode);
+    setSelectedCustomerId("");
+    setCustomerSearch("");
+    setCustomerResults([]);
+    setCustomer((value) => ({ name: "", phone: "", email: "", address: "", notes: value.notes }));
+  }
+
+  function selectExistingCustomer(customerId: string) {
+    setSelectedCustomerId(customerId);
+    const selected = customerResults.find((entry) => entry.id === customerId);
+    if (selected) {
+      setCustomer((value) => ({
+        ...value,
+        name: selected.fullName,
+        phone: selected.phoneNumber,
+        email: selected.email ?? "",
+        address: selected.address ?? "",
+      }));
+    }
+  }
+
   async function submitSale(event: React.FormEvent) {
     event.preventDefault();
     if (!cart.length) return;
@@ -187,11 +231,24 @@ export function PosDashboard() {
       toast({ title: "Review the cart", description: "A quantity or discount is outside the allowed range.", variant: "error" });
       return;
     }
+    if (customerMode === "existing" && !selectedCustomerId) {
+      toast({ title: "Select a customer", description: "Choose a matching customer from the customer database.", variant: "error" });
+      setMobileStep("customer");
+      return;
+    }
+    if (customerMode === "new" && (customer.name.trim().length < 2 || customer.phone.replace(/\D/g, "").length < 7)) {
+      toast({ title: "Customer details required", description: "Enter the new customer's name and valid phone number.", variant: "error" });
+      setMobileStep("customer");
+      return;
+    }
     setSaving("sale");
     try {
       const result = await createPosSale({
         organizationId: activeOrganizationId,
         branchId: activeBranchId,
+        customerSource: customerMode,
+        customerId: selectedCustomerId || undefined,
+        saveNewCustomer: customerMode === "new" && saveNewCustomer,
         customerName: customer.name,
         customerPhone: customer.phone,
         customerEmail: customer.email,
@@ -207,6 +264,9 @@ export function PosDashboard() {
       });
       setCart([]);
       setCustomer({ name: "", phone: "", email: "", address: "", notes: "" });
+      setCustomerMode("walkIn");
+      setSelectedCustomerId("");
+      setCustomerSearch("");
       setPayment({ amountPaid: 0, method: "cash", reference: "", taxRate: 0 });
       toast({ title: "Sale completed", description: `${result.invoiceNumber} created and inventory updated.`, variant: "success" });
       await load();
@@ -405,10 +465,20 @@ export function PosDashboard() {
             <Card>
               <CardHeader><CardTitle>Customer details</CardTitle></CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <Field label="Customer name"><Input autoComplete="name" onChange={(event) => setCustomer((value) => ({ ...value, name: event.target.value }))} placeholder="Walk-in customer if blank" value={customer.name} /></Field>
-                <Field label="Phone"><Input autoComplete="tel" inputMode="tel" onChange={(event) => setCustomer((value) => ({ ...value, phone: event.target.value }))} value={customer.phone} /></Field>
-                <Field label="Email"><Input autoComplete="email" inputMode="email" onChange={(event) => setCustomer((value) => ({ ...value, email: event.target.value }))} type="email" value={customer.email} /></Field>
-                <Field label="Address"><Input onChange={(event) => setCustomer((value) => ({ ...value, address: event.target.value }))} value={customer.address} /></Field>
+                <div className="grid grid-cols-3 gap-2 sm:col-span-2" role="group" aria-label="Customer type"><Button onClick={() => changeCustomerMode("walkIn")} type="button" variant={customerMode === "walkIn" ? "primary" : "outline"}>Walk-in</Button><Button onClick={() => changeCustomerMode("existing")} type="button" variant={customerMode === "existing" ? "primary" : "outline"}>Existing</Button><Button onClick={() => changeCustomerMode("new")} type="button" variant={customerMode === "new" ? "primary" : "outline"}>New</Button></div>
+                {customerMode === "walkIn" ? <div className="rounded-md border border-dashed bg-muted/40 p-4 text-sm text-muted-foreground sm:col-span-2"><strong className="block text-foreground">Walk-in customer</strong>No customer record will be created or linked. Choose Existing for a repeat customer or New to save a reusable customer profile.</div> : null}
+                {customerMode === "existing" ? <>
+                  <Field className="sm:col-span-2" label="Search organization customers"><Input autoFocus onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search name, phone, email, or customer number" value={customerSearch} /><span className="text-xs text-muted-foreground">{customerSearchLoading ? "Searching…" : `${customerResults.length} matching customer${customerResults.length === 1 ? "" : "s"}`}</span></Field>
+                  <Field className="sm:col-span-2" label="Select customer"><Select onChange={(event) => selectExistingCustomer(event.target.value)} value={selectedCustomerId}><option value="">Choose a matching customer</option>{customerResults.map((entry) => <option key={entry.id} value={entry.id}>{entry.fullName}{entry.companyName ? ` · ${entry.companyName}` : ""} · {entry.phoneNumber || "No phone"}{entry.referenceNumber ? ` · ${entry.referenceNumber}` : ""}</option>)}</Select></Field>
+                  {selectedCustomerId ? <div className="grid gap-1 rounded-md border bg-primary/5 p-4 text-sm sm:col-span-2"><strong>{customer.name}</strong><span>{customer.phone || "No phone number"}</span>{customer.email ? <span>{customer.email}</span> : null}{customer.address ? <span>{customer.address}</span> : null}<span className="mt-1 text-xs text-muted-foreground">Linked to customer ID {selectedCustomerId}. Details are taken from the customer database to prevent mismatches.</span></div> : null}
+                </> : null}
+                {customerMode === "new" ? <>
+                  <Field label="Customer name"><Input autoComplete="name" onChange={(event) => setCustomer((value) => ({ ...value, name: event.target.value }))} required value={customer.name} /></Field>
+                  <Field label="Phone"><Input autoComplete="tel" inputMode="tel" onChange={(event) => setCustomer((value) => ({ ...value, phone: event.target.value }))} required value={customer.phone} /></Field>
+                  <Field label="Email"><Input autoComplete="email" inputMode="email" onChange={(event) => setCustomer((value) => ({ ...value, email: event.target.value }))} type="email" value={customer.email} /></Field>
+                  <Field label="Address"><Input onChange={(event) => setCustomer((value) => ({ ...value, address: event.target.value }))} value={customer.address} /></Field>
+                  <label className="flex min-h-11 items-center gap-3 rounded-md border bg-white px-3 text-sm sm:col-span-2"><input checked={saveNewCustomer} className="h-4 w-4 accent-primary" onChange={(event) => setSaveNewCustomer(event.target.checked)} type="checkbox" /><span><strong className="block">Save to customer database</strong><span className="text-xs text-muted-foreground">Recommended so future sales use the same verified details and customer history.</span></span></label>
+                </> : null}
                 <Field className="sm:col-span-2" label="Sale notes"><Textarea onChange={(event) => setCustomer((value) => ({ ...value, notes: event.target.value }))} value={customer.notes} /></Field>
                 <div className="grid grid-cols-2 gap-2 sm:col-span-2 xl:hidden"><Button onClick={() => setMobileStep("products")} type="button" variant="outline">Back</Button><Button onClick={() => setMobileStep("checkout")} type="button">Review sale</Button></div>
               </CardContent>
@@ -459,7 +529,7 @@ export function PosDashboard() {
               return (
               <div className={`rounded-md border p-4 ${sale.saleStatus === "void" ? "border-red-200 bg-red-50/50" : ""}`} key={sale.id}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div><div className="flex flex-wrap items-center gap-2"><strong>{sale.invoiceNumber}</strong>{sale.saleStatus === "void" ? <Badge tone="danger">Void</Badge> : <Badge tone={paymentTone(sale.paymentStatus)}>{titleCase(sale.paymentStatus)}</Badge>}<Badge tone="muted">{documentBrandLabel(sale.documentBrand)}</Badge>{sale.revision ? <Badge tone="warning">Revision {sale.revision}</Badge> : null}</div><p className="mt-1 text-sm text-muted-foreground">{sale.customerName} · {formatDate(sale.soldAt)} · {sale.lines.length} product line(s)</p>{sale.saleStatus === "void" && sale.voidReason ? <p className="mt-1 text-xs font-medium text-red-700">Void reason: {sale.voidReason}</p> : null}</div>
+                  <div><div className="flex flex-wrap items-center gap-2"><strong>{sale.invoiceNumber}</strong>{sale.saleStatus === "void" ? <Badge tone="danger">Void</Badge> : <Badge tone={paymentTone(sale.paymentStatus)}>{titleCase(sale.paymentStatus)}</Badge>}<Badge tone="muted">{documentBrandLabel(sale.documentBrand)}</Badge>{sale.customerId ? <Badge tone="info">Linked customer</Badge> : null}{sale.revision ? <Badge tone="warning">Revision {sale.revision}</Badge> : null}</div><p className="mt-1 text-sm text-muted-foreground">{sale.customerId && canReadCustomers ? <Link className="font-medium text-primary hover:underline" href={`/clients/${sale.customerId}`}>{sale.customerName}</Link> : sale.customerName} · {formatDate(sale.soldAt)} · {sale.lines.length} product line(s)</p>{sale.saleStatus === "void" && sale.voidReason ? <p className="mt-1 text-xs font-medium text-red-700">Void reason: {sale.voidReason}</p> : null}</div>
                   <div className="md:text-right"><strong className="text-lg">{formatCurrency(sale.totalAmount)}</strong><p className="text-xs text-muted-foreground">{formatCurrency(sale.balanceDue)} due</p></div>
                 </div>
                 {(sale.adjustmentHistory?.length ?? 0) > 0 ? <details className="mt-3 rounded-md bg-muted/60 p-3 text-xs"><summary className="cursor-pointer font-semibold">View adjustment history ({sale.adjustmentHistory?.length})</summary><div className="mt-2 grid gap-2">{sale.adjustmentHistory?.slice().reverse().map((entry) => <div className="flex flex-col gap-1 border-t pt-2 sm:flex-row sm:items-center sm:justify-between" key={`${entry.revision}-${String(entry.adjustedAt)}`}><span>Revision {entry.revision}: {entry.reason}</span><span className="text-muted-foreground">{formatCurrency(entry.previousTotal)} → {formatCurrency(entry.revisedTotal)} · {entry.adjustedByName || "Authorized user"} · {formatDate(entry.adjustedAt)}</span></div>)}</div></details> : null}

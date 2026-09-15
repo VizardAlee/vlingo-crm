@@ -5,7 +5,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import { enrichFirestoreError } from "@/lib/firebase/permission-errors";
 import { orgCollectionPath } from "@/services/firestore-paths";
-import type { Member, PosDocumentBrand, PosSale, RentalPaymentMethod } from "@/types/crm";
+import type { Member, PosCustomerSource, PosDocumentBrand, PosSale, RentalPaymentMethod } from "@/types/crm";
 
 function dateValue(value: unknown) {
   return value && typeof value === "object" && "toDate" in value
@@ -51,6 +51,9 @@ async function posCallable<TInput, TResult>(name: string, input: TInput) {
 export interface CreatePosSaleInput {
   organizationId: string;
   branchId: string;
+  customerSource?: PosCustomerSource;
+  customerId?: string;
+  saveNewCustomer?: boolean;
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
@@ -63,6 +66,20 @@ export interface CreatePosSaleInput {
   paymentReference?: string;
   soldAt?: string;
   notes?: string;
+}
+
+export interface PosCustomerSearchResult {
+  id: string;
+  fullName: string;
+  companyName?: string;
+  phoneNumber: string;
+  email?: string;
+  address?: string;
+  referenceNumber?: string;
+}
+
+export function searchPosCustomers(input: { organizationId: string; branchId: string; search?: string }) {
+  return posCallable<typeof input, { customers: PosCustomerSearchResult[] }>("searchPosCustomers", input);
 }
 
 export function createPosSale(input: CreatePosSaleInput) {
