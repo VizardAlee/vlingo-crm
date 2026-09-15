@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeReportScopeFilter,
   safeCsvCell,
   scopePurchase,
   scopeSale,
 } from "../../src/features/reports/organization-report-utils";
 
 describe("organization report calculations", () => {
+  it("treats the all-brands UI value as an unrestricted report scope", () => {
+    expect(normalizeReportScopeFilter("all")).toBe("");
+    expect(normalizeReportScopeFilter(" ALL ")).toBe("");
+    expect(normalizeReportScopeFilter(null)).toBe("");
+    expect(normalizeReportScopeFilter("brand-bread")).toBe("brand-bread");
+  });
+
   it("allocates a mixed-brand sale using line value", () => {
     const result = scopeSale(
       {

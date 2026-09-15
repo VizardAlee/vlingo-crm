@@ -8,6 +8,7 @@ import type {
   ReportBreakdownRow,
 } from "@/features/reports/organization-report-types";
 import {
+  normalizeReportScopeFilter,
   saleLineAmount,
   scopePurchase,
   scopeSale,
@@ -114,7 +115,7 @@ export async function GET(request: Request) {
     const dateFrom = url.searchParams.get("from") ?? "";
     const dateTo = url.searchParams.get("to") ?? "";
     const requestedBranchId = url.searchParams.get("branchId")?.trim() ?? "";
-    const brandId = url.searchParams.get("brandId")?.trim() ?? "";
+    const brandId = normalizeReportScopeFilter(url.searchParams.get("brandId"));
     const start = reportDate(dateFrom);
     const end = reportDate(dateTo, true);
     if (!organizationId || !start || !end || start > end)

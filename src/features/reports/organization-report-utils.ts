@@ -1,5 +1,10 @@
 type ReportRecord = Record<string, unknown>;
 
+export function normalizeReportScopeFilter(value: string | null | undefined) {
+  const normalized = value?.trim() ?? "";
+  return normalized.toLowerCase() === "all" ? "" : normalized;
+}
+
 export function safeCsvCell(value: string | number) {
   const text = String(value);
   const safe = /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
