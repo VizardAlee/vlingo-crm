@@ -89,3 +89,24 @@ export function recordPosSalePayment(input: {
     paymentStatus: "partPaid" | "paid";
   }>("recordPosSalePayment", input);
 }
+
+export interface AdjustPosSaleInput {
+  organizationId: string;
+  saleId: string;
+  reason: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  notes?: string;
+  taxRate: number;
+  lines: Array<{ offeringId: string; quantity: number; unitPrice: number; discountAmount: number }>;
+}
+
+export function adjustPosSale(input: AdjustPosSaleInput) {
+  return posCallable<AdjustPosSaleInput, { ok: boolean; revisedTotal: number; revision: number }>("adjustPosSale", input);
+}
+
+export function voidPosSale(input: { organizationId: string; saleId: string; reason: string }) {
+  return posCallable<typeof input, { ok: boolean }>("voidPosSale", input);
+}

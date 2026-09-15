@@ -183,6 +183,23 @@ describe("route access rules", () => {
   });
 
   it("keeps role permissions aligned with operational responsibilities", () => {
+    expect(rolePermissions.superAdmin).toContain("pos.manageSales");
+    expect(rolePermissions.managingDirector).toContain("pos.manageSales");
+    expect(rolePermissions.operationsManager).toContain("pos.manageSales");
+    expect(rolePermissions.salesManager).not.toContain("pos.manageSales");
+    expect(hasPermission({
+      branchAccess: "all",
+      branchId: "head-office",
+      createdBy: "system",
+      displayName: "Managing Director",
+      email: "md@example.com",
+      id: "md-1",
+      organizationId: "org-a",
+      permissions: [],
+      role: "managingDirector",
+      status: "active",
+      updatedBy: "system",
+    }, "pos.manageSales")).toBe(true);
     expect(rolePermissions.salesExecutive).toEqual(expect.arrayContaining(["deals.update", "offerings.read", "pos.read", "pos.sell"]));
     expect(rolePermissions.salesManager).toEqual(expect.arrayContaining(["pos.read", "pos.sell"]));
     expect(rolePermissions.salesExecutive).not.toEqual(expect.arrayContaining(["clients.update", "finance.create", "users.manage"]));

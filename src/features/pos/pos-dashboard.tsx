@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Banknote, FileText, Minus, Plus, Printer, Search, ShoppingCart, Trash2 } from "lucide-react";
+import { Banknote, Ban, FileText, Minus, Pencil, Plus, Printer, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,25 @@ import { ErrorState, LoadingState, PermissionDenied } from "@/components/ui/stat
 import { useToast } from "@/components/ui/toast";
 import { GuidedTour, type GuidedTourStep } from "@/components/tour/guided-tour";
 import { useAuth } from "@/features/auth/auth-provider";
+import { branchInventoryCatalog } from "@/features/inventory/inventory-catalog-scope";
 import { hasPermission } from "@/lib/permissions";
 import { formatCurrency, formatDate, titleCase } from "@/lib/utils";
 import { listInventoryBalances, listInventoryItems } from "@/services/inventory";
-import { createPosSale, listPosSales, recordPosSalePayment } from "@/services/pos";
+import { adjustPosSale, createPosSale, listPosSales, recordPosSalePayment, voidPosSale } from "@/services/pos";
 import type { InventoryBalance, Offering, PosDocumentBrand, PosSale, RentalPaymentMethod } from "@/types/crm";
 
 type CartLine = { offeringId: string; quantity: number; unitPrice: number; discountAmount: number };
+type SaleAdjustmentDraft = {
+  saleId: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  customerAddress: string;
+  notes: string;
+  reason: string;
+  taxRate: number;
+  lines: Array<{ offeringId: string; offeringName: string; quantity: number; unitPrice: number; discountAmount: number }>;
+};
 const paymentMethods: Array<{ value: RentalPaymentMethod; label: string }> = [
   { value: "cash", label: "Cash" },
   { value: "pos", label: "Card / POS terminal" },
@@ -70,7 +82,10 @@ export function PosDashboard() {
   const [payment, setPayment] = useState({ amountPaid: 0, method: "cash" as RentalPaymentMethod, reference: "", taxRate: 0 });
   const [documentBrand, setDocumentBrand] = useState<PosDocumentBrand>("vlingoSystems");
   const [paymentForm, setPaymentForm] = useState({ saleId: "", amount: 0, method: "cash" as RentalPaymentMethod, reference: "" });
+  const [adjustmentForm, setAdjustmentForm] = useState<SaleAdjustmentDraft | null>(null);
+  const [voidForm, setVoidForm] = useState({ saleId: "", reason: "" });
   const canSell = hasPermission(member, "pos.sell");
+  const canManageSales = hasPermission(member, "pos.manageSales");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,8 +96,9 @@ export function PosDashboard() {
         listInventoryBalances(activeOrganizationId, member),
         listPosSales(activeOrganizationId, member),
       ]);
-      setItems(nextItems.filter((item) => item.status === "active" && Boolean(item.brandId)));
-      setBalances(nextBalances.filter((balance) => balance.branchId === activeBranchId && balance.locationId === activeBranchId));
+      const branchBalances = nextBalances.filter((balance) => balance.branchId === activeBranchId && balance.locationId === activeBranchId);
+      setItems(branchInventoryCatalog(nextItems, branchBalances, activeBranchId).filter((item) => item.status === "active"));
+      setBalances(branchBalances);
       setSales(nextSales.filter((sale) => sale.branchId === activeBranchId));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to load point of sale.");
@@ -236,6 +252,89 @@ export function PosDashboard() {
     }
   }
 
+  function beginAdjustment(sale: PosSale) {
+    setVoidForm({ saleId: "", reason: "" });
+    setAdjustmentForm({
+      saleId: sale.id,
+      customerName: sale.customerName,
+      customerPhone: sale.customerPhone ?? "",
+      customerEmail: sale.customerEmail ?? "",
+      customerAddress: sale.customerAddress ?? "",
+      notes: sale.notes ?? "",
+      reason: "",
+      taxRate: Number(sale.taxRate ?? 0),
+      lines: sale.lines.map((line) => ({
+        offeringId: line.offeringId,
+        offeringName: line.offeringName,
+        quantity: Number(line.quantity),
+        unitPrice: Number(line.unitPrice),
+        discountAmount: Number(line.discountAmount ?? 0),
+      })),
+    });
+  }
+
+  function updateAdjustmentLine(offeringId: string, changes: Partial<SaleAdjustmentDraft["lines"][number]>) {
+    setAdjustmentForm((current) => current ? {
+      ...current,
+      lines: current.lines.map((line) => line.offeringId === offeringId ? { ...line, ...changes } : line),
+    } : current);
+  }
+
+  async function submitAdjustment(event: React.FormEvent) {
+    event.preventDefault();
+    if (!adjustmentForm || adjustmentForm.reason.trim().length < 5) {
+      toast({ title: "Reason required", description: "Explain the correction in at least 5 characters.", variant: "error" });
+      return;
+    }
+    if (adjustmentForm.lines.some((line) => !Number.isInteger(line.quantity) || line.quantity <= 0 || line.unitPrice < 0 || line.discountAmount < 0 || line.discountAmount > line.quantity * line.unitPrice)) {
+      toast({ title: "Review the adjustment", description: "Quantities, prices, or discounts are invalid.", variant: "error" });
+      return;
+    }
+    setSaving(`adjust:${adjustmentForm.saleId}`);
+    try {
+      const result = await adjustPosSale({
+        organizationId: activeOrganizationId,
+        saleId: adjustmentForm.saleId,
+        reason: adjustmentForm.reason,
+        customerName: adjustmentForm.customerName,
+        customerPhone: adjustmentForm.customerPhone,
+        customerEmail: adjustmentForm.customerEmail,
+        customerAddress: adjustmentForm.customerAddress,
+        notes: adjustmentForm.notes,
+        taxRate: adjustmentForm.taxRate,
+        lines: adjustmentForm.lines.map(({ offeringId, quantity, unitPrice, discountAmount }) => ({ offeringId, quantity, unitPrice, discountAmount })),
+      });
+      toast({ title: "Sale adjusted", description: `Revision ${result.revision} saved. Inventory and balance due were reconciled.`, variant: "success" });
+      setAdjustmentForm(null);
+      await load();
+    } catch (nextError) {
+      toast({ title: "Unable to adjust sale", description: nextError instanceof Error ? nextError.message : "Try again.", variant: "error" });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function submitVoid(event: React.FormEvent) {
+    event.preventDefault();
+    const sale = sales.find((entry) => entry.id === voidForm.saleId);
+    if (!sale || voidForm.reason.trim().length < 5) {
+      toast({ title: "Reason required", description: "Explain why the sale is being voided in at least 5 characters.", variant: "error" });
+      return;
+    }
+    if (!window.confirm(`Void ${sale.invoiceNumber}? Stock will be restored and linked payments will be reversed. This cannot be undone.`)) return;
+    setSaving(`void:${sale.id}`);
+    try {
+      await voidPosSale({ organizationId: activeOrganizationId, saleId: sale.id, reason: voidForm.reason });
+      toast({ title: "Sale voided", description: `${sale.invoiceNumber} was retained for audit; its stock and finance effects were reversed.`, variant: "success" });
+      setVoidForm({ saleId: "", reason: "" });
+      await load();
+    } catch (nextError) {
+      toast({ title: "Unable to void sale", description: nextError instanceof Error ? nextError.message : "Try again.", variant: "error" });
+    } finally {
+      setSaving(null);
+    }
+  }
+
   if (!hasPermission(member, "pos.read")) return <PermissionDenied />;
   if (loading) return <LoadingState label="Loading point of sale" />;
   if (error) return <ErrorState message={error} />;
@@ -352,16 +451,32 @@ export function PosDashboard() {
         <Card>
           <CardHeader><CardTitle>Sales history</CardTitle></CardHeader>
           <CardContent className="grid gap-3">
-            {sales.map((sale) => (
-              <div className="rounded-md border p-4" key={sale.id}>
+            {sales.map((sale) => {
+              const editing = adjustmentForm?.saleId === sale.id ? adjustmentForm : null;
+              const revisedSubtotal = editing?.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0) ?? 0;
+              const revisedDiscount = editing?.lines.reduce((sum, line) => sum + line.discountAmount, 0) ?? 0;
+              const revisedTotal = money(revisedSubtotal - revisedDiscount + (revisedSubtotal - revisedDiscount) * Number(editing?.taxRate ?? 0) / 100);
+              return (
+              <div className={`rounded-md border p-4 ${sale.saleStatus === "void" ? "border-red-200 bg-red-50/50" : ""}`} key={sale.id}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div><div className="flex flex-wrap items-center gap-2"><strong>{sale.invoiceNumber}</strong><Badge tone={paymentTone(sale.paymentStatus)}>{titleCase(sale.paymentStatus)}</Badge><Badge tone="muted">{documentBrandLabel(sale.documentBrand)}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{sale.customerName} · {formatDate(sale.soldAt)} · {sale.lines.length} product line(s)</p></div>
+                  <div><div className="flex flex-wrap items-center gap-2"><strong>{sale.invoiceNumber}</strong>{sale.saleStatus === "void" ? <Badge tone="danger">Void</Badge> : <Badge tone={paymentTone(sale.paymentStatus)}>{titleCase(sale.paymentStatus)}</Badge>}<Badge tone="muted">{documentBrandLabel(sale.documentBrand)}</Badge>{sale.revision ? <Badge tone="warning">Revision {sale.revision}</Badge> : null}</div><p className="mt-1 text-sm text-muted-foreground">{sale.customerName} · {formatDate(sale.soldAt)} · {sale.lines.length} product line(s)</p>{sale.saleStatus === "void" && sale.voidReason ? <p className="mt-1 text-xs font-medium text-red-700">Void reason: {sale.voidReason}</p> : null}</div>
                   <div className="md:text-right"><strong className="text-lg">{formatCurrency(sale.totalAmount)}</strong><p className="text-xs text-muted-foreground">{formatCurrency(sale.balanceDue)} due</p></div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2"><Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/invoice`}><FileText className="h-4 w-4" />Invoice</Link>{(sale.paymentHistory ?? []).map((entry, index) => <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt/${encodeURIComponent(entry.receiptNumber)}`} key={entry.receiptNumber}><Printer className="h-4 w-4" />Receipt {index + 1}</Link>)}{sale.amountPaid > 0 && !sale.paymentHistory?.length ? <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt`}><Printer className="h-4 w-4" />Receipt</Link> : null}{canSell && sale.balanceDue > 0 ? <Button onClick={() => setPaymentForm({ saleId: sale.id, amount: money(sale.balanceDue), method: "cash", reference: "" })} size="sm" type="button" variant="secondary">Record payment</Button> : null}</div>
+                {(sale.adjustmentHistory?.length ?? 0) > 0 ? <details className="mt-3 rounded-md bg-muted/60 p-3 text-xs"><summary className="cursor-pointer font-semibold">View adjustment history ({sale.adjustmentHistory?.length})</summary><div className="mt-2 grid gap-2">{sale.adjustmentHistory?.slice().reverse().map((entry) => <div className="flex flex-col gap-1 border-t pt-2 sm:flex-row sm:items-center sm:justify-between" key={`${entry.revision}-${String(entry.adjustedAt)}`}><span>Revision {entry.revision}: {entry.reason}</span><span className="text-muted-foreground">{formatCurrency(entry.previousTotal)} → {formatCurrency(entry.revisedTotal)} · {entry.adjustedByName || "Authorized user"} · {formatDate(entry.adjustedAt)}</span></div>)}</div></details> : null}
+                <div className="mt-3 flex flex-wrap gap-2"><Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/invoice`}><FileText className="h-4 w-4" />Invoice</Link>{(sale.paymentHistory ?? []).map((entry, index) => <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt/${encodeURIComponent(entry.receiptNumber)}`} key={entry.receiptNumber}><Printer className="h-4 w-4" />Receipt {index + 1}</Link>)}{sale.amountPaid > 0 && !sale.paymentHistory?.length ? <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium" href={`/pos/sales/${sale.id}/receipt`}><Printer className="h-4 w-4" />Receipt</Link> : null}{canSell && sale.saleStatus === "completed" && sale.balanceDue > 0 ? <Button onClick={() => setPaymentForm({ saleId: sale.id, amount: money(sale.balanceDue), method: "cash", reference: "" })} size="sm" type="button" variant="secondary">Record payment</Button> : null}{canManageSales && sale.saleStatus === "completed" ? <><Button onClick={() => beginAdjustment(sale)} size="sm" type="button" variant="outline"><Pencil className="h-4 w-4" />Adjust</Button><Button onClick={() => { setAdjustmentForm(null); setVoidForm({ saleId: sale.id, reason: "" }); }} size="sm" type="button" variant="danger"><Ban className="h-4 w-4" />Void</Button></> : null}</div>
                 {paymentForm.saleId === sale.id ? <form className="mt-4 grid gap-3 rounded-md bg-muted p-4 sm:grid-cols-4" onSubmit={submitPayment}><Field label="Amount (part or full)"><Input max={money(sale.balanceDue)} min="0.01" onChange={(event) => setPaymentForm((value) => ({ ...value, amount: Number(event.target.value) }))} required step="0.01" type="number" value={paymentForm.amount} /><button className="mt-1 text-left text-xs font-medium text-primary hover:underline" onClick={() => setPaymentForm((value) => ({ ...value, amount: money(sale.balanceDue) }))} type="button">Use full balance: {formatCurrency(money(sale.balanceDue))}</button></Field><Field label="Method"><Select onChange={(event) => setPaymentForm((value) => ({ ...value, method: event.target.value as RentalPaymentMethod }))} value={paymentForm.method}>{paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</Select></Field><Field label="Reference"><Input onChange={(event) => setPaymentForm((value) => ({ ...value, reference: event.target.value }))} value={paymentForm.reference} /></Field><div className="flex items-end gap-2"><Button disabled={saving === `payment:${sale.id}`} type="submit">{saving === `payment:${sale.id}` ? "Saving…" : "Save payment"}</Button><Button disabled={saving === `payment:${sale.id}`} onClick={() => setPaymentForm((value) => ({ ...value, saleId: "" }))} type="button" variant="ghost">Cancel</Button></div></form> : null}
+                {editing ? <form className="mt-4 grid gap-4 rounded-md border border-amber-200 bg-amber-50/60 p-4" onSubmit={submitAdjustment}>
+                  <div><strong>Adjust sale</strong><p className="mt-1 text-xs text-muted-foreground">The original invoice number and receipts remain in the audit trail. Stock changes are posted as separate correction movements.</p></div>
+                  <div className="grid gap-3 sm:grid-cols-2"><Field label="Customer name"><Input onChange={(event) => setAdjustmentForm((value) => value ? { ...value, customerName: event.target.value } : value)} value={editing.customerName} /></Field><Field label="Phone"><Input inputMode="tel" onChange={(event) => setAdjustmentForm((value) => value ? { ...value, customerPhone: event.target.value } : value)} value={editing.customerPhone} /></Field><Field label="Email"><Input type="email" onChange={(event) => setAdjustmentForm((value) => value ? { ...value, customerEmail: event.target.value } : value)} value={editing.customerEmail} /></Field><Field label="Address"><Input onChange={(event) => setAdjustmentForm((value) => value ? { ...value, customerAddress: event.target.value } : value)} value={editing.customerAddress} /></Field></div>
+                  <div className="grid gap-3">{editing.lines.map((line) => <div className="grid gap-3 rounded-md border bg-white p-3 sm:grid-cols-[minmax(0,1fr)_100px_140px_140px] sm:items-end" key={line.offeringId}><div><p className="text-sm font-semibold">{line.offeringName}</p><p className="text-xs text-muted-foreground">Product cannot be replaced during an adjustment.</p></div><Field label="Quantity"><Input min="1" onChange={(event) => updateAdjustmentLine(line.offeringId, { quantity: Number(event.target.value) })} step="1" type="number" value={line.quantity} /></Field><Field label="Unit price"><Input min="0" onChange={(event) => updateAdjustmentLine(line.offeringId, { unitPrice: Number(event.target.value) })} step="0.01" type="number" value={line.unitPrice} /></Field><Field label="Discount"><Input min="0" onChange={(event) => updateAdjustmentLine(line.offeringId, { discountAmount: Number(event.target.value) })} step="0.01" type="number" value={line.discountAmount} /></Field></div>)}</div>
+                  <div className="grid gap-3 sm:grid-cols-2"><Field label="Tax rate"><Input max="100" min="0" onChange={(event) => setAdjustmentForm((value) => value ? { ...value, taxRate: Number(event.target.value) } : value)} step="0.01" type="number" value={editing.taxRate} /></Field><Field label="Revised total"><Input readOnly value={formatCurrency(revisedTotal)} /></Field><Field className="sm:col-span-2" label="Sale notes"><Textarea onChange={(event) => setAdjustmentForm((value) => value ? { ...value, notes: event.target.value } : value)} value={editing.notes} /></Field><Field className="sm:col-span-2" label="Correction reason"><Textarea maxLength={500} minLength={5} onChange={(event) => setAdjustmentForm((value) => value ? { ...value, reason: event.target.value } : value)} placeholder="Required for the permanent audit trail" required value={editing.reason} /></Field></div>
+                  {revisedTotal < sale.amountPaid ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">The revised total is below the amount already received. Void the sale and record the refund separately.</p> : null}
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button disabled={saving === `adjust:${sale.id}`} onClick={() => setAdjustmentForm(null)} type="button" variant="ghost">Cancel</Button><Button disabled={saving === `adjust:${sale.id}` || revisedTotal < sale.amountPaid} type="submit">{saving === `adjust:${sale.id}` ? "Saving revision…" : "Save audited revision"}</Button></div>
+                </form> : null}
+                {voidForm.saleId === sale.id ? <form className="mt-4 grid gap-3 rounded-md border border-red-200 bg-red-50 p-4" onSubmit={submitVoid}><div><strong className="text-red-800">Void {sale.invoiceNumber}</strong><p className="mt-1 text-xs text-red-700">This keeps the sale visible, restores all quantities to this branch, and reverses its linked finance payments.</p></div><Field label="Void reason"><Textarea maxLength={500} minLength={5} onChange={(event) => setVoidForm((value) => ({ ...value, reason: event.target.value }))} placeholder="Required for the permanent audit trail" required value={voidForm.reason} /></Field><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button disabled={saving === `void:${sale.id}`} onClick={() => setVoidForm({ saleId: "", reason: "" })} type="button" variant="ghost">Cancel</Button><Button disabled={saving === `void:${sale.id}`} type="submit" variant="danger">{saving === `void:${sale.id}` ? "Voiding sale…" : "Confirm void and reverse"}</Button></div></form> : null}
               </div>
-            ))}
+              );
+            })}
             {!sales.length ? <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">No POS sales have been recorded in this branch.</div> : null}
           </CardContent>
         </Card>

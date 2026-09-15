@@ -21,6 +21,7 @@ import nodemailer from "nodemailer";
 import { syncTaskToGoogleCalendar } from "./google-calendar.js";
 import { calculatePosRepayment, isValidPosPaymentMethod } from "./pos-payment.js";
 import { resolvePosPrice } from "./pos-pricing.js";
+import { calculateAdjustedSale } from "./pos-sale-management.js";
 
 initializeApp();
 
@@ -101,6 +102,7 @@ const legacyRolePermissions = {
     "inventory.reserve",
     "pos.read",
     "pos.sell",
+    "pos.manageSales",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -131,6 +133,7 @@ const legacyRolePermissions = {
     "inventory.comment",
     "inventory.approve",
     "pos.read",
+    "pos.manageSales",
     "tasks.read",
     "activities.read",
     "finance.approve",
@@ -185,6 +188,7 @@ const legacyRolePermissions = {
     "inventory.reserve",
     "pos.read",
     "pos.sell",
+    "pos.manageSales",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -813,6 +817,7 @@ function hasActorPermission(member: ActorContext, permission: string) {
     hasActorRole(member, "superAdmin") ||
     (hasActorRole(member, "operationsManager") &&
       rolePermissions.operationsManager.includes(permission)) ||
+    (hasActorRole(member, "managingDirector") && permission === "pos.manageSales") ||
     member.permissions.includes(permission)
   );
 }
@@ -3811,6 +3816,22 @@ export const createPosSale = onCall(callableOptions, async (request) => {
         method: paymentMethod,
         paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
         recordedBy: actor.id,
+        saleSnapshot: {
+          customerName,
+          customerPhone: typeof request.data?.customerPhone === "string" ? request.data.customerPhone.trim().slice(0, 60) : "",
+          customerEmail: typeof request.data?.customerEmail === "string" ? request.data.customerEmail.trim().slice(0, 160) : "",
+          customerAddress: typeof request.data?.customerAddress === "string" ? request.data.customerAddress.trim().slice(0, 500) : "",
+          lines: saleLines,
+          subtotal,
+          discountAmount,
+          taxRate,
+          taxAmount,
+          totalAmount,
+          amountPaid: paid,
+          balanceDue,
+          paymentStatus,
+          notes: typeof request.data?.notes === "string" ? request.data.notes.trim().slice(0, 1000) : "",
+        },
       }] : [],
       saleStatus: "completed",
       soldAt,
@@ -3931,6 +3952,22 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
         method: paymentMethod,
         paymentReference: typeof request.data?.paymentReference === "string" ? request.data.paymentReference.trim().slice(0, 160) : "",
         recordedBy: actor.id,
+        saleSnapshot: {
+          customerName: String(sale.customerName ?? "Walk-in customer"),
+          customerPhone: String(sale.customerPhone ?? ""),
+          customerEmail: String(sale.customerEmail ?? ""),
+          customerAddress: String(sale.customerAddress ?? ""),
+          lines: Array.isArray(sale.lines) ? sale.lines : [],
+          subtotal: money(Number(sale.subtotal ?? 0)),
+          discountAmount: money(Number(sale.discountAmount ?? 0)),
+          taxRate: Number(sale.taxRate ?? 0),
+          taxAmount: money(Number(sale.taxAmount ?? 0)),
+          totalAmount: money(Number(sale.totalAmount ?? 0)),
+          amountPaid,
+          balanceDue,
+          paymentStatus,
+          notes: String(sale.notes ?? ""),
+        },
       }),
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: actor.id,
@@ -3971,6 +4008,356 @@ export const recordPosSalePayment = onCall(callableOptions, async (request) => {
   });
 
   return { ok: true, receiptNumber, balanceDue, paymentStatus };
+});
+
+export const adjustPosSale = onCall(callableOptions, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication is required.");
+  }
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const saleId = requireString(request.data?.saleId, "saleId");
+  const reason = requireString(request.data?.reason, "reason");
+  if (reason.length < 5 || reason.length > 500) {
+    throw new HttpsError("invalid-argument", "Enter a correction reason between 5 and 500 characters.");
+  }
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "pos.manageSales")) {
+    throw new HttpsError("permission-denied", "You do not have permission to adjust sales.");
+  }
+  const rawLines: unknown[] = Array.isArray(request.data?.lines) ? request.data.lines : [];
+  if (!rawLines.length || rawLines.length > 100) {
+    throw new HttpsError("invalid-argument", "Keep every original product on the adjusted sale.");
+  }
+  const requestedLines = rawLines.map((raw) => {
+    const line = (raw ?? {}) as Record<string, unknown>;
+    const offeringId = requireString(line.offeringId, "offeringId");
+    const quantity = requireNumber(line.quantity, "quantity");
+    const unitPrice = requireNumber(line.unitPrice, "unitPrice");
+    const discountAmount = line.discountAmount === undefined ? 0 : requireNumber(line.discountAmount, "discountAmount");
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new HttpsError("invalid-argument", "Adjusted quantities must be positive whole numbers.");
+    }
+    if (unitPrice < 0 || discountAmount < 0 || discountAmount > unitPrice * quantity) {
+      throw new HttpsError("invalid-argument", "Review the adjusted price and discount values.");
+    }
+    return { offeringId, quantity, unitPrice: money(unitPrice), discountAmount: money(discountAmount) };
+  });
+  if (new Set(requestedLines.map((line) => line.offeringId)).size !== requestedLines.length) {
+    throw new HttpsError("invalid-argument", "Each product can appear only once.");
+  }
+  const taxRate = request.data?.taxRate === undefined ? 0 : requireNumber(request.data.taxRate, "taxRate");
+  if (taxRate < 0 || taxRate > 100) {
+    throw new HttpsError("invalid-argument", "Tax rate must be between 0 and 100.");
+  }
+
+  const saleRef = db.doc(`organizations/${organizationId}/posSales/${saleId}`);
+  let revisedTotal = 0;
+  let revision = 0;
+  await db.runTransaction(async (transaction) => {
+    const saleSnapshot = await transaction.get(saleRef);
+    if (!saleSnapshot.exists) throw new HttpsError("not-found", "POS sale was not found.");
+    const sale = saleSnapshot.data() ?? {};
+    if (!canActorAccessBranch(actor, sale.branchId)) {
+      throw new HttpsError("permission-denied", "You do not have access to this sale's branch.");
+    }
+    if (sale.saleStatus !== "completed") {
+      throw new HttpsError("failed-precondition", "A void sale cannot be adjusted.");
+    }
+    const oldLines = Array.isArray(sale.lines) ? sale.lines as Array<Record<string, unknown>> : [];
+    const oldById = new Map(oldLines.map((line) => [String(line.offeringId ?? ""), line]));
+    if (oldLines.length !== requestedLines.length || requestedLines.some((line) => !oldById.has(line.offeringId))) {
+      throw new HttpsError("invalid-argument", "Products cannot be added, removed, or replaced during an adjustment. Void and re-enter the sale instead.");
+    }
+    const branchId = String(sale.branchId ?? "");
+    const offeringRefs = requestedLines.map((line) => db.doc(`organizations/${organizationId}/offerings/${line.offeringId}`));
+    const balanceRefs = requestedLines.map((line) => db.doc(`organizations/${organizationId}/inventoryBalances/${line.offeringId}_${branchId}`));
+    const movementRefs = requestedLines.map(() => db.collection(`organizations/${organizationId}/inventoryMovements`).doc());
+    const [offeringSnapshots, balanceSnapshots] = await Promise.all([
+      Promise.all(offeringRefs.map((ref) => transaction.get(ref))),
+      Promise.all(balanceRefs.map((ref) => transaction.get(ref))),
+    ]);
+    const nextLines = requestedLines.map((line, index) => {
+      const oldLine = oldById.get(line.offeringId) ?? {};
+      const offering = offeringSnapshots[index].data() ?? {};
+      const balance = balanceSnapshots[index].data() ?? {};
+      if (!offeringSnapshots[index].exists || !balanceSnapshots[index].exists) {
+        throw new HttpsError("failed-precondition", "An inventory record linked to this sale is no longer available.");
+      }
+      const oldQuantity = Number(oldLine.quantity ?? 0);
+      const extraRequired = Math.max(0, line.quantity - oldQuantity);
+      const available = Number(balance.quantityOnHand ?? 0) - Number(balance.quantityReserved ?? 0);
+      if (extraRequired > available) {
+        throw new HttpsError("failed-precondition", `${String(oldLine.offeringName ?? offering.name ?? "A product")} has only ${available} additional units available.`);
+      }
+      return {
+        ...oldLine,
+        catalogRetailPrice: money(Number(offering.sellingPrice ?? oldLine.catalogRetailPrice ?? 0)),
+        ...(offering.wholesalePrice === undefined ? {} : { catalogWholesalePrice: money(Number(offering.wholesalePrice)) }),
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        priceSource: "adjusted",
+        priceAdjustment: money(line.unitPrice - Number(offering.sellingPrice ?? line.unitPrice)),
+        discountAmount: line.discountAmount,
+        lineTotal: money(line.unitPrice * line.quantity - line.discountAmount),
+      };
+    });
+    const amountPaid = money(Number(sale.amountPaid ?? 0));
+    const recalculated = calculateAdjustedSale(nextLines.map((line) => ({
+      discountAmount: Number(line.discountAmount),
+      quantity: Number(line.quantity),
+      unitPrice: Number(line.unitPrice),
+    })), taxRate, amountPaid);
+    if (!recalculated.ok) throw new HttpsError("failed-precondition", recalculated.error);
+    const { balanceDue, discountAmount, paymentStatus, subtotal, taxAmount, totalAmount } = recalculated;
+    const adjustedAt = new Date().toISOString();
+    revision = Math.max(0, Number(sale.revision ?? 0)) + 1;
+    revisedTotal = totalAmount;
+
+    requestedLines.forEach((line, index) => {
+      const oldLine = oldById.get(line.offeringId) ?? {};
+      const stockDelta = Number(oldLine.quantity ?? 0) - line.quantity;
+      if (!stockDelta) return;
+      transaction.update(balanceRefs[index], {
+        quantityOnHand: FieldValue.increment(stockDelta),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      });
+      transaction.update(offeringRefs[index], {
+        stockQuantity: FieldValue.increment(stockDelta),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      });
+      transaction.set(movementRefs[index], {
+        organizationId,
+        branchId,
+        brandId: String(oldLine.brandId ?? ""),
+        brandName: String(oldLine.brandName ?? ""),
+        offeringId: line.offeringId,
+        offeringName: String(oldLine.offeringName ?? "Inventory item"),
+        sku: String(oldLine.sku ?? ""),
+        movementType: stockDelta > 0 ? "returnIn" : "issue",
+        movementPurpose: "sale",
+        quantity: Math.abs(stockDelta),
+        fromBranchId: stockDelta > 0 ? "" : branchId,
+        fromLocationId: stockDelta > 0 ? "" : branchId,
+        fromLocationName: stockDelta > 0 ? "" : String(balanceSnapshots[index].data()?.locationName ?? ""),
+        toBranchId: stockDelta > 0 ? branchId : "",
+        toLocationId: stockDelta > 0 ? branchId : "",
+        toLocationName: stockDelta > 0 ? String(balanceSnapshots[index].data()?.locationName ?? "") : "",
+        referenceNumber: `ADJ-${saleId.slice(0, 6).toUpperCase()}-R${revision}-${index + 1}`,
+        externalReference: String(sale.referenceNumber ?? saleId),
+        notes: `Sale revision ${revision}: ${reason}`,
+        occurredAt: adjustedAt,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
+        isDeleted: false,
+      });
+    });
+    const customerName = typeof request.data?.customerName === "string" && request.data.customerName.trim()
+      ? request.data.customerName.trim().slice(0, 160)
+      : "Walk-in customer";
+    const previousReceiptSnapshot = {
+      customerName: String(sale.customerName ?? "Walk-in customer"),
+      customerPhone: String(sale.customerPhone ?? ""),
+      customerEmail: String(sale.customerEmail ?? ""),
+      customerAddress: String(sale.customerAddress ?? ""),
+      lines: oldLines,
+      subtotal: money(Number(sale.subtotal ?? 0)),
+      discountAmount: money(Number(sale.discountAmount ?? 0)),
+      taxRate: Number(sale.taxRate ?? 0),
+      taxAmount: money(Number(sale.taxAmount ?? 0)),
+      totalAmount: money(Number(sale.totalAmount ?? 0)),
+      notes: String(sale.notes ?? ""),
+    };
+    let historicalAmountPaid = 0;
+    const preservedPaymentHistory = (Array.isArray(sale.paymentHistory) ? sale.paymentHistory as Array<Record<string, unknown>> : [])
+      .map((entry) => {
+        historicalAmountPaid = money(historicalAmountPaid + Number(entry.amount ?? 0));
+        const historicalBalance = Math.max(0, money(Number(sale.totalAmount ?? 0) - historicalAmountPaid));
+        return entry.saleSnapshot ? entry : {
+          ...entry,
+          saleSnapshot: {
+            ...previousReceiptSnapshot,
+            amountPaid: historicalAmountPaid,
+            balanceDue: historicalBalance,
+            paymentStatus: historicalBalance <= 0 ? "paid" : "partPaid",
+          },
+        };
+      });
+    transaction.update(saleRef, {
+      customerName,
+      customerPhone: typeof request.data?.customerPhone === "string" ? request.data.customerPhone.trim().slice(0, 60) : "",
+      customerEmail: typeof request.data?.customerEmail === "string" ? request.data.customerEmail.trim().slice(0, 160) : "",
+      customerAddress: typeof request.data?.customerAddress === "string" ? request.data.customerAddress.trim().slice(0, 500) : "",
+      notes: typeof request.data?.notes === "string" ? request.data.notes.trim().slice(0, 1000) : "",
+      lines: nextLines,
+      subtotal,
+      discountAmount,
+      taxRate,
+      taxAmount,
+      totalAmount,
+      balanceDue,
+      paymentStatus,
+      paymentHistory: preservedPaymentHistory,
+      revision,
+      revisedAt: adjustedAt,
+      revisedBy: actor.id,
+      adjustmentHistory: FieldValue.arrayUnion({
+        adjustedAt,
+        adjustedBy: actor.id,
+        adjustedByName: actor.displayName,
+        previousTotal: money(Number(sale.totalAmount ?? 0)),
+        revisedTotal: totalAmount,
+        reason,
+        revision,
+      }),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+      updatedByEmail: actor.email,
+      updatedByName: actor.displayName,
+    });
+    transaction.set(db.collection(`organizations/${organizationId}/auditLogs`).doc(), {
+      action: "pos.sale.adjust",
+      actorId: actor.id,
+      actorName: actor.displayName,
+      branchId,
+      createdAt: FieldValue.serverTimestamp(),
+      entityId: saleId,
+      entityType: "posSale",
+      organizationId,
+      previousValue: { customerName: sale.customerName, lines: oldLines, taxRate: sale.taxRate, totalAmount: sale.totalAmount },
+      newValue: { customerName, lines: nextLines, reason, revision, taxRate, totalAmount },
+    });
+  });
+  return { ok: true, revisedTotal, revision };
+});
+
+export const voidPosSale = onCall(callableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication is required.");
+  const organizationId = requireString(request.data?.organizationId, "organizationId");
+  const saleId = requireString(request.data?.saleId, "saleId");
+  const reason = requireString(request.data?.reason, "reason");
+  if (reason.length < 5 || reason.length > 500) {
+    throw new HttpsError("invalid-argument", "Enter a void reason between 5 and 500 characters.");
+  }
+  const actor = await getActiveMember(request.auth.uid, organizationId);
+  if (!hasActorPermission(actor, "pos.manageSales")) {
+    throw new HttpsError("permission-denied", "You do not have permission to void sales.");
+  }
+  const saleRef = db.doc(`organizations/${organizationId}/posSales/${saleId}`);
+  const linkedPayments = await db.collection(`organizations/${organizationId}/financePayments`)
+    .where("sourceType", "==", "posSale")
+    .where("sourceId", "==", saleId)
+    .get();
+  await db.runTransaction(async (transaction) => {
+    const saleSnapshot = await transaction.get(saleRef);
+    if (!saleSnapshot.exists) throw new HttpsError("not-found", "POS sale was not found.");
+    const sale = saleSnapshot.data() ?? {};
+    if (!canActorAccessBranch(actor, sale.branchId)) {
+      throw new HttpsError("permission-denied", "You do not have access to this sale's branch.");
+    }
+    if (sale.saleStatus === "void") {
+      throw new HttpsError("failed-precondition", "This sale is already void.");
+    }
+    const branchId = String(sale.branchId ?? "");
+    const lines = Array.isArray(sale.lines) ? sale.lines as Array<Record<string, unknown>> : [];
+    const offeringRefs = lines.map((line) => db.doc(`organizations/${organizationId}/offerings/${String(line.offeringId ?? "")}`));
+    const balanceRefs = lines.map((line) => db.doc(`organizations/${organizationId}/inventoryBalances/${String(line.offeringId ?? "")}_${branchId}`));
+    const movementRefs = lines.map(() => db.collection(`organizations/${organizationId}/inventoryMovements`).doc());
+    const paymentRefs = new Map(linkedPayments.docs.map((item) => [item.id, item.ref]));
+    (Array.isArray(sale.paymentHistory) ? sale.paymentHistory as Array<Record<string, unknown>> : []).forEach((entry) => {
+      const paymentId = String(entry.paymentId ?? "");
+      if (paymentId) paymentRefs.set(paymentId, db.doc(`organizations/${organizationId}/financePayments/${paymentId}`));
+    });
+    const [offeringSnapshots, balanceSnapshots, paymentSnapshots] = await Promise.all([
+      Promise.all(offeringRefs.map((ref) => transaction.get(ref))),
+      Promise.all(balanceRefs.map((ref) => transaction.get(ref))),
+      Promise.all(Array.from(paymentRefs.values()).map((ref) => transaction.get(ref))),
+    ]);
+    if (offeringSnapshots.some((item) => !item.exists) || balanceSnapshots.some((item) => !item.exists)) {
+      throw new HttpsError("failed-precondition", "Stock cannot be restored because a linked inventory record is missing.");
+    }
+    const voidedAt = new Date().toISOString();
+    lines.forEach((line, index) => {
+      const quantity = Number(line.quantity ?? 0);
+      transaction.update(balanceRefs[index], {
+        quantityOnHand: FieldValue.increment(quantity),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      });
+      transaction.update(offeringRefs[index], {
+        stockQuantity: FieldValue.increment(quantity),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+      });
+      transaction.set(movementRefs[index], {
+        organizationId,
+        branchId,
+        brandId: String(line.brandId ?? ""),
+        brandName: String(line.brandName ?? ""),
+        offeringId: String(line.offeringId ?? ""),
+        offeringName: String(line.offeringName ?? "Inventory item"),
+        sku: String(line.sku ?? ""),
+        movementType: "returnIn",
+        movementPurpose: "sale",
+        quantity,
+        fromBranchId: "",
+        fromLocationId: "",
+        toBranchId: branchId,
+        toLocationId: branchId,
+        toLocationName: String(balanceSnapshots[index].data()?.locationName ?? ""),
+        referenceNumber: `VOID-${saleId.slice(0, 6).toUpperCase()}-${index + 1}`,
+        externalReference: String(sale.referenceNumber ?? saleId),
+        notes: `Voided sale: ${reason}`,
+        occurredAt: voidedAt,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: actor.id,
+        createdByEmail: actor.email,
+        createdByName: actor.displayName,
+        isDeleted: false,
+      });
+    });
+    paymentSnapshots.filter((item) => item.exists).forEach((payment) => {
+      transaction.update(payment.ref, {
+        verificationStatus: "rejected",
+        rejectionReason: `Sale voided: ${reason}`,
+        rejectedAt: voidedAt,
+        rejectedBy: actor.id,
+        status: "reversed",
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: actor.id,
+        updatedByEmail: actor.email,
+        updatedByName: actor.displayName,
+      });
+    });
+    transaction.update(saleRef, {
+      saleStatus: "void",
+      status: "void",
+      balanceDue: 0,
+      voidedAt,
+      voidedBy: actor.id,
+      voidReason: reason,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.id,
+      updatedByEmail: actor.email,
+      updatedByName: actor.displayName,
+    });
+    transaction.set(db.collection(`organizations/${organizationId}/auditLogs`).doc(), {
+      action: "pos.sale.void",
+      actorId: actor.id,
+      actorName: actor.displayName,
+      branchId,
+      createdAt: FieldValue.serverTimestamp(),
+      entityId: saleId,
+      entityType: "posSale",
+      organizationId,
+      previousValue: { saleStatus: sale.saleStatus, totalAmount: sale.totalAmount, amountPaid: sale.amountPaid },
+      newValue: { saleStatus: "void", reason, restoredLines: lines.map((line) => ({ offeringId: line.offeringId, quantity: line.quantity })), reversedPaymentIds: paymentSnapshots.filter((item) => item.exists).map((item) => item.id) },
+    });
+  });
+  return { ok: true };
 });
 
 function inventoryReference(prefix: string, id: string) {

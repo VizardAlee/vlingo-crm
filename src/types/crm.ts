@@ -47,6 +47,7 @@ export type Permission =
   | "inventory.reserve"
   | "pos.read"
   | "pos.sell"
+  | "pos.manageSales"
   | "tasks.create"
   | "tasks.read"
   | "tasks.update"
@@ -744,6 +745,34 @@ export interface PosPaymentEntry {
   method: RentalPaymentMethod;
   paymentReference?: string;
   recordedBy: string;
+  saleSnapshot?: PosReceiptSaleSnapshot;
+}
+
+export interface PosReceiptSaleSnapshot {
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  lines: PosSaleLine[];
+  subtotal: number;
+  discountAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  totalAmount: number;
+  amountPaid?: number;
+  balanceDue?: number;
+  paymentStatus?: PosPaymentStatus;
+  notes?: string;
+}
+
+export interface PosSaleAdjustment {
+  adjustedAt: Date | string;
+  adjustedBy: string;
+  adjustedByName?: string;
+  previousTotal: number;
+  revisedTotal: number;
+  reason: string;
+  revision: number;
 }
 
 export interface PosSale extends EntityMetadata {
@@ -769,6 +798,10 @@ export interface PosSale extends EntityMetadata {
   paymentMethod?: RentalPaymentMethod;
   paymentReference?: string;
   paymentHistory?: PosPaymentEntry[];
+  adjustmentHistory?: PosSaleAdjustment[];
+  revision?: number;
+  revisedAt?: Date | string;
+  revisedBy?: string;
   saleStatus: PosSaleStatus;
   soldAt: Date | string;
   notes?: string;

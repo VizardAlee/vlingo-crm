@@ -14,6 +14,7 @@ import { PermissionDenied, LoadingState, ErrorState } from "@/components/ui/stat
 import { useToast } from "@/components/ui/toast";
 import { CrmTable } from "@/components/tables/crm-table";
 import { AiGuideLink } from "@/features/ai-guide/ai-guide-link";
+import { branchInventoryCatalog } from "@/features/inventory/inventory-catalog-scope";
 import { ModuleForm } from "@/features/modules/module-form";
 import { columnsFor, type ModuleConfig } from "@/features/modules/module-config";
 import { useAuth } from "@/features/auth/auth-provider";
@@ -21,11 +22,12 @@ import { documentAccessPermissions } from "@/components/layout/navigation";
 import { effectiveBranchId, hasAnyPermission, hasPermission, isAssignedOnlySalesUser, memberRoles } from "@/lib/permissions";
 import { cn, formatCurrency, formatDate, statusTone, titleCase } from "@/lib/utils";
 import { listDocuments, type DocumentRecord } from "@/services/documents";
+import { listInventoryBalances, listInventoryItems } from "@/services/inventory";
 import { sendBulkSalesEmail, sendSalesJourneyEmail } from "@/services/email-settings";
 import { createOrgRecord, getOrgRecord, listOrgRecords, softDeleteOrgRecord, updateOrgRecord, writeAuditLog } from "@/services/repository";
 import { listMembers } from "@/services/users";
 import { convertLeadToClient } from "@/services/workflows";
-import type { DealQuoteLine, Member } from "@/types/crm";
+import type { DealQuoteLine, Member, Offering } from "@/types/crm";
 
 type RelatedEntityType = "deal" | "lead" | "client" | "property" | "unit" | "task" | "tenancy" | "development" | "marketing" | "offering";
 
@@ -2085,7 +2087,7 @@ export function ModuleListPage({
     const activeFixedFilters = JSON.parse(fixedFilterKey) as FixedFilter[];
 
     const branchId = effectiveBranchId(member, activeBranchId);
-    if (branchId) {
+    if (branchId && config.collection !== "offerings") {
       constraints.push(where("branchId", "==", branchId));
     }
 
@@ -2110,8 +2112,19 @@ export function ModuleListPage({
     });
 
     const shouldResolveCreators = ["leads", "clients", "deals"].includes(config.collection);
+    const recordsPromise = config.collection === "offerings"
+      ? Promise.all([
+          listInventoryItems(activeOrganizationId, member),
+          listInventoryBalances(activeOrganizationId, member),
+        ]).then(([offerings, balances]) => branchInventoryCatalog(
+          offerings,
+          balances,
+          branchId,
+        ) as Array<Offering & Record<string, unknown>>)
+      : listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, constraints);
+
     Promise.all([
-      listOrgRecords<Record<string, unknown> & { id: string }>(activeOrganizationId, config.collection, constraints),
+      recordsPromise,
       shouldResolveCreators ? listMembers(activeOrganizationId).catch(() => [] as Member[]) : Promise.resolve([] as Member[]),
     ])
       .then(([items, nextMembers]) => {

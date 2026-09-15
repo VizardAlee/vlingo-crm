@@ -37,6 +37,7 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "inventory.reserve",
     "pos.read",
     "pos.sell",
+    "pos.manageSales",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -63,6 +64,7 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "inventory.comment",
     "inventory.approve",
     "pos.read",
+    "pos.manageSales",
     "tasks.read",
     "activities.read",
     "finance.approve",
@@ -105,6 +107,7 @@ export const rolePermissions: Record<RoleName, Permission[]> = {
     "inventory.reserve",
     "pos.read",
     "pos.sell",
+    "pos.manageSales",
     "tasks.create",
     "tasks.read",
     "tasks.update",
@@ -149,6 +152,10 @@ export function hasPermission(member: Member | null, permission: Permission) {
   // again. Firestore rules and callable functions apply the same rule.
   if (roles.includes("operationsManager")) {
     return rolePermissions.operationsManager.includes(permission);
+  }
+
+  if (roles.includes("managingDirector") && permission === "pos.manageSales") {
+    return true;
   }
 
   return (member.permissions ?? []).includes(permission);
