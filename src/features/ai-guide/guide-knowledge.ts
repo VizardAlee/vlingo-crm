@@ -254,7 +254,7 @@ export const guideTopics: GuideTopic[] = [
       "Receive each delivered line into a stock location. Partial receipts are allowed and the order remains Part received until every line is complete. Capture the received date and, where available, the supplier delivery note or GRN reference.",
       "Stock location options come from active locations created by administrators under Settings > Branches. Closed locations are not offered for new stock activity.",
       "Inventory-created legacy locations cannot receive new stock. If one still has quantity, it appears only as a Legacy cleanup source so the stock can be transferred into an admin-created branch.",
-      "For a transfer, the source is the active dashboard branch. Users with access to other branches can choose one of those branches as the destination; both branch ledgers show the transfer.",
+      "For a transfer, the source is the active dashboard branch. A user with inventory transfer permission can choose any active organization branch as the destination even when they cannot normally open that branch; this does not grant access to view or manage the destination branch, and both branch ledgers show the transfer.",
       "A new product defaults to the creator's assigned branch. A user with all-branch access can select another active branch on the product form before saving.",
       "Receiving stock and paying the supplier are separate. Authorized inventory or finance users can record later payments against the outstanding order balance.",
       "For batch items, enter the batch number and optional expiry date. Serial numbers are optional for now; if supplied, enter one unique serial number for every unit received.",

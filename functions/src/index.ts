@@ -23,6 +23,7 @@ import { calculatePosRepayment, isValidPosPaymentMethod } from "./pos-payment.js
 import { resolvePosPrice } from "./pos-pricing.js";
 import { calculateAdjustedSale } from "./pos-sale-management.js";
 import { matchesCustomerSearch, normalizedCustomerPhone } from "./pos-customers.js";
+import { canUseInventoryDestination } from "./inventory-transfer.js";
 
 initializeApp();
 
@@ -3329,14 +3330,19 @@ export const recordInventoryMovement = onCall(
         );
       if (
         toLocationRef &&
-        (!toLocation ||
-          !canActorAccessBranch(actor, toBranchId) ||
-          (movementType !== "transfer" && toBranchId !== branchId))
+        !canUseInventoryDestination({
+          activeBranchId: branchId,
+          actorCanAccessDestination: canActorAccessBranch(actor, toBranchId),
+          destinationBranchId: toBranchId,
+          destinationExists: Boolean(toLocation),
+          destinationIsCanonicalBranch: Boolean(toBranchSnapshot?.exists),
+          movementType,
+        })
       )
         throw new HttpsError(
           "permission-denied",
           movementType === "transfer"
-            ? "You do not have access to the destination branch."
+            ? "Transfers can only be sent to an active organization branch."
             : "Destination location must belong to the active branch.",
         );
 

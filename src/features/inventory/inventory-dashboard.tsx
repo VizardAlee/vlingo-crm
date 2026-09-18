@@ -53,6 +53,7 @@ import {
   listInventoryItems,
   listInventoryLocations,
   listInventoryMovements,
+  listInventoryTransferDestinations,
   recordInventoryMovement,
   updateInventoryBrand,
 } from "@/services/inventory";
@@ -153,6 +154,9 @@ export function InventoryDashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const [brands, setBrands] = useState<InventoryBrand[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
+  const [transferDestinations, setTransferDestinations] = useState<
+    InventoryLocation[]
+  >([]);
   const [items, setItems] = useState<Offering[]>([]);
   const [balances, setBalances] = useState<InventoryBalance[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -329,6 +333,7 @@ export function InventoryDashboard() {
         nextMovements,
         nextComments,
         nextLocations,
+        nextTransferDestinations,
       ] = await Promise.all([
         listInventoryBrands(activeOrganizationId, member),
         listInventoryItems(activeOrganizationId, member),
@@ -338,6 +343,9 @@ export function InventoryDashboard() {
         isPartner
           ? Promise.resolve([])
           : listInventoryLocations(activeOrganizationId, member),
+        !isPartner && hasPermission(member, "inventory.transfer")
+          ? listInventoryTransferDestinations(activeOrganizationId)
+          : Promise.resolve([]),
       ]);
       const activeOfferingIds = new Set(nextItems.map((item) => item.id));
       const activeBalances = nextBalances.filter((balance) =>
@@ -374,6 +382,7 @@ export function InventoryDashboard() {
       setMovements(branchMovements);
       setComments(branchComments);
       setLocations(nextLocations);
+      setTransferDestinations(nextTransferDestinations);
       setCommentForm((value) => ({
         ...value,
         brandId: value.brandId || nextBrands[0]?.id || "",
@@ -527,7 +536,7 @@ export function InventoryDashboard() {
   );
   const destinationLocations =
     effectiveMovementType === "transfer"
-      ? canonicalLocations.filter(
+      ? transferDestinations.filter(
           (location) => location.id !== movement.fromLocationId,
         )
       : currentBranchLocations;

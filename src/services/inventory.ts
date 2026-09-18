@@ -233,6 +233,31 @@ export async function listInventoryLocations(
   ).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export async function listInventoryTransferDestinations(
+  organizationId: string,
+) {
+  const branches = await listOrganizationBranches(organizationId);
+  return branches
+    .filter((branch) => branch.status === "active")
+    .map(
+      (branch): InventoryLocation => ({
+        id: branch.id,
+        isLegacy: false,
+        organizationId,
+        branchId: branch.id,
+        name: branch.name,
+        code: branch.code,
+        address: branch.address,
+        locationType: "store",
+        status: "active",
+        createdBy: branch.createdBy ?? "",
+        updatedBy: branch.updatedBy ?? branch.createdBy ?? "",
+        isDeleted: false,
+      }),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function listInventoryItems(
   organizationId: string,
   member: Member | null,
