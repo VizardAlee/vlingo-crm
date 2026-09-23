@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  inventoryAvailabilityStatus,
   normalizeReportScopeFilter,
   safeCsvCell,
   scopePurchase,
@@ -7,6 +8,13 @@ import {
 } from "../../src/features/reports/organization-report-utils";
 
 describe("organization report calculations", () => {
+  it("classifies inventory availability for replenishment reporting", () => {
+    expect(inventoryAvailabilityStatus(0, 5)).toBe("outOfStock");
+    expect(inventoryAvailabilityStatus(3, 5)).toBe("lowStock");
+    expect(inventoryAvailabilityStatus(6, 5)).toBe("inStock");
+    expect(inventoryAvailabilityStatus(2, null)).toBe("inStock");
+  });
+
   it("treats the all-brands UI value as an unrestricted report scope", () => {
     expect(normalizeReportScopeFilter("all")).toBe("");
     expect(normalizeReportScopeFilter(" ALL ")).toBe("");

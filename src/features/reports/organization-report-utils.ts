@@ -5,6 +5,16 @@ export function normalizeReportScopeFilter(value: string | null | undefined) {
   return normalized.toLowerCase() === "all" ? "" : normalized;
 }
 
+export function inventoryAvailabilityStatus(
+  available: number,
+  reorderLevel: number | null | undefined,
+) {
+  if (available <= 0) return "outOfStock" as const;
+  if (Number(reorderLevel ?? 0) > 0 && available <= Number(reorderLevel))
+    return "lowStock" as const;
+  return "inStock" as const;
+}
+
 export function safeCsvCell(value: string | number) {
   const text = String(value);
   const safe = /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;

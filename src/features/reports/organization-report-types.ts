@@ -8,6 +8,8 @@ export interface OrganizationReport {
     crmStatus: ReportBreakdownRow[];
     documentBrandSales: ReportBreakdownRow[];
     inventoryByBrand: ReportBreakdownRow[];
+    inventoryMovementsByType: ReportBreakdownRow[];
+    inventoryValueByBrand: ReportBreakdownRow[];
     projectStatus: ReportBreakdownRow[];
     purchasePaymentStatus: ReportBreakdownRow[];
     purchaseReceivingStatus: ReportBreakdownRow[];
@@ -28,6 +30,40 @@ export interface OrganizationReport {
       label: string;
       purchaseValue: number;
       salesRevenue: number;
+    }>;
+    inventoryItems: Array<{
+      available: number;
+      brand: string;
+      category: string;
+      costPrice: number;
+      label: string;
+      onHand: number;
+      reorderLevel: number | null;
+      reserved: number;
+      sku: string;
+      status: "inStock" | "lowStock" | "outOfStock";
+      stockValue: number;
+      unitOfMeasure: string;
+    }>;
+    inventoryLocations: Array<{
+      available: number;
+      branch: string;
+      itemCount: number;
+      label: string;
+      lowStockItems: number;
+      onHand: number;
+      reserved: number;
+      stockValue: number;
+    }>;
+    inventoryMovements: Array<{
+      destination: string;
+      label: string;
+      occurredAt: string;
+      purpose: string;
+      quantity: number;
+      referenceNumber: string;
+      source: string;
+      type: string;
     }>;
     projects: Array<{
       contractValue: number;
@@ -61,7 +97,9 @@ export interface OrganizationReport {
     inventoryLowStockItems: number;
     inventoryMovements: number;
     inventoryOnHand: number;
+    inventoryOutOfStockItems: number;
     inventoryReserved: number;
+    inventoryTrackedItems: number;
     inventoryValue: number;
     netCashFlow: number;
     openPipelineValue: number;

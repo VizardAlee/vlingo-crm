@@ -8,6 +8,7 @@ import type {
   ReportBreakdownRow,
 } from "@/features/reports/organization-report-types";
 import {
+  inventoryAvailabilityStatus,
   normalizeReportScopeFilter,
   saleLineAmount,
   scopePurchase,
@@ -307,6 +308,128 @@ export async function GET(request: Request) {
       },
       {},
     );
+    const inventoryItemRows = Array.from(
+      scopedBalances.reduce<
+        Map<string, OrganizationReport["rows"]["inventoryItems"][number]>
+      >((rows, balance) => {
+        const id = String(balance.offeringId);
+        const offering = offeringById.get(id);
+        const row = rows.get(id) ?? {
+          available: 0,
+          brand: String(
+            balance.brandName ??
+              brandName.get(String(balance.brandId)) ??
+              offering?.brandName ??
+              "Unbranded",
+          ),
+          category: String(offering?.category ?? "Not set"),
+          costPrice: Number(offering?.costPrice ?? 0),
+          label: String(
+            balance.offeringName ?? offering?.name ?? "Inventory item",
+          ),
+          onHand: 0,
+          reorderLevel:
+            offering?.reorderLevel === undefined ||
+            offering?.reorderLevel === null ||
+            offering?.reorderLevel === ""
+              ? null
+              : Number(offering.reorderLevel),
+          reserved: 0,
+          sku: String(balance.sku ?? offering?.sku ?? ""),
+          status: "inStock" as const,
+          stockValue: 0,
+          unitOfMeasure: String(offering?.unitOfMeasure ?? "unit"),
+        };
+        const onHand = Number(balance.quantityOnHand ?? 0);
+        const reserved = Number(balance.quantityReserved ?? 0);
+        row.onHand += onHand;
+        row.reserved += reserved;
+        row.available += onHand - reserved;
+        row.stockValue += onHand * row.costPrice;
+        rows.set(id, row);
+        return rows;
+      }, new Map()).values(),
+    )
+      .map((row) => ({
+        ...row,
+        status: inventoryAvailabilityStatus(row.available, row.reorderLevel),
+      }))
+      .sort(
+        (left, right) =>
+          ({ outOfStock: 0, lowStock: 1, inStock: 2 })[left.status] -
+            ({ outOfStock: 0, lowStock: 1, inStock: 2 })[right.status] ||
+          left.label.localeCompare(right.label),
+      );
+    const inventoryLocationRows = Array.from(
+      scopedBalances.reduce<
+        Map<
+          string,
+          OrganizationReport["rows"]["inventoryLocations"][number] & {
+            itemIds: Set<string>;
+          }
+        >
+      >((rows, balance) => {
+        const locationId = String(balance.locationId ?? balance.branchId ?? "unknown");
+        const offeringId = String(balance.offeringId);
+        const offering = offeringById.get(offeringId);
+        const onHand = Number(balance.quantityOnHand ?? 0);
+        const reserved = Number(balance.quantityReserved ?? 0);
+        const available = onHand - reserved;
+        const row = rows.get(locationId) ?? {
+          available: 0,
+          branch: branchName.get(String(balance.branchId)) ?? String(balance.branchId),
+          itemCount: 0,
+          itemIds: new Set<string>(),
+          label: String(balance.locationName ?? "Stock location"),
+          lowStockItems: 0,
+          onHand: 0,
+          reserved: 0,
+          stockValue: 0,
+        };
+        row.itemIds.add(offeringId);
+        row.itemCount = row.itemIds.size;
+        row.onHand += onHand;
+        row.reserved += reserved;
+        row.available += available;
+        row.stockValue += onHand * Number(offering?.costPrice ?? 0);
+        if (
+          inventoryAvailabilityStatus(available, offering?.reorderLevel) !==
+          "inStock"
+        )
+          row.lowStockItems += 1;
+        rows.set(locationId, row);
+        return rows;
+      }, new Map()).values(),
+    )
+      .map((row) => ({
+        available: row.available,
+        branch: row.branch,
+        itemCount: row.itemCount,
+        label: row.label,
+        lowStockItems: row.lowStockItems,
+        onHand: row.onHand,
+        reserved: row.reserved,
+        stockValue: row.stockValue,
+      }))
+      .sort((left, right) => left.branch.localeCompare(right.branch));
+    const inventoryMovementRows = [...scopedMovements]
+      .sort((left, right) => {
+        const leftDate = dateValue(left.occurredAt) ?? dateValue(left.createdAt);
+        const rightDate = dateValue(right.occurredAt) ?? dateValue(right.createdAt);
+        return Number(rightDate) - Number(leftDate);
+      })
+      .map((movement) => ({
+        destination: String(movement.toLocationName ?? "-"),
+        label: String(movement.offeringName ?? "Inventory item"),
+        occurredAt:
+          (dateValue(movement.occurredAt) ?? dateValue(movement.createdAt))?.toISOString() ??
+          "",
+        purpose: String(movement.movementPurpose ?? "other"),
+        quantity: Number(movement.quantity ?? 0),
+        referenceNumber: String(movement.referenceNumber ?? movement.id),
+        source: String(movement.fromLocationName ?? "-"),
+        type: String(movement.movementType ?? "movement"),
+      }));
     const purchaseValue = scopedPurchases.reduce(
       (total, entry) => total + entry.scoped.amount,
       0,
@@ -415,6 +538,21 @@ export async function GET(request: Request) {
             value: Number(balance.quantityOnHand ?? 0),
           })),
         ),
+        inventoryMovementsByType: countRows(scopedMovements, "movementType"),
+        inventoryValueByBrand: labelTotals(
+          scopedBalances.map((balance) => ({
+            label: String(
+              balance.brandName ??
+                brandName.get(String(balance.brandId)) ??
+                "Unbranded",
+            ),
+            value:
+              Number(balance.quantityOnHand ?? 0) *
+              Number(
+                offeringById.get(String(balance.offeringId))?.costPrice ?? 0,
+              ),
+          })),
+        ),
         projectStatus: countRows(scopedProjects, "status"),
         purchasePaymentStatus: labelTotals(
           scopedPurchases.map((entry) => ({
@@ -453,7 +591,9 @@ export async function GET(request: Request) {
       },
       generatedAt: new Date().toISOString(),
       limitations: [
-        "Inventory balances and valuation are the current position; the selected dates apply to movements and other activity.",
+        "Inventory balances, availability, and valuation are the current position; the selected dates apply to the movement ledger and other activity.",
+        "Stock value is calculated as current on-hand quantity multiplied by the product cost price. Products without a cost price contribute zero until their cost is recorded.",
+        "Low-stock status compares available quantity (on hand less reserved) with the product reorder level. Products without a reorder level are not flagged as low stock.",
         ...(brandId
           ? [
               "Finance, CRM, and whole-project totals remain branch-and-date scoped because those records are not consistently tagged by product brand. A linked installation project's full contract and cost are included when it contains the selected brand.",
@@ -487,6 +627,9 @@ export async function GET(request: Request) {
                 .reduce((total, item) => total + item.scoped.revenue, 0),
             };
           }),
+        inventoryItems: inventoryItemRows,
+        inventoryLocations: inventoryLocationRows,
+        inventoryMovements: inventoryMovementRows,
         projects: projectRows.sort((a, b) => b.contractValue - a.contractValue),
         suppliers: Array.from(supplierRows.values()).sort(
           (a, b) => b.outstanding - a.outstanding,
@@ -514,7 +657,11 @@ export async function GET(request: Request) {
         ).length,
         inventoryMovements: scopedMovements.length,
         inventoryOnHand,
+        inventoryOutOfStockItems: inventoryItemRows.filter(
+          (item) => item.status === "outOfStock",
+        ).length,
         inventoryReserved,
+        inventoryTrackedItems: inventoryItemRows.length,
         inventoryValue,
         netCashFlow: cashCollected - paidExpenses,
         openPipelineValue: scopedDeals
