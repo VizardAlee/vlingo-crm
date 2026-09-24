@@ -15,6 +15,33 @@ export function inventoryAvailabilityStatus(
   return "inStock" as const;
 }
 
+export function inventoryMovementDelta(
+  movement: ReportRecord,
+  branchId: string,
+) {
+  const quantity = Number(movement.quantity ?? 0);
+  const type = String(movement.movementType ?? "");
+  const fromBranchId = String(movement.fromBranchId ?? "");
+  const toBranchId = String(movement.toBranchId ?? "");
+
+  if (type === "transfer") {
+    if (!branchId) return 0;
+    return (toBranchId === branchId ? quantity : 0) -
+      (fromBranchId === branchId ? quantity : 0);
+  }
+  if (["receipt", "adjustmentIn", "returnIn"].includes(type)) {
+    if (!branchId || toBranchId === branchId || (!toBranchId && movement.branchId === branchId))
+      return quantity;
+    return 0;
+  }
+  if (["issue", "adjustmentOut", "returnOut"].includes(type)) {
+    if (!branchId || fromBranchId === branchId || (!fromBranchId && movement.branchId === branchId))
+      return -quantity;
+    return 0;
+  }
+  return 0;
+}
+
 export function safeCsvCell(value: string | number) {
   const text = String(value);
   const safe = /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;

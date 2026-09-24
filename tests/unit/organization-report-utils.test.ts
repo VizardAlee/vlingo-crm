@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   inventoryAvailabilityStatus,
+  inventoryMovementDelta,
   normalizeReportScopeFilter,
   safeCsvCell,
   scopePurchase,
@@ -13,6 +14,15 @@ describe("organization report calculations", () => {
     expect(inventoryAvailabilityStatus(3, 5)).toBe("lowStock");
     expect(inventoryAvailabilityStatus(6, 5)).toBe("inStock");
     expect(inventoryAvailabilityStatus(2, null)).toBe("inStock");
+  });
+
+  it("reconstructs organization and branch stock changes from movements", () => {
+    expect(inventoryMovementDelta({ movementType: "receipt", quantity: 10, toBranchId: "kano" }, "kano")).toBe(10);
+    expect(inventoryMovementDelta({ movementType: "issue", quantity: 3, fromBranchId: "kano" }, "kano")).toBe(-3);
+    expect(inventoryMovementDelta({ movementType: "transfer", quantity: 4, fromBranchId: "kano", toBranchId: "kaduna" }, "kano")).toBe(-4);
+    expect(inventoryMovementDelta({ movementType: "transfer", quantity: 4, fromBranchId: "kano", toBranchId: "kaduna" }, "kaduna")).toBe(4);
+    expect(inventoryMovementDelta({ movementType: "transfer", quantity: 4, fromBranchId: "kano", toBranchId: "kaduna" }, "")).toBe(0);
+    expect(inventoryMovementDelta({ branchId: "kano", movementType: "adjustmentIn", quantity: 2 }, "kano")).toBe(2);
   });
 
   it("treats the all-brands UI value as an unrestricted report scope", () => {

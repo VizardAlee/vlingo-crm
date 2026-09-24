@@ -60,7 +60,7 @@ function downloadCsv(rows: Array<Array<string | number>>) {
   );
   const link = document.createElement("a");
   link.href = url;
-  link.download = `vlingo-organization-report-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `vlingo-inventory-and-operations-report-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -91,6 +91,15 @@ async function downloadPdf(report: OrganizationReport) {
     pdf.setFont("helvetica", "bold");
     pdf.text(String(value), margin + width, y, { align: "right" });
     y += 5;
+  };
+  const paragraph = (text: string) => {
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    const lines = pdf.splitTextToSize(text, width);
+    const height = Math.max(5, lines.length * 4);
+    ensureSpace(height);
+    pdf.text(lines, margin, y);
+    y += height;
   };
   const section = (
     title: string,
@@ -157,36 +166,116 @@ async function downloadPdf(report: OrganizationReport) {
     });
   };
 
-  pdf.setTextColor(20, 85, 15);
-  heading("Vlingo Systems CRM", 16);
+  const reportDate = (value: string) =>
+    value
+      ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString("en-NG", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "Not recorded";
+  const quantity = (value: number, unit = "unit") =>
+    `${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 2 }).format(value)} ${unit}`;
+
+  pdf.setTextColor(25, 105, 60);
+  heading("VLINGO SYSTEMS NIGERIA LIMITED", 16);
+  pdf.setTextColor(30, 75, 120);
+  heading("INVENTORY REPORT", 15);
   pdf.setTextColor(20, 20, 20);
-  heading("Consolidated Organization Report", 14);
   row("Scope", report.scopeLabel);
-  row("Period", `${report.filters.dateFrom} to ${report.filters.dateTo}`);
-  row("Generated", new Date(report.generatedAt).toLocaleString());
-  section(
-    "Report notes",
-    report.limitations.map((item, index) => [`Note ${index + 1}`, item]),
+  row(
+    "Reporting period",
+    `${reportDate(report.filters.dateFrom)} to ${reportDate(report.filters.dateTo)}`,
   );
-  section("Sales", [
-    ["Sales revenue", pdfCurrency(report.summary.salesRevenue)],
-    ["Transactions", report.summary.salesCount],
-    ["Units sold", report.summary.unitsSold],
-    ["Outstanding invoices", pdfCurrency(report.summary.outstandingSales)],
-    ["POS gross profit", pdfCurrency(report.summary.grossProfit)],
-  ]);
-  section("Inventory", [
-    ["Units on hand", report.summary.inventoryOnHand],
-    ["Units reserved", report.summary.inventoryReserved],
-    ["Units available", report.summary.inventoryAvailable],
-    ["Inventory value", pdfCurrency(report.summary.inventoryValue)],
-    ["Tracked products", report.summary.inventoryTrackedItems],
-    ["Low-stock products", report.summary.inventoryLowStockItems],
-    ["Out-of-stock products", report.summary.inventoryOutOfStockItems],
-    ["Movements in period", report.summary.inventoryMovements],
-  ]);
+  row("Generated", new Date(report.generatedAt).toLocaleString());
+  y += 2;
+  pdf.setFont("helvetica", "italic");
+  pdf.setFontSize(9);
+  pdf.text(
+    "Opening stock, receipts, sales, transfers and reconciled closing balances",
+    margin,
+    y,
+  );
+  y += 7;
   table(
-    "Current stock position by item",
+    `1. Opening stock position - ${reportDate(report.filters.dateFrom)}`,
+    ["Product / SKU", "Brand", "Opening quantity"],
+    report.rows.inventoryOpeningStock.map((item) => [
+      `${item.label}${item.sku ? ` / ${item.sku}` : ""}`,
+      item.brand,
+      quantity(item.openingQuantity, item.unitOfMeasure),
+    ]),
+    [90, 45, 45],
+  );
+  table(
+    "2. Stock received during the period",
+    ["Date", "Product", "Type", "Reference / source", "Quantity"],
+    report.rows.inventoryReceipts.map((item) => [
+      reportDate(item.date),
+      item.label,
+      titleCase(item.type),
+      `${item.referenceNumber}${item.source ? ` / ${item.source}` : ""}`,
+      quantity(item.quantity, item.unitOfMeasure),
+    ]),
+    [25, 55, 24, 51, 25],
+  );
+  table(
+    "3. Inventory sales movements and selling prices",
+    ["Date", "Salesperson", "Product", "Invoice", "Qty", "Unit price", "Line total"],
+    report.rows.inventorySales.map((item) => [
+      reportDate(item.date),
+      item.salesperson,
+      item.label,
+      item.referenceNumber,
+      item.quantity,
+      item.unitPrice === null ? "Not recorded" : pdfCurrency(item.unitPrice),
+      item.lineTotal === null ? "Not recorded" : pdfCurrency(item.lineTotal),
+    ]),
+    [22, 24, 43, 28, 11, 25, 27],
+  );
+  table(
+    "4. Internal stock transfers",
+    ["Date", "Product", "Source", "Destination", "Qty", "Reference"],
+    report.rows.inventoryTransfers.map((item) => [
+      reportDate(item.date),
+      item.label,
+      item.source,
+      item.destination,
+      quantity(item.quantity, item.unitOfMeasure),
+      item.referenceNumber,
+    ]),
+    [24, 48, 31, 31, 20, 26],
+  );
+  table(
+    `5. Closing inventory position - ${reportDate(report.filters.dateTo)}`,
+    ["Product", "Opening", "Reconciliation", "Closing"],
+    report.rows.inventoryReconciliation.map((item) => [
+      item.label,
+      quantity(item.openingQuantity, item.unitOfMeasure),
+      `${item.openingQuantity} + ${item.receipts} received + ${item.transferIn} transferred in + ${item.adjustmentIn} other in - ${item.sales} sold - ${item.transferOut} transferred out - ${item.adjustmentOut} other out`,
+      quantity(item.closingQuantity, item.unitOfMeasure),
+    ]),
+    [55, 28, 69, 28],
+  );
+  section("6. Inventory summary", [
+    ["Opening quantity", report.summary.inventoryOpeningQuantity],
+    ["Stock received", report.summary.inventoryReceivedQuantity],
+    ["Units sold", report.summary.inventorySoldQuantity],
+    ["Transfers in", report.summary.inventoryTransferredIn],
+    ["Transfers out", report.summary.inventoryTransferredOut],
+    ["Other stock in", report.summary.inventoryAdjustmentIn],
+    ["Other stock out", report.summary.inventoryAdjustmentOut],
+    ["Closing quantity", report.summary.inventoryClosingQuantity],
+    ["Sales revenue", pdfCurrency(report.summary.salesRevenue)],
+    ["Current inventory value", pdfCurrency(report.summary.inventoryValue)],
+  ]);
+  y += 3;
+  heading("7. Notes and calculation basis");
+  report.limitations.forEach((item, index) =>
+    paragraph(`${index + 1}. ${item}`),
+  );
+  table(
+    "Appendix A. Current stock position by item",
     ["Item / SKU", "Brand", "On hand", "Reserved", "Available", "Reorder / status", "Value"],
     report.rows.inventoryItems.map((item) => [
       `${item.label}${item.sku ? ` / ${item.sku}` : ""}`,
@@ -200,7 +289,7 @@ async function downloadPdf(report: OrganizationReport) {
     [42, 27, 18, 18, 18, 29, 28],
   );
   table(
-    "Stock position by location",
+    "Appendix B. Current stock position by location",
     ["Location", "Branch", "Items", "On hand", "Available", "Value"],
     report.rows.inventoryLocations.map((location) => [
       location.label,
@@ -213,7 +302,7 @@ async function downloadPdf(report: OrganizationReport) {
     [38, 36, 20, 24, 24, 38],
   );
   table(
-    `Movement ledger (${report.filters.dateFrom} to ${report.filters.dateTo})`,
+    `Appendix C. Full movement ledger (${report.filters.dateFrom} to ${report.filters.dateTo})`,
     ["Date", "Reference", "Type", "Item", "From > To", "Qty"],
     report.rows.inventoryMovements.map((movement) => [
       movement.occurredAt
@@ -227,28 +316,6 @@ async function downloadPdf(report: OrganizationReport) {
     ]),
     [23, 33, 23, 39, 45, 17],
   );
-  section("Purchasing", [
-    ["Purchase value", pdfCurrency(report.summary.purchaseValue)],
-    ["Purchase orders", report.summary.purchaseCount],
-    ["Supplier balance", pdfCurrency(report.summary.purchaseOutstanding)],
-    ["Overdue supplier balance", pdfCurrency(report.summary.overdueSupplierBalance)],
-  ]);
-  section("Projects", [
-    ["Contract value", pdfCurrency(report.summary.projectContractValue)],
-    ["Estimated cost", pdfCurrency(report.summary.projectEstimatedCost)],
-    ["Estimated margin", pdfCurrency(report.summary.projectEstimatedMargin)],
-    ["Completed projects", report.summary.completedProjects],
-  ]);
-  section("Finance", [
-    ["Verified cash collected", pdfCurrency(report.summary.cashCollected)],
-    ["Recognized expenses", pdfCurrency(report.summary.financeExpenses)],
-    ["Paid expenses", pdfCurrency(report.summary.paidExpenses)],
-    ["Net cash flow", pdfCurrency(report.summary.netCashFlow)],
-  ]);
-  section("CRM", [
-    ["Active clients", report.summary.activeClients],
-    ["Open pipeline", pdfCurrency(report.summary.openPipelineValue)],
-  ]);
   const pageCount = pdf.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {
     pdf.setPage(page);
@@ -256,14 +323,14 @@ async function downloadPdf(report: OrganizationReport) {
     pdf.setFontSize(7);
     pdf.setTextColor(20, 100, 60);
     pdf.text(
-      `VLINGO SYSTEMS NIGERIA LTD | ORGANIZATION REPORT | ${page} of ${pageCount}`,
+      `VLINGO SYSTEMS NIGERIA LTD | INVENTORY REPORT | ${page} of ${pageCount}`,
       105,
       292,
       { align: "center" },
     );
   }
   pdf.save(
-    `vlingo-organization-report-${new Date().toISOString().slice(0, 10)}.pdf`,
+    `vlingo-inventory-report-${report.filters.dateFrom}-to-${report.filters.dateTo}.pdf`,
   );
 }
 
@@ -435,6 +502,69 @@ export function OrganizationReports() {
       ...Object.entries(report.summary).map(([label, value]) => [
         titleCase(label),
         value,
+      ]),
+      [],
+      ["1. Opening stock position"],
+      ["Product", "Brand", "SKU", "Unit", "Opening quantity"],
+      ...report.rows.inventoryOpeningStock.map((row) => [
+        row.label,
+        row.brand,
+        row.sku,
+        row.unitOfMeasure,
+        row.openingQuantity,
+      ]),
+      [],
+      ["2. Stock received during the period"],
+      ["Date", "Product", "Type", "Reference", "Source", "Quantity", "Unit"],
+      ...report.rows.inventoryReceipts.map((row) => [
+        row.date,
+        row.label,
+        row.type,
+        row.referenceNumber,
+        row.source,
+        row.quantity,
+        row.unitOfMeasure,
+      ]),
+      [],
+      ["3. Inventory sales movements and selling prices"],
+      ["Date", "Salesperson", "Customer", "Product", "Invoice", "Quantity", "Unit price", "Line total"],
+      ...report.rows.inventorySales.map((row) => [
+        row.date,
+        row.salesperson,
+        row.customer,
+        row.label,
+        row.referenceNumber,
+        row.quantity,
+        row.unitPrice ?? "",
+        row.lineTotal ?? "",
+      ]),
+      [],
+      ["4. Internal stock transfers"],
+      ["Date", "Product", "Source", "Destination", "Quantity", "Unit", "Reference"],
+      ...report.rows.inventoryTransfers.map((row) => [
+        row.date,
+        row.label,
+        row.source,
+        row.destination,
+        row.quantity,
+        row.unitOfMeasure,
+        row.referenceNumber,
+      ]),
+      [],
+      ["5. Closing inventory reconciliation"],
+      ["Product", "Brand", "SKU", "Opening", "Received", "Sold", "Transfer in", "Transfer out", "Other in", "Other out", "Closing"],
+      ...report.rows.inventoryReconciliation.map((row) => [
+        row.label,
+        row.brand,
+        row.sku,
+        row.openingQuantity,
+        row.receipts,
+        row.sales,
+        row.transferIn,
+        row.transferOut,
+        row.adjustmentIn,
+        row.adjustmentOut,
+        row.closingQuantity,
       ]),
       [],
       ["Top product", "Quantity", "Revenue"],
@@ -666,62 +796,106 @@ export function OrganizationReports() {
           {section === "inventory" ? (
             <>
               <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <MetricCard icon={PackageCheck} label="Tracked products" value={report.summary.inventoryTrackedItems.toLocaleString()} />
-                <MetricCard icon={Boxes} label="Units on hand" value={report.summary.inventoryOnHand.toLocaleString()} />
-                <MetricCard icon={PackageCheck} label="Available" value={report.summary.inventoryAvailable.toLocaleString()} />
-                <MetricCard icon={Boxes} label="Reserved" value={report.summary.inventoryReserved.toLocaleString()} />
-                <MetricCard icon={Banknote} label="Inventory value" value={formatCurrency(report.summary.inventoryValue)} />
-                <MetricCard icon={Receipt} label="Low-stock products" value={report.summary.inventoryLowStockItems} />
-                <MetricCard icon={Receipt} label="Out-of-stock products" value={report.summary.inventoryOutOfStockItems} />
-                <MetricCard icon={TrendingUp} label="Movements in period" value={report.summary.inventoryMovements} />
-              </div>
-              <div className="grid gap-4 lg:grid-cols-3">
-                <Breakdown rows={report.breakdowns.inventoryByBrand} title="On-hand units by brand" />
-                <Breakdown currency rows={report.breakdowns.inventoryValueByBrand} title="Inventory value by brand" />
-                <Breakdown rows={report.breakdowns.inventoryMovementsByType} title="Movements by type" />
+                <MetricCard icon={Boxes} label="Opening quantity" value={report.summary.inventoryOpeningQuantity.toLocaleString()} />
+                <MetricCard icon={PackageCheck} label="Stock received" value={report.summary.inventoryReceivedQuantity.toLocaleString()} />
+                <MetricCard icon={ShoppingCart} label="Units sold" value={report.summary.inventorySoldQuantity.toLocaleString()} />
+                <MetricCard icon={Boxes} label="Closing quantity" value={report.summary.inventoryClosingQuantity.toLocaleString()} />
+                <MetricCard icon={TrendingUp} label="Transfers out" value={report.summary.inventoryTransferredOut.toLocaleString()} />
+                <MetricCard icon={TrendingUp} label="Other stock movements" value={(report.summary.inventoryAdjustmentIn + report.summary.inventoryAdjustmentOut).toLocaleString()} />
+                <MetricCard icon={Banknote} label="Sales revenue" value={formatCurrency(report.summary.salesRevenue)} />
+                <MetricCard icon={Banknote} label="Current stock value" value={formatCurrency(report.summary.inventoryValue)} />
               </div>
               <DataTable
-                headers={["Product", "Brand", "SKU", "On hand", "Reserved", "Available", "Reorder", "Status", "Stock value"]}
-                rows={report.rows.inventoryItems.map((row) => [
+                headers={["Product", "Brand", "SKU", "Unit", "Opening quantity"]}
+                rows={report.rows.inventoryOpeningStock.map((row) => [
                   row.label,
                   row.brand,
                   row.sku || "-",
-                  row.onHand.toLocaleString(),
-                  row.reserved.toLocaleString(),
-                  row.available.toLocaleString(),
-                  row.reorderLevel?.toLocaleString() ?? "-",
-                  titleCase(row.status),
-                  formatCurrency(row.stockValue),
+                  row.unitOfMeasure,
+                  row.openingQuantity.toLocaleString(),
                 ])}
-                title="Current stock position by item"
+                title={`1. Opening stock position - ${new Date(`${report.filters.dateFrom}T12:00:00`).toLocaleDateString()}`}
               />
               <DataTable
-                headers={["Location", "Branch", "Products", "On hand", "Reserved", "Available", "Low stock", "Stock value"]}
-                rows={report.rows.inventoryLocations.map((row) => [
+                headers={["Date", "Product", "Type", "Reference", "Source / note", "Quantity"]}
+                rows={report.rows.inventoryReceipts.map((row) => [
+                  row.date ? new Date(row.date).toLocaleDateString() : "-",
                   row.label,
-                  row.branch,
-                  row.itemCount.toLocaleString(),
-                  row.onHand.toLocaleString(),
-                  row.reserved.toLocaleString(),
-                  row.available.toLocaleString(),
-                  row.lowStockItems.toLocaleString(),
-                  formatCurrency(row.stockValue),
+                  titleCase(row.type),
+                  row.referenceNumber,
+                  row.source || "Direct receipt",
+                  `${row.quantity.toLocaleString()} ${row.unitOfMeasure}`,
                 ])}
-                title="Stock position by location"
+                title="2. Stock received during the period"
               />
               <DataTable
-                headers={["Date", "Reference", "Type", "Purpose", "Product", "Source", "Destination", "Quantity"]}
-                rows={report.rows.inventoryMovements.map((row) => [
-                  row.occurredAt ? new Date(row.occurredAt).toLocaleDateString() : "-",
+                headers={["Date", "Salesperson", "Customer", "Product", "Invoice", "Qty", "Unit price", "Line total"]}
+                rows={report.rows.inventorySales.map((row) => [
+                  row.date ? new Date(row.date).toLocaleDateString() : "-",
+                  row.salesperson,
+                  row.customer,
+                  row.label,
                   row.referenceNumber,
-                  titleCase(row.type),
-                  titleCase(row.purpose),
+                  row.quantity.toLocaleString(),
+                  row.unitPrice === null ? "Not recorded" : formatCurrency(row.unitPrice),
+                  row.lineTotal === null ? "Not recorded" : formatCurrency(row.lineTotal),
+                ])}
+                title="3. Inventory sales movements and selling prices"
+              />
+              <DataTable
+                headers={["Date", "Product", "Source", "Destination", "Quantity", "Reference"]}
+                rows={report.rows.inventoryTransfers.map((row) => [
+                  row.date ? new Date(row.date).toLocaleDateString() : "-",
                   row.label,
                   row.source,
                   row.destination,
-                  row.quantity.toLocaleString(),
+                  `${row.quantity.toLocaleString()} ${row.unitOfMeasure}`,
+                  row.referenceNumber,
                 ])}
-                title={`Movement ledger (${report.filters.dateFrom} to ${report.filters.dateTo})`}
+                title="4. Internal stock transfers"
+              />
+              <DataTable
+                headers={["Product", "Opening", "Received", "Sold", "Transfer in", "Transfer out", "Other in", "Other out", "Closing"]}
+                rows={report.rows.inventoryReconciliation.map((row) => [
+                  row.label,
+                  row.openingQuantity.toLocaleString(),
+                  row.receipts.toLocaleString(),
+                  row.sales.toLocaleString(),
+                  row.transferIn.toLocaleString(),
+                  row.transferOut.toLocaleString(),
+                  row.adjustmentIn.toLocaleString(),
+                  row.adjustmentOut.toLocaleString(),
+                  row.closingQuantity.toLocaleString(),
+                ])}
+                title={`5. Closing inventory reconciliation - ${new Date(`${report.filters.dateTo}T12:00:00`).toLocaleDateString()}`}
+              />
+              <div className="grid gap-4 lg:grid-cols-3">
+                <Breakdown rows={report.breakdowns.inventoryByBrand} title="6. Current units by brand" />
+                <Breakdown currency rows={report.breakdowns.inventoryValueByBrand} title="Current inventory value by brand" />
+                <Breakdown rows={report.breakdowns.inventoryMovementsByType} title="Period movements by type" />
+              </div>
+              <Card>
+                <CardHeader><CardTitle>7. Notes and calculation basis</CardTitle></CardHeader>
+                <CardContent className="grid gap-2 text-sm">
+                  {report.limitations.map((item, index) => (
+                    <p key={item}><strong>{index + 1}.</strong> {item}</p>
+                  ))}
+                </CardContent>
+              </Card>
+              <DataTable
+                headers={["Product", "Brand", "SKU", "On hand", "Reserved", "Available", "Reorder", "Status", "Stock value"]}
+                rows={report.rows.inventoryItems.map((row) => [row.label, row.brand, row.sku || "-", row.onHand.toLocaleString(), row.reserved.toLocaleString(), row.available.toLocaleString(), row.reorderLevel?.toLocaleString() ?? "-", titleCase(row.status), formatCurrency(row.stockValue)])}
+                title="Appendix A. Current stock position"
+              />
+              <DataTable
+                headers={["Location", "Branch", "Products", "On hand", "Reserved", "Available", "Low stock", "Stock value"]}
+                rows={report.rows.inventoryLocations.map((row) => [row.label, row.branch, row.itemCount.toLocaleString(), row.onHand.toLocaleString(), row.reserved.toLocaleString(), row.available.toLocaleString(), row.lowStockItems.toLocaleString(), formatCurrency(row.stockValue)])}
+                title="Appendix B. Current stock position by location"
+              />
+              <DataTable
+                headers={["Date", "Reference", "Type", "Purpose", "Product", "Source", "Destination", "Quantity"]}
+                rows={report.rows.inventoryMovements.map((row) => [row.occurredAt ? new Date(row.occurredAt).toLocaleDateString() : "-", row.referenceNumber, titleCase(row.type), titleCase(row.purpose), row.label, row.source, row.destination, row.quantity.toLocaleString()])}
+                title="Appendix C. Full movement ledger"
               />
             </>
           ) : null}

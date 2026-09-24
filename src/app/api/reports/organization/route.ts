@@ -9,6 +9,7 @@ import type {
 } from "@/features/reports/organization-report-types";
 import {
   inventoryAvailabilityStatus,
+  inventoryMovementDelta,
   normalizeReportScopeFilter,
   saleLineAmount,
   scopePurchase,
@@ -198,11 +199,13 @@ export async function GET(request: Request) {
     const scopedBalances = balances.filter(
       (record) => branchMatches(record, branchId) && (!brandId || record.brandId === brandId),
     );
-    const scopedMovements = movements.filter(
+    const scopedAllMovements = movements.filter(
       (record) =>
         branchMatches(record, branchId) &&
-        (!brandId || record.brandId === brandId) &&
-        withinRange(record, start, end, ["occurredAt", "createdAt"]),
+        (!brandId || record.brandId === brandId),
+    );
+    const scopedMovements = scopedAllMovements.filter((record) =>
+      withinRange(record, start, end, ["occurredAt", "createdAt"]),
     );
     const scopedSales = sales
       .filter(
@@ -430,6 +433,213 @@ export async function GET(request: Request) {
         source: String(movement.fromLocationName ?? "-"),
         type: String(movement.movementType ?? "movement"),
       }));
+    const currentQuantityByOffering = scopedBalances.reduce<Record<string, number>>(
+      (result, balance) => {
+        const id = String(balance.offeringId);
+        result[id] = (result[id] ?? 0) + Number(balance.quantityOnHand ?? 0);
+        return result;
+      },
+      {},
+    );
+    const movementDate = (movement: RecordData) =>
+      dateValue(movement.occurredAt) ?? dateValue(movement.createdAt);
+    const futureMovements = scopedAllMovements.filter((movement) => {
+      const date = movementDate(movement);
+      return Boolean(date && date > end);
+    });
+    const reportOfferingIds = new Set<string>([
+      ...Object.keys(currentQuantityByOffering),
+      ...scopedAllMovements.map((movement) => String(movement.offeringId ?? "")),
+      ...scopedSales.flatMap((entry) =>
+        entry.scoped.lines.map((line) => String(line.offeringId ?? "")),
+      ),
+    ].filter(Boolean));
+    const unitForOffering = (offeringId: string) =>
+      String(offeringById.get(offeringId)?.unitOfMeasure ?? "unit");
+    const labelForOffering = (offeringId: string) => {
+      const movement = scopedAllMovements.find(
+        (item) => String(item.offeringId) === offeringId,
+      );
+      return String(
+        offeringById.get(offeringId)?.name ??
+          movement?.offeringName ??
+          "Inventory item",
+      );
+    };
+    const brandForOffering = (offeringId: string) => {
+      const movement = scopedAllMovements.find(
+        (item) => String(item.offeringId) === offeringId,
+      );
+      const offering = offeringById.get(offeringId);
+      return String(
+        offering?.brandName ??
+          movement?.brandName ??
+          brandName.get(String(offering?.brandId ?? movement?.brandId)) ??
+          "Unbranded",
+      );
+    };
+    const movementsForOffering = (offeringId: string) =>
+      scopedMovements.filter(
+        (movement) => String(movement.offeringId) === offeringId,
+      );
+    const inventoryReconciliationRows = Array.from(reportOfferingIds)
+      .map((offeringId) => {
+        const period = movementsForOffering(offeringId);
+        const periodDelta = period.reduce(
+          (total, movement) => total + inventoryMovementDelta(movement, branchId),
+          0,
+        );
+        const futureDelta = futureMovements
+          .filter((movement) => String(movement.offeringId) === offeringId)
+          .reduce(
+            (total, movement) => total + inventoryMovementDelta(movement, branchId),
+            0,
+          );
+        const closingQuantity =
+          Number(currentQuantityByOffering[offeringId] ?? 0) - futureDelta;
+        const openingQuantity = closingQuantity - periodDelta;
+        let receipts = 0;
+        let sales = 0;
+        let transferIn = 0;
+        let transferOut = 0;
+        let adjustmentIn = 0;
+        let adjustmentOut = 0;
+        period.forEach((movement) => {
+          const quantity = Number(movement.quantity ?? 0);
+          const type = String(movement.movementType ?? "");
+          const delta = inventoryMovementDelta(movement, branchId);
+          if (type === "transfer") {
+            if (!branchId) {
+              transferIn += quantity;
+              transferOut += quantity;
+            } else {
+              if (delta > 0) transferIn += delta;
+              if (delta < 0) transferOut += Math.abs(delta);
+            }
+            return;
+          }
+          if (type === "receipt") receipts += Math.max(0, delta);
+          else if (type === "issue" && movement.movementPurpose === "sale")
+            sales += Math.abs(Math.min(0, delta || -quantity));
+          else if (delta > 0) adjustmentIn += delta;
+          else if (delta < 0) adjustmentOut += Math.abs(delta);
+        });
+        return {
+          adjustmentIn,
+          adjustmentOut,
+          brand: brandForOffering(offeringId),
+          closingQuantity,
+          label: labelForOffering(offeringId),
+          openingQuantity,
+          receipts,
+          sales,
+          sku: String(offeringById.get(offeringId)?.sku ?? ""),
+          transferIn,
+          transferOut,
+          unitOfMeasure: unitForOffering(offeringId),
+        };
+      })
+      .filter((row) =>
+        [
+          row.openingQuantity,
+          row.receipts,
+          row.sales,
+          row.transferIn,
+          row.transferOut,
+          row.adjustmentIn,
+          row.adjustmentOut,
+          row.closingQuantity,
+        ].some((value) => Math.abs(value) > 0.000001),
+      )
+      .sort((left, right) => left.label.localeCompare(right.label));
+    const inventoryOpeningStockRows = inventoryReconciliationRows
+      .filter((row) => Math.abs(row.openingQuantity) > 0.000001)
+      .map((row) => ({
+        brand: row.brand,
+        label: row.label,
+        openingQuantity: row.openingQuantity,
+        sku: row.sku,
+        unitOfMeasure: row.unitOfMeasure,
+      }));
+    const inventoryReceiptRows = scopedMovements
+      .filter((movement) => ["receipt", "adjustmentIn", "returnIn"].includes(String(movement.movementType)))
+      .map((movement) => ({
+        date: movementDate(movement)?.toISOString() ?? "",
+        label: String(movement.offeringName ?? labelForOffering(String(movement.offeringId))),
+        quantity: Number(movement.quantity ?? 0),
+        referenceNumber: String(movement.externalReference ?? movement.referenceNumber ?? movement.id),
+        source: String(movement.notes ?? movement.fromLocationName ?? "Direct receipt"),
+        type: String(movement.movementType ?? "receipt"),
+        unitOfMeasure: unitForOffering(String(movement.offeringId)),
+      }))
+      .sort((left, right) => left.date.localeCompare(right.date));
+    const posSaleReferences = new Set(
+      scopedSales.flatMap((entry) => [
+        String(entry.sale.id),
+        String(entry.sale.referenceNumber ?? ""),
+        String(entry.sale.invoiceNumber ?? ""),
+      ]),
+    );
+    const inventorySalesRows = [
+      ...scopedSales
+      .flatMap((entry) => {
+        const soldAt =
+          (dateValue(entry.sale.soldAt) ?? dateValue(entry.sale.createdAt))?.toISOString() ??
+          "";
+        return entry.scoped.lines.map((line) => ({
+          customer: String(entry.sale.customerName ?? "Walk-in customer"),
+          date: soldAt,
+          label: String(line.offeringName ?? "Inventory item"),
+          lineTotal: saleLineAmount(line),
+          quantity: Number(line.quantity ?? 0),
+          referenceNumber: String(
+            entry.sale.invoiceNumber ?? entry.sale.referenceNumber ?? entry.sale.id,
+          ),
+          salesperson: String(
+            entry.sale.createdByName ?? entry.sale.createdByEmail ?? "Not recorded",
+          ),
+          unitPrice: Number(line.unitPrice ?? 0),
+        }));
+      }),
+      ...scopedMovements
+        .filter(
+          (movement) =>
+            movement.movementType === "issue" &&
+            movement.movementPurpose === "sale" &&
+            !posSaleReferences.has(String(movement.externalReference ?? "")),
+        )
+        .map((movement) => ({
+          customer: "Not recorded",
+          date: movementDate(movement)?.toISOString() ?? "",
+          label: String(movement.offeringName ?? "Inventory item"),
+          lineTotal: null,
+          quantity: Number(movement.quantity ?? 0),
+          referenceNumber: String(
+            movement.externalReference ?? movement.referenceNumber ?? movement.id,
+          ),
+          salesperson: String(
+            movement.createdByName ?? movement.createdByEmail ?? "Not recorded",
+          ),
+          unitPrice: null,
+        })),
+    ]
+      .sort((left, right) => left.date.localeCompare(right.date));
+    const inventoryTransferRows = scopedMovements
+      .filter((movement) => movement.movementType === "transfer")
+      .map((movement) => ({
+        date: movementDate(movement)?.toISOString() ?? "",
+        destination: String(
+          movement.toLocationName ?? branchName.get(String(movement.toBranchId)) ?? "Not recorded",
+        ),
+        label: String(movement.offeringName ?? labelForOffering(String(movement.offeringId))),
+        quantity: Number(movement.quantity ?? 0),
+        referenceNumber: String(movement.externalReference ?? movement.referenceNumber ?? movement.id),
+        source: String(
+          movement.fromLocationName ?? branchName.get(String(movement.fromBranchId)) ?? "Not recorded",
+        ),
+        unitOfMeasure: unitForOffering(String(movement.offeringId)),
+      }))
+      .sort((left, right) => left.date.localeCompare(right.date));
     const purchaseValue = scopedPurchases.reduce(
       (total, entry) => total + entry.scoped.amount,
       0,
@@ -591,7 +801,10 @@ export async function GET(request: Request) {
       },
       generatedAt: new Date().toISOString(),
       limitations: [
-        "Inventory balances, availability, and valuation are the current position; the selected dates apply to the movement ledger and other activity.",
+        "Opening and closing quantities are reconstructed from the audited inventory movement ledger and the current system balance. Transfers net to zero when all branches are selected, but remain listed for audit.",
+        "The closing reconciliation is: opening stock + receipts + transfers in + other stock in - sales - transfers out - other stock out.",
+        "Selling prices and salesperson names come from completed POS sales. Manual inventory issues marked as sales remain in the stock reconciliation but may not have a selling price unless they are linked to a POS sale.",
+        "Current availability and valuation are shown separately from the selected-period reconciliation. Historical values depend on complete movement dates and product cost records.",
         "Stock value is calculated as current on-hand quantity multiplied by the product cost price. Products without a cost price contribute zero until their cost is recorded.",
         "Low-stock status compares available quantity (on hand less reserved) with the product reorder level. Products without a reorder level are not flagged as low stock.",
         ...(brandId
@@ -630,6 +843,11 @@ export async function GET(request: Request) {
         inventoryItems: inventoryItemRows,
         inventoryLocations: inventoryLocationRows,
         inventoryMovements: inventoryMovementRows,
+        inventoryOpeningStock: inventoryOpeningStockRows,
+        inventoryReceipts: inventoryReceiptRows,
+        inventoryReconciliation: inventoryReconciliationRows,
+        inventorySales: inventorySalesRows,
+        inventoryTransfers: inventoryTransferRows,
         projects: projectRows.sort((a, b) => b.contractValue - a.contractValue),
         suppliers: Array.from(supplierRows.values()).sort(
           (a, b) => b.outstanding - a.outstanding,
@@ -649,6 +867,18 @@ export async function GET(request: Request) {
         financeExpenses: sum(scopedExpenses, "amount"),
         grossProfit: salesRevenue - salesCost,
         inventoryAvailable: inventoryOnHand - inventoryReserved,
+        inventoryAdjustmentIn: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.adjustmentIn,
+          0,
+        ),
+        inventoryAdjustmentOut: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.adjustmentOut,
+          0,
+        ),
+        inventoryClosingQuantity: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.closingQuantity,
+          0,
+        ),
         inventoryLowStockItems: Object.entries(availableByOffering).filter(
           ([id, available]) => {
             const reorder = Number(offeringById.get(id)?.reorderLevel ?? 0);
@@ -657,11 +887,31 @@ export async function GET(request: Request) {
         ).length,
         inventoryMovements: scopedMovements.length,
         inventoryOnHand,
+        inventoryOpeningQuantity: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.openingQuantity,
+          0,
+        ),
         inventoryOutOfStockItems: inventoryItemRows.filter(
           (item) => item.status === "outOfStock",
         ).length,
+        inventoryReceivedQuantity: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.receipts,
+          0,
+        ),
         inventoryReserved,
+        inventorySoldQuantity: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.sales,
+          0,
+        ),
         inventoryTrackedItems: inventoryItemRows.length,
+        inventoryTransferredIn: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.transferIn,
+          0,
+        ),
+        inventoryTransferredOut: inventoryReconciliationRows.reduce(
+          (total, item) => total + item.transferOut,
+          0,
+        ),
         inventoryValue,
         netCashFlow: cashCollected - paidExpenses,
         openPipelineValue: scopedDeals

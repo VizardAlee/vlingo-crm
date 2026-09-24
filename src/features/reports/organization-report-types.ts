@@ -55,6 +55,55 @@ export interface OrganizationReport {
       reserved: number;
       stockValue: number;
     }>;
+    inventoryOpeningStock: Array<{
+      brand: string;
+      label: string;
+      openingQuantity: number;
+      sku: string;
+      unitOfMeasure: string;
+    }>;
+    inventoryReceipts: Array<{
+      date: string;
+      label: string;
+      quantity: number;
+      referenceNumber: string;
+      source: string;
+      type: string;
+      unitOfMeasure: string;
+    }>;
+    inventoryReconciliation: Array<{
+      adjustmentIn: number;
+      adjustmentOut: number;
+      brand: string;
+      closingQuantity: number;
+      label: string;
+      openingQuantity: number;
+      receipts: number;
+      sales: number;
+      sku: string;
+      transferIn: number;
+      transferOut: number;
+      unitOfMeasure: string;
+    }>;
+    inventorySales: Array<{
+      customer: string;
+      date: string;
+      label: string;
+      lineTotal: number | null;
+      quantity: number;
+      referenceNumber: string;
+      salesperson: string;
+      unitPrice: number | null;
+    }>;
+    inventoryTransfers: Array<{
+      date: string;
+      destination: string;
+      label: string;
+      quantity: number;
+      referenceNumber: string;
+      source: string;
+      unitOfMeasure: string;
+    }>;
     inventoryMovements: Array<{
       destination: string;
       label: string;
@@ -94,12 +143,20 @@ export interface OrganizationReport {
     financeExpenses: number;
     grossProfit: number;
     inventoryAvailable: number;
+    inventoryAdjustmentIn: number;
+    inventoryAdjustmentOut: number;
+    inventoryClosingQuantity: number;
     inventoryLowStockItems: number;
     inventoryMovements: number;
     inventoryOnHand: number;
+    inventoryOpeningQuantity: number;
     inventoryOutOfStockItems: number;
+    inventoryReceivedQuantity: number;
     inventoryReserved: number;
+    inventorySoldQuantity: number;
     inventoryTrackedItems: number;
+    inventoryTransferredIn: number;
+    inventoryTransferredOut: number;
     inventoryValue: number;
     netCashFlow: number;
     openPipelineValue: number;
